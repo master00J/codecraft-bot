@@ -26,6 +26,7 @@ class CustomBotManager {
   /**
    * Get all custom bots from database that should be started
    * Returns bots where setup_completed = true and bot_token exists
+   * EXCLUDES bots that run on Pterodactyl (they have their own containers)
    */
   async getCustomBotsToStart() {
     if (!this.supabase) {
@@ -34,11 +35,13 @@ class CustomBotManager {
 
     try {
       // Get all bots where setup_completed = true
-      // We don't filter on is_active because the bot needs to start first before it can be in the guild
+      // EXCLUDE bots that run on Pterodactyl (runs_on_pterodactyl = true)
+      // Those bots have their own dedicated containers and shouldn't run here
       const { data: allBotsData, error: fetchError } = await this.supabase
         .from('custom_bot_tokens')
         .select('*')
-        .eq('setup_completed', true);
+        .eq('setup_completed', true)
+        .or('runs_on_pterodactyl.is.null,runs_on_pterodactyl.eq.false');
       
       if (fetchError) {
         console.error('❌ [CustomBotManager] Error fetching custom bot tokens:', fetchError);
@@ -46,8 +49,20 @@ class CustomBotManager {
       }
       
       // Filter out bots without a valid token (client-side filter)
+      // Also double-check that Pterodactyl bots are excluded (in case DB query didn't filter them)
       const customBots = (allBotsData || []).filter(bot => {
-        return bot.bot_token && bot.bot_token.trim().length > 0;
+        // Skip bots without valid token
+        if (!bot.bot_token || bot.bot_token.trim().length === 0) {
+          return false;
+        }
+        
+        // Skip bots that run on Pterodactyl (they have dedicated containers)
+        if (bot.runs_on_pterodactyl === true) {
+          console.log(`⏭️ [CustomBotManager] Skipping bot for guild ${bot.guild_id} (${bot.bot_username || 'Unknown'}) - runs on Pterodactyl`);
+          return false;
+        }
+        
+        return true;
       });
       
       // Debug logging if bots found but none have tokens
