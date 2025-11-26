@@ -1,0 +1,253 @@
+{
+    "pricing": {
+      "webshop": {
+        "name": "E-Commerce Development",
+        "icon": "🛒",
+        "starting_from": 500,
+        "tiers": [
+          {
+            "name": "Starter Shop",
+            "price": 150,
+            "timeline": "1-2 weeks"
+          },
+          {
+            "name": "Professional Shop",
+            "price": 750,
+            "timeline": "3-5 weeks"
+          },
+          {
+            "name": "Enterprise Shop",
+            "price": 1500,
+            "timeline": "6-8 weeks"
+          }
+        ]
+      },
+      "discord_bot": {
+        "name": "Discord Bot Development",
+        "icon": "🤖",
+        "starting_from": 25,
+        "tiers": [
+          {
+            "name": "Basic Bot",
+            "price": 25,
+            "timeline": "2 days"
+          },
+          {
+            "name": "Advanced Bot",
+            "price": 50,
+            "timeline": "2-3 weeks"
+          },
+          {
+            "name": "AI-Powered Bot",
+            "price": 350,
+            "timeline": "2-3 weeks"
+          }
+        ]
+      },
+      "website": {
+        "name": "Website Development",
+        "icon": "🌐",
+        "starting_from": 150,
+        "tiers": [
+          {
+            "name": "Landing Page",
+            "price": 150,
+            "timeline": "1-5 days"
+          },
+          {
+            "name": "Business Website",
+            "price": 300,
+            "timeline": "2-3 weeks"
+          },
+          {
+            "name": "Web Application",
+            "price": 650,
+            "timeline": "4-6 weeks"
+          }
+        ]
+      },
+      "api": {
+        "name": "API Development",
+        "icon": "⚙️",
+        "starting_from": 1000,
+        "tiers": [
+          {
+            "name": "Basic API",
+            "price": 300,
+            "timeline": "1-2 weeks"
+          },
+          {
+            "name": "Standard API",
+            "price": 3500,
+            "timeline": "3-4 weeks"
+          },
+          {
+            "name": "Enterprise API",
+            "price": 7500,
+            "timeline": "6-8 weeks"
+          }
+        ]
+      },
+      "design": {
+        "name": "UI/UX Design",
+        "icon": "🎨",
+        "starting_from": 400,
+        "tiers": [
+          {
+            "name": "Basic Design",
+            "price": 400,
+            "timeline": "1 week"
+          },
+          {
+            "name": "Professional Design",
+            "price": 1000,
+            "timeline": "2 weeks"
+          },
+          {
+            "name": "Full Branding Package",
+            "price": 2500,
+            "timeline": "3-4 weeks"
+          }
+        ]
+      },
+      "custom": {
+        "name": "Custom Software",
+        "icon": "💻",
+        "starting_from": 100,
+        "tiers": [
+          {
+            "name": "Consultation",
+            "price": 100,
+            "timeline": "Immediate"
+          },
+          {
+            "name": "Small Project",
+            "price": 2000,
+            "timeline": "2-4 weeks"
+          },
+          {
+            "name": "Large Project",
+            "price": 10000,
+            "timeline": "2-6 months"
+          }
+        ]
+      }
+    },
+    "hourly_rates": {
+      "development": 75,
+      "consultation": 100,
+      "emergency": 150
+    },
+    "discounts": {
+      "first_time": 0.15,
+      "bundle": 0.20,
+      "referral": 0.10
+    },
+    "company": {
+      "name": "CodeCraft Solutions",
+      "tagline": "Building the future, one line at a time",
+      "support_email": "support@codecraft.solutions",
+      "sales_email": "sales@codecraft.solutions",
+      "response_time": "< 2 hours"
+    },
+    "portfolio": [
+      {
+        "title": "OSRS Service Platform - Multi-Tenant SaaS",
+        "category": "🌐 SaaS Platform",
+        "client": "Own project",
+        "description": "Professional multi-tenant SaaS platform where businesses can sell OSRS service webshops. Complete platform with shop management, Discord integration, worker system, loyalty rewards, and real-time chat.",
+        "technologies": ["Next.js 14", "TypeScript", "Prisma", "PostgreSQL", "Discord.js", "NextAuth", "Tailwind CSS"],
+        "features": [
+          "Multi-tenant shop system with custom URLs",
+          "Discord bot integration & OAuth",
+          "Worker management with permissions & payouts",
+          "Real-time chat & order messaging",
+          "Customer loyalty & tier system",
+          "Advanced analytics dashboard",
+          "Review & rating system",
+          "Automated notifications"
+        ],
+        "results": "Full-featured SaaS platform ready for production deployment",
+        "timeline": "1 week and still going",
+        "budget": "Custom Development",
+        "image": "https://cdn.discordapp.com/attachments/1435708586453106730/1435708610213838939/Rsdash.net.png",
+        "color": "#FFD700"
+      }
+    ],
+    "payment_methods": [
+      {
+        "id": "stripe",
+        "name": "💳 Credit Card (Stripe)",
+        "enabled": true,
+        "processing_fee": 0.029,
+        "fixed_fee": 0.30,
+        "address": "https://buy.stripe.com/your-payment-link",
+        "instructions": "Pay via Stripe payment link. You'll receive an invoice with a secure payment link."
+      },
+      {
+        "id": "paypal",
+        "name": "🅿️ PayPal",
+        "enabled": true,
+        "processing_fee": 0.035,
+        "fixed_fee": 0.49,
+        "address": "payments@codecraft.solutions",
+        "instructions": "Send payment via PayPal to the address shown below."
+      },
+      {
+        "id": "crypto",
+        "name": "₿ Cryptocurrency",
+        "enabled": true,
+        "processing_fee": 0.01,
+        "fixed_fee": 0,
+        "address": "Contact staff for wallet address",
+        "instructions": "We accept BTC, ETH, and USDT. Use the address provided by staff."
+      },
+      {
+        "id": "bank",
+        "name": "🏦 Bank Transfer",
+        "enabled": false,
+        "processing_fee": 0,
+        "fixed_fee": 0,
+        "address": "IBAN: BE00 0000 0000 0000",
+        "instructions": "Bank transfers available for EU & US. Use the IBAN shown below."
+      }
+    ],
+    "terms_of_service": {
+      "version": "1.0",
+      "last_updated": "2025-01-06",
+      "sections": [
+        {
+          "id": "payment",
+          "title": "💰 Payment",
+          "content": "50% upfront payment required. Remaining 50% due upon completion. All prices in USD."
+        },
+        {
+          "id": "timeline",
+          "title": "⏰ Timeline",
+          "content": "Timeline estimates are best effort. We'll keep you updated on progress."
+        },
+        {
+          "id": "revisions",
+          "title": "✏️ Revisions",
+          "content": "Unlimited revisions during development. Major changes may affect price/timeline."
+        },
+        {
+          "id": "ownership",
+          "title": "📦 Ownership",
+          "content": "You own everything after final payment. We can showcase project in portfolio."
+        },
+        {
+          "id": "refunds",
+          "title": "💸 Refunds",
+          "content": "Full refund if not started. 50% refund if under 50% complete. No refund after delivery."
+        },
+        {
+          "id": "support",
+          "title": "🛠️ Support",
+          "content": "30 days free support after delivery for bugs and small fixes."
+        }
+      ]
+    }
+  }
+  
+  
