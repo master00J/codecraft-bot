@@ -56,7 +56,9 @@ const EventManager = require('./modules/comcraft/events/manager');
 const aiService = require('./modules/comcraft/ai');
 const memoryStore = require('./modules/comcraft/ai/memory-store');
 const aiStore = require('./modules/comcraft/ai/store');
-const customBotManager = require('./modules/comcraft/bot/custom-bot-manager');
+// CustomBotManager disabled - all custom bots now run on Pterodactyl VPS in separate containers
+// const customBotManager = require('./modules/comcraft/bot/custom-bot-manager');
+const customBotManager = null; // Set to null so all existing checks are skipped
 const aiUsageService = require('./modules/comcraft/ai/usage-service');
 const { buildKnowledgeContext } = require('./modules/comcraft/ai/prompt-utils.js');
 const rankCardGenerator = require('./modules/comcraft/leveling/rank-card-generator');
@@ -553,19 +555,17 @@ client.once('ready', async () => {
   discordManager = new DiscordManager(client);
   console.log('🎨 Discord Manager initialized');
 
-  // Initialize Custom Bot Manager (for bot-personalizer)
-  try {
-    await customBotManager.initialize();
-    console.log('🤖 Custom Bot Manager initialized');
-    
-    // Start polling for new custom bots (check every minute)
-    customBotManager.startPolling(60000);
-    
-    // Start periodic status logging (every 5 minutes)
-    customBotManager.startStatusLogging(300000);
-  } catch (error) {
-    console.error('❌ Error initializing Custom Bot Manager:', error);
-  }
+  // Custom Bot Manager DISABLED - all custom bots now run on Pterodactyl VPS
+  // This saves resources on the main bot's server
+  // try {
+  //   await customBotManager.initialize();
+  //   console.log('🤖 Custom Bot Manager initialized');
+  //   customBotManager.startPolling(60000);
+  //   customBotManager.startStatusLogging(300000);
+  // } catch (error) {
+  //   console.error('❌ Error initializing Custom Bot Manager:', error);
+  // }
+  console.log('ℹ️  Custom Bot Manager disabled - bots run on Pterodactyl VPS');
 
   // Initialize Auto-Roles Manager
   autoRolesManager = new AutoRolesManager(client);
