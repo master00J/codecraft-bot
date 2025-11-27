@@ -14,7 +14,9 @@ class DiceGifGenerator {
   constructor(options = {}) {
     this.width = options.width || 300;
     this.height = options.height || 180;
-    this.frameDelay = options.frameDelay || 70;
+    this.frameDelay = options.frameDelay || 80; // Slightly slower for smoother animation
+    this.rollFrames = options.rollFrames || 24; // More frames for longer roll
+    this.resultFrames = options.resultFrames || 12; // Frames showing result
     this.background = null;
   }
 
@@ -325,7 +327,7 @@ class DiceGifGenerator {
     const dieBaseY = this.height * 0.5;
 
     // Generate roll sequences for both dice
-    const rollFrames = 16;
+    const rollFrames = this.rollFrames;
     const sequence1 = this.generateRollSequence(finalRoll1, rollFrames);
     const sequence2 = this.generateRollSequence(finalRoll2, rollFrames);
 
@@ -382,8 +384,9 @@ class DiceGifGenerator {
     // Result frames
     const winner = finalRoll1 > finalRoll2 ? 1 : (finalRoll2 > finalRoll1 ? 2 : 0);
     const winnerName = winner === 1 ? player1 : (winner === 2 ? player2 : null);
+    const resultFrames = this.resultFrames;
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < resultFrames; i++) {
       this.drawBackground(ctx);
 
       // Draw final dice (settled, no tilt)

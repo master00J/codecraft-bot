@@ -4232,8 +4232,8 @@ async function handleCasinoBetModal(interaction) {
       }
     }
 
-    // GIF animation duration (~2 seconds)
-    const gifDuration = 2500;
+    // GIF animation duration (~3.5 seconds for longer roll)
+    const gifDuration = 3500;
 
     if (diceGif) {
       // STEP 1: Show GIF with "Rolling..." embed
