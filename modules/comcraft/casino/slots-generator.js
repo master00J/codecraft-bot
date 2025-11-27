@@ -69,27 +69,92 @@ class SlotsGifGenerator {
   }
 
   /**
-   * Draw a symbol at position
+   * Draw symbol as colored shape (fallback if emoji doesn't render)
+   */
+  drawSymbolShape(ctx, symbol, x, y, size = 40) {
+    const color = this.symbolColors[symbol] || '#FFFFFF';
+    const radius = size * 0.4;
+    
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    
+    // Draw different shapes based on symbol
+    if (symbol === '💎') {
+      // Diamond shape
+      ctx.beginPath();
+      ctx.moveTo(x, y - radius);
+      ctx.lineTo(x + radius * 0.7, y);
+      ctx.lineTo(x, y + radius);
+      ctx.lineTo(x - radius * 0.7, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (symbol === '⭐') {
+      // Star shape
+      ctx.beginPath();
+      const spikes = 5;
+      const outerRadius = radius;
+      const innerRadius = radius * 0.5;
+      for (let i = 0; i < spikes * 2; i++) {
+        const angle = (i * Math.PI) / spikes;
+        const r = i % 2 === 0 ? outerRadius : innerRadius;
+        const px = x + Math.cos(angle) * r;
+        const py = y + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (symbol === '🔔') {
+      // Bell shape (circle with triangle)
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.3, radius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Triangle at bottom
+      ctx.beginPath();
+      ctx.moveTo(x, y + radius * 0.3);
+      ctx.lineTo(x - radius * 0.4, y - radius * 0.1);
+      ctx.lineTo(x + radius * 0.4, y - radius * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // Fruit symbols - draw as colored circles
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  /**
+   * Draw a symbol at position (try emoji first, fallback to shape)
    */
   drawSymbol(ctx, symbol, x, y, size = 40, blur = false) {
     ctx.save();
     
     if (blur) {
-      ctx.globalAlpha = 0.6;
+      ctx.globalAlpha = 0.7;
     } else {
       ctx.globalAlpha = 1.0;
     }
     
-    // Make symbols more visible with stroke
-    ctx.font = `bold ${size}px Arial`;
+    // Try to draw emoji first
+    ctx.font = `${size}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // Add text stroke for better visibility
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.strokeText(symbol, x, y);
     ctx.fillText(symbol, x, y);
+    
+    // If emoji didn't render (check by measuring text width)
+    // Fallback to colored shape
+    const metrics = ctx.measureText(symbol);
+    if (metrics.width < size * 0.3) {
+      // Emoji probably didn't render, use shape fallback
+      this.drawSymbolShape(ctx, symbol, x, y, size);
+    }
     
     ctx.restore();
   }
@@ -126,15 +191,20 @@ class SlotsGifGenerator {
         // Draw symbol with slight blur effect during spinning
         ctx.save();
         ctx.globalAlpha = 0.8; // More visible
-        ctx.font = `bold ${symbolSize}px Arial`;
+        
+        // Try emoji first
+        ctx.font = `${symbolSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        
-        // Add stroke for visibility
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.lineWidth = 2;
-        ctx.strokeText(symbol, x, yPos);
         ctx.fillText(symbol, x, yPos);
+        
+        // Check if emoji rendered, if not use shape fallback
+        const metrics = ctx.measureText(symbol);
+        if (metrics.width < symbolSize * 0.3) {
+          ctx.globalAlpha = 0.6; // Slightly more transparent for spinning
+          this.drawSymbolShape(ctx, symbol, x, yPos, symbolSize);
+        }
+        
         ctx.restore();
       }
     }
