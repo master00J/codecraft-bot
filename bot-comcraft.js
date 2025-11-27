@@ -4208,6 +4208,7 @@ async function handleCasinoBetModal(interaction) {
   }
 
   if (gameType === 'dice') {
+    console.log(`🎲 [Dice] Starting dice game for ${username}`);
     const result = await casinoManager.playDice(guildId, userId, username, betAmount);
 
     if (!result.success) {
@@ -4216,6 +4217,50 @@ async function handleCasinoBetModal(interaction) {
       });
     }
 
+    console.log(`🎲 [Dice] Game result: playerRoll=${result.playerRoll}, houseRoll=${result.houseRoll}, hasGif=${!!result.gifBuffer}`);
+
+    // Check if we have a GIF to show
+    let diceGif = null;
+    if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+      const header = result.gifBuffer.slice(0, 6).toString('ascii');
+      if (header.startsWith('GIF')) {
+        diceGif = new AttachmentBuilder(result.gifBuffer, {
+          name: 'dice-roll.gif',
+          description: 'Dice roll animation',
+        });
+        console.log(`✅ [Dice] GIF attachment created: ${result.gifBuffer.length} bytes`);
+      }
+    }
+
+    // GIF animation duration (~2 seconds)
+    const gifDuration = 2500;
+
+    if (diceGif) {
+      // STEP 1: Show GIF with "Rolling..." embed
+      const rollingEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🎲 Rolling Dice...')
+        .setDescription('The dice are tumbling!')
+        .addFields({
+          name: '💰 Bet Amount',
+          value: `${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        })
+        .setImage('attachment://dice-roll.gif')
+        .setTimestamp();
+
+      await interaction.editReply({
+        content: null,
+        embeds: [rollingEmbed],
+        files: [diceGif],
+        components: [],
+      });
+
+      // Wait for GIF to play
+      await new Promise(resolve => setTimeout(resolve, gifDuration));
+    }
+
+    // STEP 2: Show result embed
     const playerDice = casinoManager.getDiceEmoji(result.playerRoll);
     const houseDice = casinoManager.getDiceEmoji(result.houseRoll);
     const comparison = result.playerRoll > result.houseRoll ? '>' : result.playerRoll < result.houseRoll ? '<' : '=';
@@ -4262,11 +4307,16 @@ async function handleCasinoBetModal(interaction) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`casino_dice_${userId}`)
-        .setLabel('Play Again')
+        .setLabel('🎲 Play Again')
         .setStyle(ButtonStyle.Primary)
     );
 
-    return interaction.editReply({ embeds: [embed], components: [row] });
+    return interaction.editReply({ 
+      content: null,
+      embeds: [embed], 
+      files: [], // Remove GIF from result
+      components: [row] 
+    });
   }
 
   if (gameType === 'slots') {
