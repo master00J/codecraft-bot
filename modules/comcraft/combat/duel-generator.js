@@ -370,7 +370,7 @@ class DuelGifGenerator {
     
     const p1X = startX;
     const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight; // Op de grond (geen zweven)
+    const charY = this.height - scaledHeight + 15; // Iets lager voor betere grondpositie
 
     const p1Center = p1X + scaledWidth / 2;
     const p2Center = p2X + scaledWidth / 2;
@@ -581,7 +581,7 @@ class DuelGifGenerator {
     
     const p1X = startX;
     const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight; // Op de grond (geen zweven)
+    const charY = this.height - scaledHeight + 15; // Iets lager voor betere grondpositie
 
     const p1Center = p1X + scaledWidth / 2;
     const p2Center = p2X + scaledWidth / 2;
