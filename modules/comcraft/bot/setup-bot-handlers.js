@@ -3808,14 +3808,27 @@ async function handleCasinoBetModal(interaction, casinoManager, economyManager) 
       await new Promise(resolve => setTimeout(resolve, gifDuration));
     }
 
-    // STEP 2: Show result embed
+    // STEP 2: Show result embed (3x3 grid)
+    // reels is now [[row1, row2, row3], [row1, row2, row3], [row1, row2, row3]]
+    const topRow = `${result.reels[0][0]} │ ${result.reels[1][0]} │ ${result.reels[2][0]}`;
+    const middleRow = `${result.reels[0][1]} │ ${result.reels[1][1]} │ ${result.reels[2][1]}`;
+    const bottomRow = `${result.reels[0][2]} │ ${result.reels[1][2]} │ ${result.reels[2][2]}`;
+    
+    let winText = '❌ No matching symbols';
+    if (result.result === 'win' && result.winningLines) {
+      const lineNames = result.winningLines.map(l => l.name).join(', ');
+      winText = `✨ **${result.winningLines.length} winning line(s)**: ${lineNames}`;
+    }
+    
     const resultEmbed = new EmbedBuilder()
       .setColor(result.result === 'win' ? '#22C55E' : '#EF4444')
       .setTitle(result.result === 'win' ? `🎰 ${result.multiplier >= 10 ? 'JACKPOT!' : result.multiplier >= 5 ? 'BIG WIN!' : 'WIN!'}` : '🎰 No Win')
       .setDescription(
         `🎰 **SLOTS** 🎰\n\n` +
-        `**${result.reels[0]}** │ **${result.reels[1]}** │ **${result.reels[2]}**\n\n` +
-        `${result.result === 'win' ? '✨ You matched symbols!' : '❌ No matching symbols'}`
+        `**${topRow}**\n` +
+        `**${middleRow}**\n` +
+        `**${bottomRow}**\n\n` +
+        `${winText}`
       )
       .addFields(
         {

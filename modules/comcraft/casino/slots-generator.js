@@ -11,7 +11,7 @@ const GIFEncoder = require("gif-encoder-2");
 class SlotsGifGenerator {
   constructor(options = {}) {
     this.width = options.width || 320;
-    this.height = options.height || 200;
+    this.height = options.height || 240; // Taller for 3 rows
     this.frameDelay = options.frameDelay || 80;
     this.spinFrames = options.spinFrames || 35; // Longer spin for better visibility
     this.stopDelay = 6; // Slightly longer delay between reels stopping
@@ -349,89 +349,115 @@ class SlotsGifGenerator {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Slot machine frame
+    // Slot machine frame (taller for 3 rows)
     ctx.fillStyle = '#8B4513';
-    ctx.fillRect(20, 40, this.width - 40, 110);
+    ctx.fillRect(20, 40, this.width - 40, 150);
     
     // Gold trim
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth = 3;
-    ctx.strokeRect(20, 40, this.width - 40, 110);
+    ctx.strokeRect(20, 40, this.width - 40, 150);
     
     // Inner frame (darker)
     ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(30, 50, this.width - 60, 90);
+    ctx.fillRect(30, 50, this.width - 60, 130);
     
     // Reel backgrounds (darker slots)
     const reelWidth = (this.width - 60) / 3;
     for (let i = 0; i < 3; i++) {
       ctx.fillStyle = '#0d0d1a';
-      ctx.fillRect(32 + i * reelWidth, 52, reelWidth - 4, 86);
+      ctx.fillRect(32 + i * reelWidth, 52, reelWidth - 4, 126);
     }
     
-    // Reel dividers
+    // Reel dividers (vertical)
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(30 + reelWidth, 50);
-    ctx.lineTo(30 + reelWidth, 140);
+    ctx.lineTo(30 + reelWidth, 180);
     ctx.moveTo(30 + reelWidth * 2, 50);
-    ctx.lineTo(30 + reelWidth * 2, 140);
+    ctx.lineTo(30 + reelWidth * 2, 180);
+    ctx.stroke();
+    
+    // Row dividers (horizontal lines between rows)
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(30, 50 + 43); // Between row 1 and 2
+    ctx.lineTo(this.width - 30, 50 + 43);
+    ctx.moveTo(30, 50 + 86); // Between row 2 and 3
+    ctx.lineTo(this.width - 30, 50 + 86);
     ctx.stroke();
   }
 
   /**
-   * Draw a spinning reel with scrolling symbols
+   * Draw a spinning reel with 3 rows scrolling
    */
-  drawSpinningReel(ctx, x, y, frame, reelIndex = 0) {
+  drawSpinningReel(ctx, x, frame, reelIndex = 0) {
     const symbolSize = 40;
-    const symbolSpacing = 45;
+    const rowSpacing = 35;
     const scrollSpeed = 15;
+    const baseY = 80; // Start Y for top row
     
-    // Calculate vertical offset
-    const totalOffset = (frame * scrollSpeed) % symbolSpacing;
+    // Calculate vertical offset for scrolling
+    const totalOffset = (frame * scrollSpeed) % rowSpacing;
     
-    // Draw multiple symbols scrolling
-    for (let i = -1; i <= 2; i++) {
-      const symbolPos = Math.floor((frame * scrollSpeed) / symbolSpacing) + i + (reelIndex * 3);
-      const symbolIndex = Math.abs(symbolPos) % this.symbols.length;
-      const symbol = this.symbols[symbolIndex];
+    // Draw 3 rows, each scrolling independently
+    for (let row = 0; row < 3; row++) {
+      const rowY = baseY + (row * rowSpacing);
       
-      const yPos = y + (i * symbolSpacing) - totalOffset + symbolSpacing / 2;
-      
-      // Only draw if in visible area
-      if (yPos >= 55 && yPos <= 135) {
-        // Blur/fade effect for spinning
-        const distFromCenter = Math.abs(yPos - y);
-        const alpha = Math.max(0.3, 1 - distFromCenter / 50);
-        this.drawSymbol(ctx, symbol, x, yPos, symbolSize, alpha * 0.8);
+      // Draw multiple symbols scrolling for this row
+      for (let i = -1; i <= 2; i++) {
+        const symbolPos = Math.floor((frame * scrollSpeed) / rowSpacing) + i + (reelIndex * 3) + (row * 2);
+        const symbolIndex = Math.abs(symbolPos) % this.symbols.length;
+        const symbol = this.symbols[symbolIndex];
+        
+        const yPos = rowY + (i * rowSpacing) - totalOffset;
+        
+        // Only draw if in visible area
+        if (yPos >= 55 && yPos <= 180) {
+          // Blur/fade effect for spinning
+          const distFromCenter = Math.abs(yPos - rowY);
+          const alpha = Math.max(0.3, 1 - distFromCenter / 40);
+          this.drawSymbol(ctx, symbol, x, yPos, symbolSize, alpha * 0.8);
+        }
       }
     }
     
     // Motion blur overlay
     ctx.fillStyle = 'rgba(13,13,26,0.2)';
-    ctx.fillRect(x - 40, 52, 80, 86);
+    ctx.fillRect(x - 40, 52, 80, 130);
   }
 
   /**
-   * Draw a stopped reel
+   * Draw a stopped reel with 3 rows (3x3 grid)
    */
-  drawStoppedReel(ctx, x, y, symbol, highlight = false) {
-    if (highlight) {
-      // Glow effect
-      ctx.shadowColor = '#FFD700';
-      ctx.shadowBlur = 15;
+  drawStoppedReel(ctx, x, reelIndex, symbols, highlightRows = []) {
+    // symbols is array of 3 symbols [top, middle, bottom]
+    // highlightRows is array of row indices to highlight [0, 1, 2]
+    const rowSpacing = 35;
+    const baseY = 80; // Start Y position for top row
+    
+    for (let row = 0; row < 3; row++) {
+      const y = baseY + (row * rowSpacing);
+      const symbol = symbols[row];
+      const isHighlighted = highlightRows.includes(row);
       
-      // Background highlight
-      ctx.fillStyle = 'rgba(255,215,0,0.2)';
-      ctx.beginPath();
-      ctx.arc(x, y, 35, 0, Math.PI * 2);
-      ctx.fill();
+      if (isHighlighted) {
+        // Glow effect for winning symbols
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 15;
+        
+        // Background highlight
+        ctx.fillStyle = 'rgba(255,215,0,0.2)';
+        ctx.beginPath();
+        ctx.arc(x, y, 30, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      this.drawSymbol(ctx, symbol, x, y, 40, 1);
+      ctx.shadowBlur = 0;
     }
-    
-    this.drawSymbol(ctx, symbol, x, y, 45, 1);
-    
-    ctx.shadowBlur = 0;
   }
 
   /**
@@ -499,15 +525,74 @@ class SlotsGifGenerator {
   }
 
   /**
-   * Check if position is winning
+   * Get which rows to highlight for a specific reel based on winning lines
    */
-  isWinningPosition(reels, position) {
-    const [r1, r2, r3] = reels;
-    if (r1 === r2 && r2 === r3) return true;
-    if (r1 === r2 && (position === 0 || position === 1)) return true;
-    if (r2 === r3 && (position === 1 || position === 2)) return true;
-    if (r1 === r3 && (position === 0 || position === 2)) return true;
-    return false;
+  getHighlightRowsForReel(winningLines, reelIndex) {
+    const highlightRows = [];
+    
+    for (const line of winningLines) {
+      if (line.row === 0) highlightRows.push(0); // Top row
+      if (line.row === 1) highlightRows.push(1); // Middle row
+      if (line.row === 2) highlightRows.push(2); // Bottom row
+      
+      // Diagonals affect all reels
+      if (line.name === 'Diagonal ↘') {
+        if (reelIndex === 0) highlightRows.push(0);
+        if (reelIndex === 1) highlightRows.push(1);
+        if (reelIndex === 2) highlightRows.push(2);
+      }
+      if (line.name === 'Diagonal ↙') {
+        if (reelIndex === 0) highlightRows.push(2);
+        if (reelIndex === 1) highlightRows.push(1);
+        if (reelIndex === 2) highlightRows.push(0);
+      }
+    }
+    
+    return [...new Set(highlightRows)]; // Remove duplicates
+  }
+
+  /**
+   * Draw winning lines on the slot machine
+   */
+  drawWinningLines(ctx, winningLines, reelX) {
+    const baseY = 80;
+    const rowSpacing = 35;
+    
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 5]);
+    
+    for (const line of winningLines) {
+      ctx.beginPath();
+      
+      if (line.row === 0) {
+        // Top row
+        ctx.moveTo(reelX[0] - 30, baseY);
+        ctx.lineTo(reelX[2] + 30, baseY);
+      } else if (line.row === 1) {
+        // Middle row
+        ctx.moveTo(reelX[0] - 30, baseY + rowSpacing);
+        ctx.lineTo(reelX[2] + 30, baseY + rowSpacing);
+      } else if (line.row === 2) {
+        // Bottom row
+        ctx.moveTo(reelX[0] - 30, baseY + rowSpacing * 2);
+        ctx.lineTo(reelX[2] + 30, baseY + rowSpacing * 2);
+      } else if (line.name === 'Diagonal ↘') {
+        // Diagonal top-left to bottom-right
+        ctx.moveTo(reelX[0] - 30, baseY);
+        ctx.lineTo(reelX[1], baseY + rowSpacing);
+        ctx.lineTo(reelX[2] + 30, baseY + rowSpacing * 2);
+      } else if (line.name === 'Diagonal ↙') {
+        // Diagonal top-right to bottom-left
+        ctx.moveTo(reelX[2] + 30, baseY);
+        ctx.lineTo(reelX[1], baseY + rowSpacing);
+        ctx.lineTo(reelX[0] - 30, baseY + rowSpacing * 2);
+      }
+      
+      ctx.stroke();
+    }
+    
+    ctx.setLineDash([]);
   }
 
   /**
@@ -516,11 +601,12 @@ class SlotsGifGenerator {
   async spin(options) {
     const {
       playerName = "Player",
-      reels,
+      reels, // Now 3x3: [[row1, row2, row3], [row1, row2, row3], [row1, row2, row3]]
       result = 'loss',
       multiplier = 0,
       betAmount = 1000,
       winAmount = 0,
+      winningLines = [], // Array of winning line info
     } = options;
 
     const encoder = new GIFEncoder(this.width, this.height);
@@ -538,7 +624,6 @@ class SlotsGifGenerator {
       30 + reelWidth + reelWidth / 2,
       30 + reelWidth * 2 + reelWidth / 2,
     ];
-    const reelY = 95;
 
     const reel1StopFrame = this.spinFrames;
     const reel2StopFrame = this.spinFrames + this.stopDelay;
@@ -554,10 +639,13 @@ class SlotsGifGenerator {
         const stopFrame = r === 0 ? reel1StopFrame : r === 1 ? reel2StopFrame : reel3StopFrame;
         
         if (frame < stopFrame) {
-          this.drawSpinningReel(ctx, reelX[r], reelY, frame + r * 7, r);
+          // Still spinning
+          this.drawSpinningReel(ctx, reelX[r], frame + r * 7, r);
         } else {
-          const isWinning = this.isWinningPosition(reels, r);
-          this.drawStoppedReel(ctx, reelX[r], reelY, reels[r], isWinning && frame >= totalSpinFrames - 1);
+          // Stopped - show final symbols for this reel
+          const reelSymbols = reels[r]; // [top, middle, bottom]
+          const highlightRows = frame >= totalSpinFrames - 1 ? this.getHighlightRowsForReel(winningLines, r) : [];
+          this.drawStoppedReel(ctx, reelX[r], r, reelSymbols, highlightRows);
         }
       }
 
@@ -576,23 +664,19 @@ class SlotsGifGenerator {
       this.drawBackground(ctx);
       this.drawPlayerInfo(ctx, playerName, betAmount);
 
+      // Draw all reels stopped
       for (let r = 0; r < 3; r++) {
-        const isWinning = this.isWinningPosition(reels, r);
-        this.drawStoppedReel(ctx, reelX[r], reelY, reels[r], isWinning && result === 'win');
+        const reelSymbols = reels[r];
+        const highlightRows = result === 'win' ? this.getHighlightRowsForReel(winningLines, r) : [];
+        this.drawStoppedReel(ctx, reelX[r], r, reelSymbols, highlightRows);
+      }
+
+      // Draw winning lines
+      if (result === 'win' && winningLines.length > 0) {
+        this.drawWinningLines(ctx, winningLines, reelX);
       }
 
       this.drawResult(ctx, result, multiplier, winAmount, frame);
-
-      if (result === 'win') {
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(40, reelY);
-        ctx.lineTo(this.width - 40, reelY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
 
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
     }

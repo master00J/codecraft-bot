@@ -105,16 +105,16 @@ class CasinoManager {
         console.log('✓ DiceGifGenerator initialized');
       }
       
-      // Initialize slots generator for animated slots
+      // Initialize slots generator for animated slots (3x3 grid)
       if (SlotsGifGenerator) {
         this.slotsGifGenerator = new SlotsGifGenerator({
           width: 320,
-          height: 200,
+          height: 240, // Taller for 3 rows
           frameDelay: 80,
           spinFrames: 35, // Longer spin for better visibility
           resultFrames: 12,
         });
-        console.log('✓ SlotsGifGenerator initialized');
+        console.log('✓ SlotsGifGenerator initialized (3x3 grid)');
       }
     } catch (error) {
       console.error('Error creating CasinoManager:', error);
@@ -415,63 +415,121 @@ class CasinoManager {
 
     // Slot symbols: 🍒 🍋 🍊 🍇 🔔 ⭐ 💎
     const symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎'];
-    const reel1 = symbols[Math.floor(Math.random() * symbols.length)];
-    const reel2 = symbols[Math.floor(Math.random() * symbols.length)];
-    const reel3 = symbols[Math.floor(Math.random() * symbols.length)];
+    
+    // Generate 3x3 grid (3 reels, each with 3 rows)
+    const reels = [
+      [
+        symbols[Math.floor(Math.random() * symbols.length)],
+        symbols[Math.floor(Math.random() * symbols.length)],
+        symbols[Math.floor(Math.random() * symbols.length)]
+      ],
+      [
+        symbols[Math.floor(Math.random() * symbols.length)],
+        symbols[Math.floor(Math.random() * symbols.length)],
+        symbols[Math.floor(Math.random() * symbols.length)]
+      ],
+      [
+        symbols[Math.floor(Math.random() * symbols.length)],
+        symbols[Math.floor(Math.random() * symbols.length)],
+        symbols[Math.floor(Math.random() * symbols.length)]
+      ]
+    ];
 
     let result = 'loss';
     let winAmount = 0;
     let multiplier = 0;
+    let winningLines = [];
 
-    // Check for wins
-    if (reel1 === reel2 && reel2 === reel3) {
-      // Three of a kind
-      if (reel1 === '💎') {
-        multiplier = 10; // Jackpot
-      } else if (reel1 === '⭐') {
-        multiplier = 5;
-      } else if (reel1 === '🔔') {
-        multiplier = 3;
-      } else {
-        multiplier = 2;
+    // Check for wins on multiple paylines
+    // Payline 1: Top row (reels[0][0], reels[1][0], reels[2][0])
+    // Payline 2: Middle row (reels[0][1], reels[1][1], reels[2][1])
+    // Payline 3: Bottom row (reels[0][2], reels[1][2], reels[2][2])
+    // Payline 4: Diagonal top-left to bottom-right
+    // Payline 5: Diagonal top-right to bottom-left
+    
+    const paylines = [
+      { name: 'Top Row', symbols: [reels[0][0], reels[1][0], reels[2][0]], row: 0 },
+      { name: 'Middle Row', symbols: [reels[0][1], reels[1][1], reels[2][1]], row: 1 },
+      { name: 'Bottom Row', symbols: [reels[0][2], reels[1][2], reels[2][2]], row: 2 },
+      { name: 'Diagonal ↘', symbols: [reels[0][0], reels[1][1], reels[2][2]], row: -1 },
+      { name: 'Diagonal ↙', symbols: [reels[0][2], reels[1][1], reels[2][0]], row: -1 },
+    ];
+
+    // Check each payline
+    for (const line of paylines) {
+      const [s1, s2, s3] = line.symbols;
+      let lineMultiplier = 0;
+
+      if (s1 === s2 && s2 === s3) {
+        // Three of a kind
+        if (s1 === '💎') {
+          lineMultiplier = 10; // Jackpot
+        } else if (s1 === '⭐') {
+          lineMultiplier = 5;
+        } else if (s1 === '🔔') {
+          lineMultiplier = 3;
+        } else {
+          lineMultiplier = 2;
+        }
+      } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+        // Two of a kind
+        lineMultiplier = 1.5;
       }
-    } else if (reel1 === reel2 || reel2 === reel3 || reel1 === reel3) {
-      // Two of a kind
-      multiplier = 1.5;
+
+      if (lineMultiplier > 0) {
+        winningLines.push({
+          name: line.name,
+          symbols: line.symbols,
+          multiplier: lineMultiplier,
+          row: line.row
+        });
+        
+        // Use highest multiplier
+        if (lineMultiplier > multiplier) {
+          multiplier = lineMultiplier;
+        }
+      }
     }
 
-    if (multiplier > 0) {
-      const payout = Math.floor(betAmount * multiplier * (1 - config.house_edge / 100));
+    // Calculate total win (can win on multiple lines!)
+    if (winningLines.length > 0) {
+      // Sum all winning lines
+      const totalMultiplier = winningLines.reduce((sum, line) => sum + line.multiplier, 0);
+      const payout = Math.floor(betAmount * totalMultiplier * (1 - config.house_edge / 100));
       winAmount = payout;
       result = 'win';
+      multiplier = totalMultiplier; // Total multiplier from all lines
     }
 
     // Update balance
     if (result === 'win') {
       const netWin = winAmount - betAmount;
+      const reelDisplay = reels.map(r => r.join(' ')).join(' | ');
       await this.economyManager.addCoins(
         guildId,
         userId,
         netWin,
         'casino_win',
-        `Slots: ${reel1} ${reel2} ${reel3}`,
-        { game_type: 'slots', reels: [reel1, reel2, reel3], multiplier }
+        `Slots: ${winningLines.length} line(s) - ${winningLines.map(l => l.name).join(', ')}`,
+        { game_type: 'slots', reels: reels, multiplier, winningLines }
       );
     } else {
+      const reelDisplay = reels.map(r => r.join(' ')).join(' | ');
       await this.economyManager.removeCoins(
         guildId,
         userId,
         betAmount,
         'casino_loss',
-        `Slots: ${reel1} ${reel2} ${reel3}`,
-        { game_type: 'slots', reels: [reel1, reel2, reel3] }
+        `Slots: No win`,
+        { game_type: 'slots', reels: reels }
       );
     }
 
     // Log game
     await this.logGame(guildId, userId, username, 'slots', betAmount, winAmount, result, {
-      reels: [reel1, reel2, reel3],
+      reels: reels,
       multiplier: multiplier || 0,
+      winningLines: winningLines.length,
     });
 
     // Update stats
@@ -483,11 +541,12 @@ class CasinoManager {
       try {
         const gifResult = await this.slotsGifGenerator.spin({
           playerName: username,
-          reels: [reel1, reel2, reel3],
+          reels: reels, // Now 3x3 grid
           result: result,
           multiplier: multiplier,
           betAmount: betAmount,
           winAmount: winAmount,
+          winningLines: winningLines,
         });
         gifBuffer = gifResult.buffer;
         console.log(`✅ SlotsGifGenerator: Created GIF buffer of ${gifBuffer.length} bytes`);
@@ -501,10 +560,11 @@ class CasinoManager {
     return {
       success: true,
       result,
-      reels: [reel1, reel2, reel3],
+      reels: reels, // 3x3 grid
       betAmount,
       winAmount,
       multiplier,
+      winningLines,
       netResult: result === 'win' ? winAmount - betAmount : -betAmount,
       gifBuffer, // Animated slots GIF
     };
