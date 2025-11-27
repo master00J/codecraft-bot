@@ -3636,6 +3636,7 @@ async function handleCasinoBetModal(interaction, casinoManager, economyManager) 
 
   // Handle dice game with animated GIF
   if (gameType === 'dice') {
+    console.log(`🎲 [Dice] Starting dice game for ${username}`);
     const result = await casinoManager.playDice(guildId, userId, username, betAmount);
 
     if (!result.success) {
@@ -3644,17 +3645,37 @@ async function handleCasinoBetModal(interaction, casinoManager, economyManager) 
       });
     }
 
+    console.log(`🎲 [Dice] Game result:`, {
+      playerRoll: result.playerRoll,
+      houseRoll: result.houseRoll,
+      result: result.result,
+      hasGifBuffer: !!result.gifBuffer,
+      gifBufferType: result.gifBuffer ? typeof result.gifBuffer : 'undefined',
+      isBuffer: result.gifBuffer ? Buffer.isBuffer(result.gifBuffer) : false,
+      gifBufferLength: result.gifBuffer?.length || 0,
+    });
+
     // Check if we have a GIF to show
     let diceGif = null;
-    if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
-      const header = result.gifBuffer.slice(0, 6).toString('ascii');
-      if (header.startsWith('GIF')) {
-        diceGif = new AttachmentBuilder(result.gifBuffer, {
-          name: 'dice-roll.gif',
-          description: 'Dice roll animation',
-        });
-        console.log(`✅ Dice GIF attachment created: ${result.gifBuffer.length} bytes`);
+    if (result.gifBuffer) {
+      console.log(`🎲 [Dice] GIF buffer exists, checking format...`);
+      if (Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+        const header = result.gifBuffer.slice(0, 6).toString('ascii');
+        console.log(`🎲 [Dice] GIF header: "${header}"`);
+        if (header.startsWith('GIF')) {
+          diceGif = new AttachmentBuilder(result.gifBuffer, {
+            name: 'dice-roll.gif',
+            description: 'Dice roll animation',
+          });
+          console.log(`✅ [Dice] GIF attachment created: ${result.gifBuffer.length} bytes`);
+        } else {
+          console.warn(`⚠️ [Dice] Invalid GIF header: "${header}"`);
+        }
+      } else {
+        console.warn(`⚠️ [Dice] gifBuffer is not a valid Buffer or is empty`);
       }
+    } else {
+      console.warn(`⚠️ [Dice] No gifBuffer in result`);
     }
 
     // GIF animation duration (~2 seconds)
