@@ -370,7 +370,7 @@ class DuelGifGenerator {
     
     const p1X = startX;
     const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight + 20; // Iets hoger voor betere zichtbaarheid
+    const charY = this.height - scaledHeight; // Op de grond (geen zweven)
 
     const p1Center = p1X + scaledWidth / 2;
     const p2Center = p2X + scaledWidth / 2;
@@ -469,10 +469,12 @@ class DuelGifGenerator {
     const endIdleFrame = this.getFrame(this.sprites.idle, 0, idleFrames);
     
     if (isFinal && winner) {
-      // Winner celebration
-      for (let i = 0; i < 6; i++) {
+      // Winner celebration - langere dood animatie voor betere zichtbaarheid
+      for (let i = 0; i < 12; i++) {
         const idleAnim = this.getFrame(this.sprites.idle, i % idleFrames, idleFrames);
-        const deathF = this.getFrame(this.sprites.death, Math.min(i + 1, deathFrames - 1), deathFrames);
+        const deathProgress = Math.min(i / 11, 1); // 0 tot 1 over 12 frames
+        const deathFrameIdx = Math.floor(deathProgress * (deathFrames - 1));
+        const deathF = this.getFrame(this.sprites.death, deathFrameIdx, deathFrames);
 
         this.drawBackground(ctx);
         if (winner === 1) {
@@ -498,6 +500,12 @@ class DuelGifGenerator {
         ctx.strokeText(`${winnerName} WINS!`, this.width / 2, this.height / 2 - 10);
         ctx.fillText(`${winnerName} WINS!`, this.width / 2, this.height / 2 - 10);
 
+        // Langere delay voor dood animatie frames (laatste 6 frames extra lang)
+        if (i >= 6) {
+          encoder.setDelay(200); // 200ms voor laatste frames
+        } else {
+          encoder.setDelay(this.frameDelay); // Normale delay voor eerste frames
+        }
         encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
       }
     } else {
@@ -573,7 +581,7 @@ class DuelGifGenerator {
     
     const p1X = startX;
     const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight + 20; // Iets hoger voor betere zichtbaarheid
+    const charY = this.height - scaledHeight; // Op de grond (geen zweven)
 
     const p1Center = p1X + scaledWidth / 2;
     const p2Center = p2X + scaledWidth / 2;
@@ -650,12 +658,13 @@ class DuelGifGenerator {
       }
     }
 
-    // Final frames: Winner celebration
-    for (let i = 0; i < 6; i++) {
+    // Final frames: Winner celebration - langere dood animatie voor betere zichtbaarheid
+    for (let i = 0; i < 12; i++) {
       this.drawBackground(ctx);
 
       const idleFrameIdx = i % idleFrames;
-      const deathFrameIdx = Math.min(i, deathFrames - 1);
+      const deathProgress = Math.min(i / 11, 1); // 0 tot 1 over 12 frames
+      const deathFrameIdx = Math.floor(deathProgress * (deathFrames - 1));
 
       if (winner === 1) {
         const winnerFrame = this.getFrame(this.sprites.idle, idleFrameIdx, idleFrames);
@@ -693,6 +702,12 @@ class DuelGifGenerator {
       
       ctx.restore();
 
+      // Langere delay voor dood animatie frames (laatste 6 frames extra lang)
+      if (i >= 6) {
+        encoder.setDelay(200); // 200ms voor laatste frames
+      } else {
+        encoder.setDelay(this.frameDelay); // Normale delay voor eerste frames
+      }
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
     }
 
