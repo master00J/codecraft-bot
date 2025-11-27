@@ -12,8 +12,8 @@ class SlotsGifGenerator {
     this.width = options.width || 320;
     this.height = options.height || 200;
     this.frameDelay = options.frameDelay || 80;
-    this.spinFrames = options.spinFrames || 20; // Frames of spinning
-    this.stopDelay = 4; // Frames between each reel stopping
+    this.spinFrames = options.spinFrames || 25; // More frames for longer spin
+    this.stopDelay = 5; // Frames between each reel stopping
     this.resultFrames = options.resultFrames || 12;
     
     // Slot symbols (must match manager.js)
@@ -75,12 +75,20 @@ class SlotsGifGenerator {
     ctx.save();
     
     if (blur) {
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.6;
+    } else {
+      ctx.globalAlpha = 1.0;
     }
     
-    ctx.font = `${size}px Arial`;
+    // Make symbols more visible with stroke
+    ctx.font = `bold ${size}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    
+    // Add text stroke for better visibility
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeText(symbol, x, y);
     ctx.fillText(symbol, x, y);
     
     ctx.restore();
@@ -89,28 +97,56 @@ class SlotsGifGenerator {
   /**
    * Draw a spinning reel (blur effect)
    */
-  drawSpinningReel(ctx, x, y, frame) {
-    // Draw multiple blurred symbols to simulate spinning
-    const symbolSize = 35;
-    const offset = (frame * 15) % 60;
+  drawSpinningReel(ctx, x, y, frame, reelIndex = 0) {
+    // Create a deterministic sequence for this reel based on frame and reel index
+    // This ensures smooth scrolling without random jumps
+    const symbolSize = 45; // Larger symbols for better visibility
+    const reelHeight = 90; // Height of visible reel area
+    const symbolSpacing = 35; // Space between symbols (increased for larger symbols)
+    const scrollSpeed = 14; // Pixels per frame (faster scroll)
     
-    for (let i = -1; i <= 2; i++) {
-      const symbolIndex = Math.floor(Math.random() * this.symbols.length);
+    // Calculate vertical offset (continuous scrolling)
+    const totalOffset = (frame * scrollSpeed) % symbolSpacing;
+    
+    // Draw 4-5 symbols visible in the reel window
+    for (let i = -1; i <= 3; i++) {
+      // Use deterministic symbol selection based on position (not random)
+      // This creates a repeating pattern that scrolls smoothly
+      // Add reelIndex offset so each reel shows different symbols
+      const symbolPos = Math.floor((frame * scrollSpeed) / symbolSpacing) + i + (reelIndex * 3);
+      const symbolIndex = Math.abs(symbolPos) % this.symbols.length;
       const symbol = this.symbols[symbolIndex];
-      const yPos = y + (i * 30) + offset - 30;
       
-      if (yPos > 50 && yPos < 140) {
-        this.drawSymbol(ctx, symbol, x, yPos, symbolSize, true);
+      // Calculate Y position with smooth scrolling
+      const baseY = 50 + (reelHeight / 2); // Center of reel area
+      const yPos = baseY + (i * symbolSpacing) - totalOffset;
+      
+      // Only draw if symbol is visible in reel window
+      if (yPos >= 50 && yPos <= 140) {
+        // Draw symbol with slight blur effect during spinning
+        ctx.save();
+        ctx.globalAlpha = 0.8; // More visible
+        ctx.font = `bold ${symbolSize}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Add stroke for visibility
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.strokeText(symbol, x, yPos);
+        ctx.fillText(symbol, x, yPos);
+        ctx.restore();
       }
     }
     
-    // Motion blur lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
+    // Add motion blur effect (vertical lines)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
     for (let i = 0; i < 3; i++) {
+      const blurY = 50 + (i * 30) + 15;
       ctx.beginPath();
-      ctx.moveTo(x - 20, 60 + i * 25);
-      ctx.lineTo(x + 20, 60 + i * 25);
+      ctx.moveTo(x - 25, blurY);
+      ctx.lineTo(x + 25, blurY);
       ctx.stroke();
     }
   }
@@ -122,10 +158,11 @@ class SlotsGifGenerator {
     if (highlight) {
       // Glow effect for winning symbols
       ctx.shadowColor = '#FFD700';
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 20;
     }
     
-    this.drawSymbol(ctx, symbol, x, y, 40);
+    // Use same size as spinning symbols for consistency
+    this.drawSymbol(ctx, symbol, x, y, 45);
     
     ctx.shadowBlur = 0;
   }
@@ -244,8 +281,8 @@ class SlotsGifGenerator {
         const stopFrame = r === 0 ? reel1StopFrame : r === 1 ? reel2StopFrame : reel3StopFrame;
         
         if (frame < stopFrame) {
-          // Still spinning
-          this.drawSpinningReel(ctx, reelX[r], reelY, frame + r * 5);
+          // Still spinning - pass reel index for deterministic scrolling
+          this.drawSpinningReel(ctx, reelX[r], reelY, frame + r * 5, r);
         } else {
           // Stopped - show final symbol
           const isWinningSymbol = this.isWinningPosition(reels, r);
