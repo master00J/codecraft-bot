@@ -3634,6 +3634,105 @@ async function handleCasinoBetModal(interaction, casinoManager, economyManager) 
     return interaction.editReply({ embeds: [embed], components: [row] });
   }
 
+  // Handle dice game with animated GIF
+  if (gameType === 'dice') {
+    const result = await casinoManager.playDice(guildId, userId, username, betAmount);
+
+    if (!result.success) {
+      return interaction.editReply({
+        content: `❌ ${result.error}`,
+      });
+    }
+
+    // Check if we have a GIF to show
+    let diceGif = null;
+    if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+      const header = result.gifBuffer.slice(0, 6).toString('ascii');
+      if (header.startsWith('GIF')) {
+        diceGif = new AttachmentBuilder(result.gifBuffer, {
+          name: 'dice-roll.gif',
+          description: 'Dice roll animation',
+        });
+        console.log(`✅ Dice GIF attachment created: ${result.gifBuffer.length} bytes`);
+      }
+    }
+
+    // GIF animation duration (~2 seconds)
+    const gifDuration = 2500;
+
+    if (diceGif) {
+      // STEP 1: Show GIF with "Rolling..." embed
+      const rollingEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🎲 Rolling Dice...')
+        .setDescription('The dice are tumbling!')
+        .addFields({
+          name: '💰 Bet Amount',
+          value: `${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        })
+        .setImage('attachment://dice-roll.gif')
+        .setTimestamp();
+
+      await interaction.editReply({
+        content: null,
+        embeds: [rollingEmbed],
+        files: [diceGif],
+        components: [],
+      });
+
+      // Wait for GIF to play
+      await new Promise(resolve => setTimeout(resolve, gifDuration));
+    }
+
+    // STEP 2: Show result embed
+    const playerEmoji = casinoManager.getDiceEmoji(result.playerRoll);
+    const houseEmoji = casinoManager.getDiceEmoji(result.houseRoll);
+    const resultColor = result.result === 'win' ? '#22C55E' : result.result === 'draw' ? '#F59E0B' : '#EF4444';
+    const resultTitle = result.result === 'win' ? '🎉 You Won!' : result.result === 'draw' ? '🤝 Draw!' : '😢 You Lost';
+
+    const resultEmbed = new EmbedBuilder()
+      .setColor(resultColor)
+      .setTitle(resultTitle)
+      .setDescription(
+        `🎲 **DICE ROLL** 🎲\n\n` +
+        `**You:** ${playerEmoji} **${result.playerRoll}**\n` +
+        `**House:** ${houseEmoji} **${result.houseRoll}**\n\n` +
+        `${result.result === 'win' ? '✅ Your roll is higher!' : result.result === 'draw' ? '🤝 Both rolled the same!' : '❌ House rolled higher!'}`
+      )
+      .addFields(
+        {
+          name: '💰 Bet Amount',
+          value: `${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        },
+        {
+          name: result.result === 'win' ? '🎁 Win Amount' : result.result === 'draw' ? '↩️ Returned' : '💸 Loss',
+          value: result.result === 'win'
+            ? `+${economyManager.formatCoins(result.netResult)} coins`
+            : result.result === 'draw'
+            ? `${economyManager.formatCoins(betAmount)} coins`
+            : `-${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        }
+      )
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`casino_dice_${userId}`)
+        .setLabel('🎲 Roll Again')
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    return interaction.editReply({
+      content: null,
+      embeds: [resultEmbed],
+      files: [], // Remove GIF from result
+      components: [row],
+    });
+  }
+
   // Other game types not yet implemented for custom bots
   return interaction.editReply({
     content: `🎰 ${gameType} is not yet implemented for custom bots.`,

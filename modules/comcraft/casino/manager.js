@@ -43,6 +43,15 @@ try {
   console.warn('⚠️ CoinflipGenerator not available:', error.message);
 }
 
+// Import DiceGifGenerator for animated dice rolls
+let DiceGifGenerator;
+try {
+  DiceGifGenerator = require('./dice-generator');
+  console.log('✓ DiceGifGenerator imported successfully');
+} catch (error) {
+  console.warn('⚠️ DiceGifGenerator not available:', error.message);
+}
+
 class CasinoManager {
   constructor() {
     if (!process.env.SUPABASE_URL) {
@@ -75,6 +84,16 @@ class CasinoManager {
           frameDelay: 70,
         });
         console.log('✓ CoinflipGenerator initialized');
+      }
+      
+      // Initialize dice generator for animated dice rolls
+      if (DiceGifGenerator) {
+        this.diceGifGenerator = new DiceGifGenerator({
+          width: 300,
+          height: 180,
+          frameDelay: 70,
+        });
+        console.log('✓ DiceGifGenerator initialized');
       }
     } catch (error) {
       console.error('Error creating CasinoManager:', error);
@@ -320,6 +339,26 @@ class CasinoManager {
     // Update stats
     await this.updateStats(guildId, userId, 'dice', betAmount, winAmount, result);
 
+    // Generate animated dice roll GIF
+    let gifBuffer = null;
+    if (this.diceGifGenerator) {
+      try {
+        const gifResult = await this.diceGifGenerator.roll({
+          player1: username,
+          player2: 'House',
+          roll1: playerRoll,
+          roll2: houseRoll,
+          betAmount: betAmount,
+        });
+        gifBuffer = gifResult.buffer;
+        console.log(`✅ DiceGifGenerator: Created GIF buffer of ${gifBuffer.length} bytes`);
+      } catch (gifError) {
+        console.warn('⚠️ Failed to generate dice GIF:', gifError.message);
+      }
+    } else {
+      console.warn('⚠️ DiceGifGenerator not initialized');
+    }
+
     return {
       success: true,
       result,
@@ -328,6 +367,7 @@ class CasinoManager {
       betAmount,
       winAmount,
       netResult: result === 'win' ? winAmount - betAmount : result === 'draw' ? 0 : -betAmount,
+      gifBuffer, // Animated dice roll GIF
     };
   }
 
