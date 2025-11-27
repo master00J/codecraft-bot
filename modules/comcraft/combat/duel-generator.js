@@ -23,8 +23,8 @@ class DuelGifGenerator {
     this.frameWidth = options.frameWidth || 200;
     this.frameHeight = options.frameHeight || 200;
 
-    // Animation settings - faster for smoother battle
-    this.frameDelay = options.frameDelay || 80; // ms per frame (sneller)
+    // Animation settings - slower for smoother hits
+    this.frameDelay = options.frameDelay || 120; // ms per frame (langzamer voor betere zichtbaarheid)
 
     // Sprite sheets (will be loaded)
     this.sprites = {};
@@ -360,17 +360,17 @@ class DuelGifGenerator {
     const actualSpriteHeight = idleFrame.sh;
 
     // Scale and positioning - sprites OVERLAPPING for combat
-    const scale = 1.0; // Normale grootte
+    const scale = 1.4; // Groter voor betere zichtbaarheid
     const scaledWidth = actualSpriteWidth * scale;
     const scaledHeight = actualSpriteHeight * scale;
-    const spacing = -80; // Sterk overlappen - ze raken elkaar
+    const spacing = -120; // Meer overlap - dichter bij elkaar
     
     const totalWidth = (scaledWidth * 2) + spacing;
     const startX = (this.width - totalWidth) / 2;
     
     const p1X = startX;
     const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight + 30; // Lager op de grond
+    const charY = this.height - scaledHeight + 20; // Iets hoger voor betere zichtbaarheid
 
     const p1Center = p1X + scaledWidth / 2;
     const p2Center = p2X + scaledWidth / 2;
@@ -420,9 +420,9 @@ class DuelGifGenerator {
       const { attacker, damage, isMiss } = attack;
       const actualDamage = isMiss ? 0 : (damage || 0);
 
-      // Attack animation (4 frames)
-      for (let i = 0; i < 4; i++) {
-        const progress = i / 3;
+      // Attack animation (6 frames voor langzamere hits)
+      for (let i = 0; i < 6; i++) {
+        const progress = i / 5;
         const attackFrameIdx = Math.floor(progress * (attackFrames - 1));
         const hitFrameIdx = Math.floor(progress * (hitFrames - 1));
         const showSplat = progress >= 0.6;
@@ -440,8 +440,8 @@ class DuelGifGenerator {
           
           if (showSplat) {
             splatTarget = 2;
-            // Apply damage to P2
-            if (i === 2) currentP2Hp = Math.max(0, currentP2Hp - actualDamage);
+            // Apply damage to P2 (op frame 3 van 6)
+            if (i === 3) currentP2Hp = Math.max(0, currentP2Hp - actualDamage);
           }
         } else {
           // Player 2 attacks Player 1
@@ -452,8 +452,8 @@ class DuelGifGenerator {
           
           if (showSplat) {
             splatTarget = 1;
-            // Apply damage to P1
-            if (i === 2) currentP1Hp = Math.max(0, currentP1Hp - actualDamage);
+            // Apply damage to P1 (op frame 3 van 6)
+            if (i === 3) currentP1Hp = Math.max(0, currentP1Hp - actualDamage);
           }
         }
 
@@ -563,17 +563,17 @@ class DuelGifGenerator {
     const actualSpriteHeight = idleFrame.sh;
 
     // Scale and positioning - sprites OVERLAPPING for combat
-    const scale = 1.0; // Normale grootte
+    const scale = 1.4; // Groter voor betere zichtbaarheid
     const scaledWidth = actualSpriteWidth * scale;
     const scaledHeight = actualSpriteHeight * scale;
-    const spacing = -80; // Sterk overlappen - ze raken elkaar
+    const spacing = -120; // Meer overlap - dichter bij elkaar
     
     const totalWidth = (scaledWidth * 2) + spacing;
     const startX = (this.width - totalWidth) / 2;
     
     const p1X = startX;
     const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight + 30; // Lager op de grond
+    const charY = this.height - scaledHeight + 20; // Iets hoger voor betere zichtbaarheid
 
     const p1Center = p1X + scaledWidth / 2;
     const p2Center = p2X + scaledWidth / 2;
@@ -601,11 +601,11 @@ class DuelGifGenerator {
       this.drawHpBar(ctx, p2Center - 40, 25, currentP2Hp, player2.maxHp);
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
 
-      // Phase 2: Attack animation (4 frames)
-      for (let i = 0; i < 4; i++) {
+      // Phase 2: Attack animation (6 frames voor langzamere hits)
+      for (let i = 0; i < 6; i++) {
         this.drawBackground(ctx);
 
-        const progress = i / 3;
+        const progress = i / 5;
         const attackFrameIdx = Math.floor(progress * (attackFrames - 1));
         const hitFrameIdx = Math.floor(progress * (hitFrames - 1));
         const showSplat = progress >= 0.5;
