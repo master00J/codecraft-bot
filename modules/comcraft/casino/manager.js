@@ -52,6 +52,15 @@ try {
   console.warn('⚠️ DiceGifGenerator not available:', error.message);
 }
 
+// Import SlotsGifGenerator for animated slots
+let SlotsGifGenerator;
+try {
+  SlotsGifGenerator = require('./slots-generator');
+  console.log('✓ SlotsGifGenerator imported successfully');
+} catch (error) {
+  console.warn('⚠️ SlotsGifGenerator not available:', error.message);
+}
+
 class CasinoManager {
   constructor() {
     if (!process.env.SUPABASE_URL) {
@@ -91,9 +100,19 @@ class CasinoManager {
         this.diceGifGenerator = new DiceGifGenerator({
           width: 300,
           height: 180,
-          frameDelay: 70,
+          frameDelay: 80,
         });
         console.log('✓ DiceGifGenerator initialized');
+      }
+      
+      // Initialize slots generator for animated slots
+      if (SlotsGifGenerator) {
+        this.slotsGifGenerator = new SlotsGifGenerator({
+          width: 320,
+          height: 200,
+          frameDelay: 80,
+        });
+        console.log('✓ SlotsGifGenerator initialized');
       }
     } catch (error) {
       console.error('Error creating CasinoManager:', error);
@@ -456,6 +475,27 @@ class CasinoManager {
     // Update stats
     await this.updateStats(guildId, userId, 'slots', betAmount, winAmount, result);
 
+    // Generate animated slots GIF
+    let gifBuffer = null;
+    if (this.slotsGifGenerator) {
+      try {
+        const gifResult = await this.slotsGifGenerator.spin({
+          playerName: username,
+          reels: [reel1, reel2, reel3],
+          result: result,
+          multiplier: multiplier,
+          betAmount: betAmount,
+          winAmount: winAmount,
+        });
+        gifBuffer = gifResult.buffer;
+        console.log(`✅ SlotsGifGenerator: Created GIF buffer of ${gifBuffer.length} bytes`);
+      } catch (gifError) {
+        console.warn('⚠️ Failed to generate slots GIF:', gifError.message);
+      }
+    } else {
+      console.warn('⚠️ SlotsGifGenerator not initialized');
+    }
+
     return {
       success: true,
       result,
@@ -464,6 +504,7 @@ class CasinoManager {
       winAmount,
       multiplier,
       netResult: result === 'win' ? winAmount - betAmount : -betAmount,
+      gifBuffer, // Animated slots GIF
     };
   }
 

@@ -3754,6 +3754,105 @@ async function handleCasinoBetModal(interaction, casinoManager, economyManager) 
     });
   }
 
+  // Handle slots game with animated GIF
+  if (gameType === 'slots') {
+    console.log(`🎰 [Slots] Starting slots game for ${username}`);
+    const result = await casinoManager.playSlots(guildId, userId, username, betAmount);
+
+    if (!result.success) {
+      return interaction.editReply({
+        content: `❌ ${result.error}`,
+      });
+    }
+
+    console.log(`🎰 [Slots] Game result: reels=${result.reels.join(',')}, hasGif=${!!result.gifBuffer}`);
+
+    // Check if we have a GIF to show
+    let slotsGif = null;
+    if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+      const header = result.gifBuffer.slice(0, 6).toString('ascii');
+      if (header.startsWith('GIF')) {
+        slotsGif = new AttachmentBuilder(result.gifBuffer, {
+          name: 'slots-spin.gif',
+          description: 'Slots spin animation',
+        });
+        console.log(`✅ [Slots] GIF attachment created: ${result.gifBuffer.length} bytes`);
+      }
+    }
+
+    // GIF animation duration (~3 seconds)
+    const gifDuration = 3500;
+
+    if (slotsGif) {
+      // STEP 1: Show GIF with "Spinning..." embed
+      const spinningEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🎰 Spinning...')
+        .setDescription('The reels are spinning!')
+        .addFields({
+          name: '💰 Bet Amount',
+          value: `${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        })
+        .setImage('attachment://slots-spin.gif')
+        .setTimestamp();
+
+      await interaction.editReply({
+        content: null,
+        embeds: [spinningEmbed],
+        files: [slotsGif],
+        components: [],
+      });
+
+      // Wait for GIF to play
+      await new Promise(resolve => setTimeout(resolve, gifDuration));
+    }
+
+    // STEP 2: Show result embed
+    const resultEmbed = new EmbedBuilder()
+      .setColor(result.result === 'win' ? '#22C55E' : '#EF4444')
+      .setTitle(result.result === 'win' ? `🎰 ${result.multiplier >= 10 ? 'JACKPOT!' : result.multiplier >= 5 ? 'BIG WIN!' : 'WIN!'}` : '🎰 No Win')
+      .setDescription(
+        `🎰 **SLOTS** 🎰\n\n` +
+        `**${result.reels[0]}** │ **${result.reels[1]}** │ **${result.reels[2]}**\n\n` +
+        `${result.result === 'win' ? '✨ You matched symbols!' : '❌ No matching symbols'}`
+      )
+      .addFields(
+        {
+          name: '💰 Bet Amount',
+          value: `${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        },
+        ...(result.result === 'win' ? [{
+          name: '✨ Multiplier',
+          value: `**${result.multiplier}x**`,
+          inline: true,
+        }] : []),
+        {
+          name: result.result === 'win' ? '🎁 Win Amount' : '💸 Loss',
+          value: result.result === 'win'
+            ? `+${economyManager.formatCoins(result.netResult)} coins`
+            : `-${economyManager.formatCoins(Math.abs(result.netResult))} coins`,
+          inline: true,
+        }
+      )
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`casino_slots_${userId}`)
+        .setLabel('🎰 Spin Again')
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    return interaction.editReply({
+      content: null,
+      embeds: [resultEmbed],
+      files: [], // Remove GIF from result
+      components: [row],
+    });
+  }
+
   // Other game types not yet implemented for custom bots
   return interaction.editReply({
     content: `🎰 ${gameType} is not yet implemented for custom bots.`,
