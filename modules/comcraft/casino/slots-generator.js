@@ -5,6 +5,7 @@ const GIFEncoder = require("gif-encoder-2");
  * Slots GIF Generator for Discord Bot
  * 
  * Generates animated slot machine GIFs with spinning reels
+ * Uses custom drawn symbols (no emoji dependency)
  */
 
 class SlotsGifGenerator {
@@ -12,23 +13,328 @@ class SlotsGifGenerator {
     this.width = options.width || 320;
     this.height = options.height || 200;
     this.frameDelay = options.frameDelay || 80;
-    this.spinFrames = options.spinFrames || 25; // More frames for longer spin
-    this.stopDelay = 5; // Frames between each reel stopping
+    this.spinFrames = options.spinFrames || 35; // Longer spin for better visibility
+    this.stopDelay = 6; // Slightly longer delay between reels stopping
     this.resultFrames = options.resultFrames || 12;
     
-    // Slot symbols (must match manager.js)
+    // Slot symbols
     this.symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎'];
     
-    // Symbol colors for drawing
+    // Symbol colors
     this.symbolColors = {
-      '🍒': '#FF0000',
-      '🍋': '#FFD700',
-      '🍊': '#FFA500',
-      '🍇': '#8B008B',
-      '🔔': '#FFD700',
-      '⭐': '#FFD700',
-      '💎': '#00BFFF',
+      '🍒': { primary: '#FF0000', secondary: '#CC0000', accent: '#00AA00' },
+      '🍋': { primary: '#FFE135', secondary: '#CCAA00', accent: '#FFD700' },
+      '🍊': { primary: '#FFA500', secondary: '#CC7700', accent: '#FF8C00' },
+      '🍇': { primary: '#8B008B', secondary: '#6B006B', accent: '#9932CC' },
+      '🔔': { primary: '#FFD700', secondary: '#DAA520', accent: '#B8860B' },
+      '⭐': { primary: '#FFD700', secondary: '#FFA500', accent: '#FFFF00' },
+      '💎': { primary: '#00BFFF', secondary: '#0080FF', accent: '#87CEEB' },
     };
+  }
+
+  /**
+   * Draw a cherry symbol
+   */
+  drawCherry(ctx, x, y, size) {
+    const r = size * 0.25;
+    
+    // Stem
+    ctx.strokeStyle = '#00AA00';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.5, y - r * 1.2);
+    ctx.quadraticCurveTo(x, y - r * 2, x + r * 0.8, y - r * 1.5);
+    ctx.stroke();
+    
+    // Left cherry
+    ctx.beginPath();
+    ctx.arc(x - r * 0.6, y, r, 0, Math.PI * 2);
+    const cherryGrad1 = ctx.createRadialGradient(x - r * 0.8, y - r * 0.3, 0, x - r * 0.6, y, r);
+    cherryGrad1.addColorStop(0, '#FF6666');
+    cherryGrad1.addColorStop(0.7, '#FF0000');
+    cherryGrad1.addColorStop(1, '#CC0000');
+    ctx.fillStyle = cherryGrad1;
+    ctx.fill();
+    ctx.strokeStyle = '#990000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Right cherry
+    ctx.beginPath();
+    ctx.arc(x + r * 0.6, y + r * 0.3, r, 0, Math.PI * 2);
+    const cherryGrad2 = ctx.createRadialGradient(x + r * 0.4, y, 0, x + r * 0.6, y + r * 0.3, r);
+    cherryGrad2.addColorStop(0, '#FF6666');
+    cherryGrad2.addColorStop(0.7, '#FF0000');
+    cherryGrad2.addColorStop(1, '#CC0000');
+    ctx.fillStyle = cherryGrad2;
+    ctx.fill();
+    ctx.strokeStyle = '#990000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(x - r * 0.8, y - r * 0.3, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /**
+   * Draw a lemon symbol
+   */
+  drawLemon(ctx, x, y, size) {
+    const r = size * 0.35;
+    
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.7, Math.PI * 0.1, 0, Math.PI * 2);
+    const lemonGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.2, 0, x, y, r);
+    lemonGrad.addColorStop(0, '#FFFF66');
+    lemonGrad.addColorStop(0.6, '#FFE135');
+    lemonGrad.addColorStop(1, '#CCAA00');
+    ctx.fillStyle = lemonGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#AA8800';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Tips
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.9, y - r * 0.1, r * 0.2, r * 0.15, Math.PI * 0.1, 0, Math.PI * 2);
+    ctx.fillStyle = '#CCAA00';
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.ellipse(x + r * 0.9, y + r * 0.1, r * 0.2, r * 0.15, Math.PI * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /**
+   * Draw an orange symbol
+   */
+  drawOrange(ctx, x, y, size) {
+    const r = size * 0.32;
+    
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    const orangeGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+    orangeGrad.addColorStop(0, '#FFCC66');
+    orangeGrad.addColorStop(0.5, '#FFA500');
+    orangeGrad.addColorStop(1, '#CC7700');
+    ctx.fillStyle = orangeGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#995500';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Leaf
+    ctx.beginPath();
+    ctx.ellipse(x, y - r * 1.1, r * 0.25, r * 0.15, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#228B22';
+    ctx.fill();
+    
+    // Texture dots
+    ctx.fillStyle = 'rgba(255,200,100,0.3)';
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2;
+      const dotX = x + Math.cos(angle) * r * 0.5;
+      const dotY = y + Math.sin(angle) * r * 0.5;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /**
+   * Draw grapes symbol
+   */
+  drawGrapes(ctx, x, y, size) {
+    const r = size * 0.12;
+    const grapeColor = ctx.createRadialGradient(x, y, 0, x, y, size * 0.4);
+    grapeColor.addColorStop(0, '#9932CC');
+    grapeColor.addColorStop(1, '#6B006B');
+    
+    // Grape positions (triangle pattern)
+    const positions = [
+      [0, -r * 2.2],
+      [-r * 1.1, -r * 0.8], [r * 1.1, -r * 0.8],
+      [-r * 1.8, r * 0.5], [0, r * 0.5], [r * 1.8, r * 0.5],
+      [-r * 1.1, r * 1.8], [r * 1.1, r * 1.8],
+    ];
+    
+    positions.forEach(([dx, dy]) => {
+      ctx.beginPath();
+      ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+      ctx.fillStyle = grapeColor;
+      ctx.fill();
+      ctx.strokeStyle = '#4B0082';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Shine
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.beginPath();
+      ctx.arc(x + dx - r * 0.3, y + dy - r * 0.3, r * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    
+    // Stem
+    ctx.strokeStyle = '#228B22';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 2.2);
+    ctx.lineTo(x, y - r * 3.5);
+    ctx.stroke();
+  }
+
+  /**
+   * Draw bell symbol
+   */
+  drawBell(ctx, x, y, size) {
+    const r = size * 0.35;
+    
+    // Bell body
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.8, y + r * 0.5);
+    ctx.quadraticCurveTo(x - r * 0.9, y - r * 0.5, x - r * 0.3, y - r * 0.8);
+    ctx.quadraticCurveTo(x, y - r * 1.1, x + r * 0.3, y - r * 0.8);
+    ctx.quadraticCurveTo(x + r * 0.9, y - r * 0.5, x + r * 0.8, y + r * 0.5);
+    ctx.lineTo(x - r * 0.8, y + r * 0.5);
+    
+    const bellGrad = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+    bellGrad.addColorStop(0, '#FFE066');
+    bellGrad.addColorStop(0.5, '#FFD700');
+    bellGrad.addColorStop(1, '#B8860B');
+    ctx.fillStyle = bellGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#8B6914';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Bell rim
+    ctx.beginPath();
+    ctx.ellipse(x, y + r * 0.5, r * 0.85, r * 0.2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#DAA520';
+    ctx.fill();
+    ctx.stroke();
+    
+    // Clapper
+    ctx.beginPath();
+    ctx.arc(x, y + r * 0.7, r * 0.15, 0, Math.PI * 2);
+    ctx.fillStyle = '#8B6914';
+    ctx.fill();
+    
+    // Top knob
+    ctx.beginPath();
+    ctx.arc(x, y - r * 0.95, r * 0.15, 0, Math.PI * 2);
+    ctx.fillStyle = '#DAA520';
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  /**
+   * Draw star symbol
+   */
+  drawStar(ctx, x, y, size) {
+    const outerR = size * 0.38;
+    const innerR = outerR * 0.45;
+    const spikes = 5;
+    
+    ctx.beginPath();
+    for (let i = 0; i < spikes * 2; i++) {
+      const angle = (i * Math.PI / spikes) - Math.PI / 2;
+      const r = i % 2 === 0 ? outerR : innerR;
+      const px = x + Math.cos(angle) * r;
+      const py = y + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    
+    const starGrad = ctx.createRadialGradient(x, y, 0, x, y, outerR);
+    starGrad.addColorStop(0, '#FFFF66');
+    starGrad.addColorStop(0.5, '#FFD700');
+    starGrad.addColorStop(1, '#FFA500');
+    ctx.fillStyle = starGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#CC8800';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Inner glow
+    ctx.beginPath();
+    ctx.arc(x, y, innerR * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,200,0.5)';
+    ctx.fill();
+  }
+
+  /**
+   * Draw diamond symbol
+   */
+  drawDiamond(ctx, x, y, size) {
+    const w = size * 0.35;
+    const h = size * 0.45;
+    
+    // Main diamond shape
+    ctx.beginPath();
+    ctx.moveTo(x, y - h);           // Top
+    ctx.lineTo(x + w, y);           // Right
+    ctx.lineTo(x, y + h);           // Bottom
+    ctx.lineTo(x - w, y);           // Left
+    ctx.closePath();
+    
+    const diamondGrad = ctx.createLinearGradient(x - w, y - h, x + w, y + h);
+    diamondGrad.addColorStop(0, '#87CEEB');
+    diamondGrad.addColorStop(0.3, '#00BFFF');
+    diamondGrad.addColorStop(0.5, '#FFFFFF');
+    diamondGrad.addColorStop(0.7, '#00BFFF');
+    diamondGrad.addColorStop(1, '#0080FF');
+    ctx.fillStyle = diamondGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#0066CC';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Facet lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y - h);
+    ctx.lineTo(x - w * 0.5, y - h * 0.3);
+    ctx.lineTo(x, y + h * 0.2);
+    ctx.lineTo(x + w * 0.5, y - h * 0.3);
+    ctx.lineTo(x, y - h);
+    ctx.stroke();
+    
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.3, y - h * 0.5);
+    ctx.lineTo(x, y - h * 0.7);
+    ctx.lineTo(x + w * 0.1, y - h * 0.4);
+    ctx.lineTo(x - w * 0.1, y - h * 0.3);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /**
+   * Draw symbol by type
+   */
+  drawSymbol(ctx, symbol, x, y, size = 45, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    switch (symbol) {
+      case '🍒': this.drawCherry(ctx, x, y, size); break;
+      case '🍋': this.drawLemon(ctx, x, y, size); break;
+      case '🍊': this.drawOrange(ctx, x, y, size); break;
+      case '🍇': this.drawGrapes(ctx, x, y, size); break;
+      case '🔔': this.drawBell(ctx, x, y, size); break;
+      case '⭐': this.drawStar(ctx, x, y, size); break;
+      case '💎': this.drawDiamond(ctx, x, y, size); break;
+      default: this.drawStar(ctx, x, y, size); break;
+    }
+    
+    ctx.restore();
   }
 
   /**
@@ -53,13 +359,19 @@ class SlotsGifGenerator {
     ctx.strokeRect(20, 40, this.width - 40, 110);
     
     // Inner frame (darker)
-    ctx.fillStyle = '#2d2d2d';
+    ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(30, 50, this.width - 60, 90);
     
-    // Reel dividers
-    ctx.strokeStyle = '#444';
-    ctx.lineWidth = 2;
+    // Reel backgrounds (darker slots)
     const reelWidth = (this.width - 60) / 3;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = '#0d0d1a';
+      ctx.fillRect(32 + i * reelWidth, 52, reelWidth - 4, 86);
+    }
+    
+    // Reel dividers
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(30 + reelWidth, 50);
     ctx.lineTo(30 + reelWidth, 140);
@@ -69,170 +381,55 @@ class SlotsGifGenerator {
   }
 
   /**
-   * Draw symbol as colored shape (fallback if emoji doesn't render)
-   */
-  drawSymbolShape(ctx, symbol, x, y, size = 40) {
-    const color = this.symbolColors[symbol] || '#FFFFFF';
-    const radius = size * 0.4;
-    
-    ctx.fillStyle = color;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
-    
-    // Draw different shapes based on symbol
-    if (symbol === '💎') {
-      // Diamond shape
-      ctx.beginPath();
-      ctx.moveTo(x, y - radius);
-      ctx.lineTo(x + radius * 0.7, y);
-      ctx.lineTo(x, y + radius);
-      ctx.lineTo(x - radius * 0.7, y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else if (symbol === '⭐') {
-      // Star shape
-      ctx.beginPath();
-      const spikes = 5;
-      const outerRadius = radius;
-      const innerRadius = radius * 0.5;
-      for (let i = 0; i < spikes * 2; i++) {
-        const angle = (i * Math.PI) / spikes;
-        const r = i % 2 === 0 ? outerRadius : innerRadius;
-        const px = x + Math.cos(angle) * r;
-        const py = y + Math.sin(angle) * r;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else if (symbol === '🔔') {
-      // Bell shape (circle with triangle)
-      ctx.beginPath();
-      ctx.arc(x, y - radius * 0.3, radius * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      // Triangle at bottom
-      ctx.beginPath();
-      ctx.moveTo(x, y + radius * 0.3);
-      ctx.lineTo(x - radius * 0.4, y - radius * 0.1);
-      ctx.lineTo(x + radius * 0.4, y - radius * 0.1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      // Fruit symbols - draw as colored circles
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  /**
-   * Draw a symbol at position (try emoji first, fallback to shape)
-   */
-  drawSymbol(ctx, symbol, x, y, size = 40, blur = false) {
-    ctx.save();
-    
-    if (blur) {
-      ctx.globalAlpha = 0.7;
-    } else {
-      ctx.globalAlpha = 1.0;
-    }
-    
-    // Try to draw emoji first
-    ctx.font = `${size}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(symbol, x, y);
-    
-    // If emoji didn't render (check by measuring text width)
-    // Fallback to colored shape
-    const metrics = ctx.measureText(symbol);
-    if (metrics.width < size * 0.3) {
-      // Emoji probably didn't render, use shape fallback
-      this.drawSymbolShape(ctx, symbol, x, y, size);
-    }
-    
-    ctx.restore();
-  }
-
-  /**
-   * Draw a spinning reel (blur effect)
+   * Draw a spinning reel with scrolling symbols
    */
   drawSpinningReel(ctx, x, y, frame, reelIndex = 0) {
-    // Create a deterministic sequence for this reel based on frame and reel index
-    // This ensures smooth scrolling without random jumps
-    const symbolSize = 45; // Larger symbols for better visibility
-    const reelHeight = 90; // Height of visible reel area
-    const symbolSpacing = 35; // Space between symbols (increased for larger symbols)
-    const scrollSpeed = 14; // Pixels per frame (faster scroll)
+    const symbolSize = 40;
+    const symbolSpacing = 45;
+    const scrollSpeed = 15;
     
-    // Calculate vertical offset (continuous scrolling)
+    // Calculate vertical offset
     const totalOffset = (frame * scrollSpeed) % symbolSpacing;
     
-    // Draw 4-5 symbols visible in the reel window
-    for (let i = -1; i <= 3; i++) {
-      // Use deterministic symbol selection based on position (not random)
-      // This creates a repeating pattern that scrolls smoothly
-      // Add reelIndex offset so each reel shows different symbols
+    // Draw multiple symbols scrolling
+    for (let i = -1; i <= 2; i++) {
       const symbolPos = Math.floor((frame * scrollSpeed) / symbolSpacing) + i + (reelIndex * 3);
       const symbolIndex = Math.abs(symbolPos) % this.symbols.length;
       const symbol = this.symbols[symbolIndex];
       
-      // Calculate Y position with smooth scrolling
-      const baseY = 50 + (reelHeight / 2); // Center of reel area
-      const yPos = baseY + (i * symbolSpacing) - totalOffset;
+      const yPos = y + (i * symbolSpacing) - totalOffset + symbolSpacing / 2;
       
-      // Only draw if symbol is visible in reel window
-      if (yPos >= 50 && yPos <= 140) {
-        // Draw symbol with slight blur effect during spinning
-        ctx.save();
-        ctx.globalAlpha = 0.8; // More visible
-        
-        // Try emoji first
-        ctx.font = `${symbolSize}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(symbol, x, yPos);
-        
-        // Check if emoji rendered, if not use shape fallback
-        const metrics = ctx.measureText(symbol);
-        if (metrics.width < symbolSize * 0.3) {
-          ctx.globalAlpha = 0.6; // Slightly more transparent for spinning
-          this.drawSymbolShape(ctx, symbol, x, yPos, symbolSize);
-        }
-        
-        ctx.restore();
+      // Only draw if in visible area
+      if (yPos >= 55 && yPos <= 135) {
+        // Blur/fade effect for spinning
+        const distFromCenter = Math.abs(yPos - y);
+        const alpha = Math.max(0.3, 1 - distFromCenter / 50);
+        this.drawSymbol(ctx, symbol, x, yPos, symbolSize, alpha * 0.8);
       }
     }
     
-    // Add motion blur effect (vertical lines)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 3; i++) {
-      const blurY = 50 + (i * 30) + 15;
-      ctx.beginPath();
-      ctx.moveTo(x - 25, blurY);
-      ctx.lineTo(x + 25, blurY);
-      ctx.stroke();
-    }
+    // Motion blur overlay
+    ctx.fillStyle = 'rgba(13,13,26,0.2)';
+    ctx.fillRect(x - 40, 52, 80, 86);
   }
 
   /**
-   * Draw a stopped reel with final symbol
+   * Draw a stopped reel
    */
   drawStoppedReel(ctx, x, y, symbol, highlight = false) {
     if (highlight) {
-      // Glow effect for winning symbols
+      // Glow effect
       ctx.shadowColor = '#FFD700';
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = 15;
+      
+      // Background highlight
+      ctx.fillStyle = 'rgba(255,215,0,0.2)';
+      ctx.beginPath();
+      ctx.arc(x, y, 35, 0, Math.PI * 2);
+      ctx.fill();
     }
     
-    // Use same size as spinning symbols for consistency
-    this.drawSymbol(ctx, symbol, x, y, 45);
+    this.drawSymbol(ctx, symbol, x, y, 45, 1);
     
     ctx.shadowBlur = 0;
   }
@@ -241,7 +438,6 @@ class SlotsGifGenerator {
    * Draw player info
    */
   drawPlayerInfo(ctx, playerName, betAmount) {
-    // Player name at top
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#FFD700';
@@ -252,9 +448,7 @@ class SlotsGifGenerator {
     ctx.strokeText(displayName, this.width / 2, 25);
     ctx.fillText(displayName, this.width / 2, 25);
     
-    // Bet amount at bottom
     ctx.font = 'bold 12px Arial';
-    ctx.fillStyle = '#FFD700';
     const betText = `Bet: ${betAmount.toLocaleString()} coins`;
     ctx.strokeText(betText, this.width / 2, this.height - 15);
     ctx.fillText(betText, this.width / 2, this.height - 15);
@@ -279,19 +473,18 @@ class SlotsGifGenerator {
     if (result === 'win') {
       if (multiplier >= 10) {
         ctx.fillStyle = '#FF00FF';
-        ctx.strokeText('🎰 JACKPOT! 🎰', 0, 0);
-        ctx.fillText('🎰 JACKPOT! 🎰', 0, 0);
+        ctx.strokeText('JACKPOT!', 0, 0);
+        ctx.fillText('JACKPOT!', 0, 0);
       } else if (multiplier >= 5) {
         ctx.fillStyle = '#FFD700';
-        ctx.strokeText('⭐ BIG WIN! ⭐', 0, 0);
-        ctx.fillText('⭐ BIG WIN! ⭐', 0, 0);
+        ctx.strokeText('BIG WIN!', 0, 0);
+        ctx.fillText('BIG WIN!', 0, 0);
       } else {
         ctx.fillStyle = '#00FF00';
         ctx.strokeText('WIN!', 0, 0);
         ctx.fillText('WIN!', 0, 0);
       }
       
-      // Win amount
       ctx.font = 'bold 14px Arial';
       ctx.fillStyle = '#00FF00';
       ctx.strokeText(`+${winAmount.toLocaleString()}`, 0, 20);
@@ -306,12 +499,24 @@ class SlotsGifGenerator {
   }
 
   /**
+   * Check if position is winning
+   */
+  isWinningPosition(reels, position) {
+    const [r1, r2, r3] = reels;
+    if (r1 === r2 && r2 === r3) return true;
+    if (r1 === r2 && (position === 0 || position === 1)) return true;
+    if (r2 === r3 && (position === 1 || position === 2)) return true;
+    if (r1 === r3 && (position === 0 || position === 2)) return true;
+    return false;
+  }
+
+  /**
    * Generate slots GIF
    */
   async spin(options) {
     const {
       playerName = "Player",
-      reels, // Array of 3 symbols [reel1, reel2, reel3]
+      reels,
       result = 'loss',
       multiplier = 0,
       betAmount = 1000,
@@ -333,34 +538,29 @@ class SlotsGifGenerator {
       30 + reelWidth + reelWidth / 2,
       30 + reelWidth * 2 + reelWidth / 2,
     ];
-    const reelY = 95; // Center of reel area
+    const reelY = 95;
 
-    // Calculate when each reel stops
     const reel1StopFrame = this.spinFrames;
     const reel2StopFrame = this.spinFrames + this.stopDelay;
     const reel3StopFrame = this.spinFrames + this.stopDelay * 2;
     const totalSpinFrames = reel3StopFrame + 2;
 
-    // Phase 1: Spinning animation
+    // Spinning animation
     for (let frame = 0; frame < totalSpinFrames; frame++) {
       this.drawBackground(ctx);
       this.drawPlayerInfo(ctx, playerName, betAmount);
 
-      // Draw each reel
       for (let r = 0; r < 3; r++) {
         const stopFrame = r === 0 ? reel1StopFrame : r === 1 ? reel2StopFrame : reel3StopFrame;
         
         if (frame < stopFrame) {
-          // Still spinning - pass reel index for deterministic scrolling
-          this.drawSpinningReel(ctx, reelX[r], reelY, frame + r * 5, r);
+          this.drawSpinningReel(ctx, reelX[r], reelY, frame + r * 7, r);
         } else {
-          // Stopped - show final symbol
-          const isWinningSymbol = this.isWinningPosition(reels, r);
-          this.drawStoppedReel(ctx, reelX[r], reelY, reels[r], isWinningSymbol && frame >= totalSpinFrames - 1);
+          const isWinning = this.isWinningPosition(reels, r);
+          this.drawStoppedReel(ctx, reelX[r], reelY, reels[r], isWinning && frame >= totalSpinFrames - 1);
         }
       }
 
-      // "Spinning..." text during spin
       if (frame < totalSpinFrames - 2) {
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
@@ -371,21 +571,18 @@ class SlotsGifGenerator {
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
     }
 
-    // Phase 2: Result display
+    // Result frames
     for (let frame = 0; frame < this.resultFrames; frame++) {
       this.drawBackground(ctx);
       this.drawPlayerInfo(ctx, playerName, betAmount);
 
-      // Draw all reels stopped with win highlighting
       for (let r = 0; r < 3; r++) {
-        const isWinningSymbol = this.isWinningPosition(reels, r);
-        this.drawStoppedReel(ctx, reelX[r], reelY, reels[r], isWinningSymbol && result === 'win');
+        const isWinning = this.isWinningPosition(reels, r);
+        this.drawStoppedReel(ctx, reelX[r], reelY, reels[r], isWinning && result === 'win');
       }
 
-      // Draw result
       this.drawResult(ctx, result, multiplier, winAmount, frame);
 
-      // Win line for matching symbols
       if (result === 'win') {
         ctx.strokeStyle = '#FFD700';
         ctx.lineWidth = 3;
@@ -410,28 +607,9 @@ class SlotsGifGenerator {
       winAmount,
     };
   }
-
-  /**
-   * Check if a reel position is part of a winning combination
-   */
-  isWinningPosition(reels, position) {
-    const [r1, r2, r3] = reels;
-    
-    // Three of a kind - all positions win
-    if (r1 === r2 && r2 === r3) {
-      return true;
-    }
-    
-    // Two of a kind - only matching positions win
-    if (r1 === r2 && (position === 0 || position === 1)) return true;
-    if (r2 === r3 && (position === 1 || position === 2)) return true;
-    if (r1 === r3 && (position === 0 || position === 2)) return true;
-    
-    return false;
-  }
 }
 
-// Test if run directly
+// Test
 if (require.main === module) {
   async function main() {
     const generator = new SlotsGifGenerator();
@@ -447,11 +625,10 @@ if (require.main === module) {
     });
 
     require('fs').writeFileSync("slots-test.gif", result.buffer);
-    console.log(`Saved: slots-test.gif (${result.buffer.length} bytes)`);
+    console.log(`Saved: slots-test.gif`);
   }
 
   main().catch(console.error);
 }
 
 module.exports = SlotsGifGenerator;
-

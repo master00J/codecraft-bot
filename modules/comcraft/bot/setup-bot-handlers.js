@@ -3780,8 +3780,8 @@ async function handleCasinoBetModal(interaction, casinoManager, economyManager) 
       }
     }
 
-    // GIF animation duration (~3 seconds)
-    const gifDuration = 3500;
+    // GIF animation duration (~5 seconds for longer visibility)
+    const gifDuration = 5000;
 
     if (slotsGif) {
       // STEP 1: Show GIF with "Spinning..." embed

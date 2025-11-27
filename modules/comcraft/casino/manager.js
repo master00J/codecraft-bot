@@ -111,7 +111,7 @@ class CasinoManager {
           width: 320,
           height: 200,
           frameDelay: 80,
-          spinFrames: 25, // Longer spin for better visibility
+          spinFrames: 35, // Longer spin for better visibility
           resultFrames: 12,
         });
         console.log('✓ SlotsGifGenerator initialized');
