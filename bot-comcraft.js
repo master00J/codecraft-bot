@@ -4373,20 +4373,16 @@ async function handleCasinoBetModal(interaction) {
     }
 
     // STEP 2: Show result embed
+    const reelDisplay = `${result.reels[0]} │ ${result.reels[1]} │ ${result.reels[2]}`;
+    const winIndicator = result.result === 'win' ? '✨' : '';
+    
     const embed = new EmbedBuilder()
       .setColor(result.result === 'win' ? '#22C55E' : '#EF4444')
       .setTitle(result.result === 'win' ? `🎰 ${result.multiplier >= 10 ? 'JACKPOT!' : result.multiplier >= 5 ? 'BIG WIN!' : 'WIN!'}` : '🎰 No Win')
       .setDescription(
-        `\`\`\`\n` +
-        `🎰 SLOTS 🎰\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `\n` +
-        `  ┌─────┬─────┬─────┐\n` +
-        `  │  ${result.reels[0]}  │  ${result.reels[1]}  │  ${result.reels[2]}  │\n` +
-        `  └─────┴─────┴─────┘\n` +
-        `\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `\`\`\``
+        `🎰 **SLOTS** 🎰\n\n` +
+        `**${reelDisplay}**\n\n` +
+        `${result.result === 'win' ? `${winIndicator} You matched symbols!` : '❌ No matching symbols'}`
       )
       .addFields(
         {
