@@ -335,7 +335,7 @@ export default function GameNewsPage() {
                         />
                       ) : null}
                       <div className={`w-12 h-12 rounded bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md ${sub.game_news_sources.game_icon_url ? 'hidden' : ''}`}>
-                        {sub.game_news_sources.game_name.charAt(0)}
+                        {sub.game_news_sources?.game_name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold">
@@ -430,7 +430,7 @@ export default function GameNewsPage() {
                         />
                       ) : null}
                       <div className={`w-10 h-10 rounded bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md ${game.game_icon_url ? 'hidden' : ''}`}>
-                        {game.game_name.charAt(0)}
+                        {game.game_name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{game.game_name}</p>

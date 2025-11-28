@@ -422,23 +422,23 @@ export default function LevelingConfig() {
               ) : (
                 <div className="space-y-2">
                   {leaderboard.map((user, index) => (
-                    <div key={user.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div key={user.id || index} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                       <div className="text-2xl font-bold w-8">
                         {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}
                       </div>
                       <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
-                        {user.username.charAt(0)}
+                        {user.username?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1">
-                        <div className="font-semibold">{user.username}</div>
+                        <div className="font-semibold">{user.username || 'Unknown User'}</div>
                         <div className="text-sm text-muted-foreground">
-                          {user.total_messages} messages
+                          {user.total_messages || 0} messages
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xl font-bold">Level {user.level}</div>
+                        <div className="text-xl font-bold">Level {user.level || 1}</div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
-                          {user.xp.toLocaleString()} XP
+                          {(user.xp || 0).toLocaleString()} XP
                         </div>
                       </div>
                     </div>
