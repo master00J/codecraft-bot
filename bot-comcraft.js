@@ -81,6 +81,7 @@ const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands
 const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
 const userStatsManager = require('./modules/comcraft/stats/user-stats-manager');
 const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generator');
+const combatCardGenerator = require('./modules/comcraft/combat/combat-card-generator');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -3729,54 +3730,31 @@ async function handleCombatRankCommand(interaction) {
       });
     }
 
-    const currentLevel = stats.combat_level;
-    const currentXP = stats.combat_xp;
-    const xpForNext = combatXPManager.xpForNextLevel(currentLevel);
-    const xpForCurrent = combatXPManager.xpForLevel(currentLevel);
-    const xpProgress = currentXP - xpForCurrent;
-    const xpNeeded = xpForNext - xpForCurrent;
-    const progressPercent = xpNeeded > 0 ? ((xpProgress / xpNeeded) * 100).toFixed(1) : 100;
-
-    // Generate progress bar
-    const barLength = 20;
-    const filledLength = Math.round((xpProgress / xpNeeded) * barLength);
-    const progressBar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
-
-    const embed = new EmbedBuilder()
-      .setColor('#FF4500')
-      .setTitle(`⚔️ Combat Stats - ${targetUser.username}`)
-      .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
-      .addFields(
-        { name: '🏆 Combat Level', value: `${currentLevel}`, inline: true },
-        { name: '✨ Combat XP', value: `${currentXP.toLocaleString()}`, inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
-        { 
-          name: '📊 Progress to Next Level', 
-          value: `${progressBar}\n${xpProgress.toLocaleString()} / ${xpNeeded.toLocaleString()} XP (${progressPercent}%)`, 
-          inline: false 
-        },
-        { name: '⚔️ Duels Won', value: `${stats.duels_won}`, inline: true },
-        { name: '💀 Duels Lost', value: `${stats.duels_lost}`, inline: true },
-        { name: '📈 Win Rate', value: `${stats.win_rate}%`, inline: true },
-        { name: '🔥 Current Streak', value: `${stats.current_win_streak}`, inline: true },
-        { name: '🌟 Best Streak', value: `${stats.highest_win_streak}`, inline: true },
-        { name: '🎯 Total Duels', value: `${stats.total_duels}`, inline: true }
-      )
-      .setFooter({ text: 'Keep dueling to level up and unlock better bonuses!' })
-      .setTimestamp();
-
-    // Add bonus info if they have a high level
-    if (currentLevel >= 10) {
-      const damageBonus = ((combatXPManager.getDamageMultiplier(currentLevel) - 1) * 100).toFixed(0);
-      const defenseBonus = ((1 - combatXPManager.getDefenseMultiplier(currentLevel)) * 100).toFixed(0);
-      embed.addFields({
-        name: '💪 Combat Bonuses',
-        value: `+${damageBonus}% Damage | ${defenseBonus}% Damage Reduction`,
-        inline: false,
+    // Generate combat stats card
+    try {
+      const avatarURL = targetUser.displayAvatarURL({ 
+        size: 256, 
+        extension: 'png',
+        forceStatic: true 
       });
-    }
 
-    await interaction.editReply({ embeds: [embed] });
+      const combatCardBuffer = await combatCardGenerator.generateCombatCard({
+        user: {
+          username: targetUser.username,
+          avatarURL: avatarURL
+        },
+        stats: stats,
+        xpManager: combatXPManager
+      });
+
+      const attachment = new AttachmentBuilder(combatCardBuffer, { name: 'combat-stats.png' });
+
+      // Send as standalone image without embed
+      await interaction.editReply({ files: [attachment], embeds: [] });
+    } catch (error) {
+      console.error('[CombatRankCommand] Error generating combat card:', error);
+      await interaction.editReply('❌ An error occurred while generating the combat stats card.');
+    }
   } catch (error) {
     console.error('Error in handleCombatRankCommand:', error);
     return interaction.editReply({
@@ -7475,49 +7453,10 @@ async function handleUnequipCommand(interaction) {
 }
 
 /**
- * View combat rank (existing - keeping for reference)
+ * View combat rank (duplicate - keeping for backwards compatibility)
+ * This is now handled by the main handleCombatRankCommand function above
+ * @deprecated - Use the main handleCombatRankCommand instead
  */
-async function handleCombatRankCommand(interaction) {
-  if (!combatXPManager) {
-    return interaction.reply({
-      content: '❌ Combat XP system is niet beschikbaar.',
-      ephemeral: true,
-    });
-  }
-
-  await interaction.deferReply();
-
-  const user = interaction.options.getUser('user') || interaction.user;
-  const stats = await combatXPManager.getCombatStats(interaction.guild.id, user.id);
-
-  const level = stats.combat_level;
-  const xp = stats.combat_xp;
-  const xpForNext = combatXPManager.xpForNextLevel(level);
-  const xpProgress = xp - combatXPManager.xpForLevel(level);
-
-  const winRate = stats.total_duels > 0
-    ? Math.round((stats.duels_won / stats.total_duels) * 100)
-    : 0;
-
-  const embed = new EmbedBuilder()
-    .setColor('#FF4500')
-    .setTitle(`⚔️ Combat Stats - ${user.username}`)
-    .setThumbnail(user.displayAvatarURL({ size: 256 }))
-    .addFields(
-      { name: '🏆 Combat Level', value: level.toString(), inline: true },
-      { name: '✨ Combat XP', value: `${xpProgress} / ${xpForNext}`, inline: true },
-      { name: '🎯 Win Rate', value: `${winRate}%`, inline: true },
-      { name: '✅ Wins', value: stats.duels_won.toString(), inline: true },
-      { name: '❌ Losses', value: stats.duels_lost.toString(), inline: true },
-      { name: '🔥 Win Streak', value: `${stats.current_win_streak} (Best: ${stats.highest_win_streak})`, inline: true },
-      { name: '💥 Damage Dealt', value: stats.total_damage_dealt.toString(), inline: true },
-      { name: '🛡️ Damage Taken', value: stats.total_damage_taken.toString(), inline: true },
-      { name: '💪 Combat Bonuses', value: `+${combatXPManager.getDamageMultiplier(level)}% DMG | +${combatXPManager.getDefenseMultiplier(level)}% DEF`, inline: false }
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
-}
 
 /**
  * View combat leaderboard (existing - keeping for reference)
