@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function LevelingConfig() {
@@ -24,6 +25,7 @@ export default function LevelingConfig() {
   const [rewards, setRewards] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [rankMultipliers, setRankMultipliers] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -50,17 +52,29 @@ export default function LevelingConfig() {
 
   const fetchData = async () => {
     try {
-      const response = await fetch(`/api/comcraft/guilds/${guildId}/leveling`);
-      const data = await response.json();
-      setConfig(data.config || {});
-      setRewards(data.rewards || []);
-      setLeaderboard(data.leaderboard || []);
+      const [levelingRes, multipliersRes, rolesRes] = await Promise.all([
+        fetch(`/api/comcraft/guilds/${guildId}/leveling`),
+        fetch(`/api/comcraft/guilds/${guildId}/leveling/rank-multipliers`),
+        fetch(`/api/comcraft/guilds/${guildId}/discord/roles`)
+      ]);
 
-      // Fetch rank multipliers
-      const multipliersResponse = await fetch(`/api/comcraft/guilds/${guildId}/leveling/rank-multipliers`);
-      if (multipliersResponse.ok) {
-        const multipliersData = await multipliersResponse.json();
+      if (levelingRes.ok) {
+        const data = await levelingRes.json();
+        setConfig(data.config || {});
+        setRewards(data.rewards || []);
+        setLeaderboard(data.leaderboard || []);
+      }
+
+      if (multipliersRes.ok) {
+        const multipliersData = await multipliersRes.json();
         setRankMultipliers(multipliersData.multipliers || []);
+      }
+
+      if (rolesRes.ok) {
+        const rolesData = await rolesRes.json();
+        if (rolesData.success && rolesData.roles) {
+          setRoles(rolesData.roles || []);
+        }
       }
     } catch (error) {
       console.error('Error fetching leveling data:', error);
@@ -505,28 +519,47 @@ export default function LevelingConfig() {
               {/* Add New Multiplier */}
               <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-6">
                 <h3 className="font-semibold mb-4">Add New Rank Multiplier</h3>
-                <div className="grid md:grid-cols-4 gap-4">
+                <div className="grid md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label>Role ID</Label>
-                    <Input 
-                      value={newMultiplier.role_id}
-                      onChange={(e) => setNewMultiplier({...newMultiplier, role_id: e.target.value})}
-                      placeholder="123456789012345678"
-                    />
+                    <Label>Select Role</Label>
+                    <Select 
+                      value={newMultiplier.role_id} 
+                      onValueChange={(value) => {
+                        const selectedRole = roles.find(r => r.id === value);
+                        setNewMultiplier({
+                          ...newMultiplier, 
+                          role_id: value,
+                          role_name: selectedRole?.name || ''
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a role..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.length === 0 ? (
+                          <SelectItem value="" disabled>No roles available</SelectItem>
+                        ) : (
+                          roles
+                            .filter(role => !rankMultipliers.find(m => m.role_id === role.id))
+                            .map((role) => (
+                              <SelectItem key={role.id} value={role.id}>
+                                <div className="flex items-center gap-2">
+                                  {role.color && role.color !== 0 && (
+                                    <div 
+                                      className="w-3 h-3 rounded-full" 
+                                      style={{ backgroundColor: `#${role.color.toString(16).padStart(6, '0')}` }}
+                                    />
+                                  )}
+                                  {role.name}
+                                </div>
+                              </SelectItem>
+                            ))
+                        )}
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
-                      Discord Role ID
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Role Name (optional)</Label>
-                    <Input 
-                      value={newMultiplier.role_name}
-                      onChange={(e) => setNewMultiplier({...newMultiplier, role_name: e.target.value})}
-                      placeholder="VIP Member"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      For display only
+                      {roles.length === 0 ? 'Loading roles...' : 'Choose a role to set XP multiplier'}
                     </p>
                   </div>
 
@@ -555,6 +588,7 @@ export default function LevelingConfig() {
                         onChange={(e) => setNewMultiplier({...newMultiplier, enabled: e.target.checked})}
                         className="w-4 h-4"
                       />
+                      <span className="ml-2 text-sm text-muted-foreground">Enable multiplier</span>
                     </div>
                   </div>
                 </div>
@@ -572,33 +606,42 @@ export default function LevelingConfig() {
                     <span className="text-sm">Add one above to give specific roles bonus XP!</span>
                   </div>
                 ) : (
-                  rankMultipliers.map((multiplier) => (
-                    <div key={multiplier.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="flex items-center gap-4">
-                        <div>
-                          <div className="font-semibold">
-                            {multiplier.role_name || `Role ${multiplier.role_id}`}
+                  rankMultipliers.map((multiplier) => {
+                    const role = roles.find(r => r.id === multiplier.role_id);
+                    return (
+                      <div key={multiplier.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center gap-4">
+                          {role && role.color && role.color !== 0 && (
+                            <div 
+                              className="w-4 h-4 rounded-full" 
+                              style={{ backgroundColor: `#${role.color.toString(16).padStart(6, '0')}` }}
+                            />
+                          )}
+                          <div>
+                            <div className="font-semibold">
+                              {multiplier.role_name || role?.name || `Role ${multiplier.role_id}`}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {role ? `${role.name} (${multiplier.role_id})` : `Role ID: ${multiplier.role_id}`}
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Role ID: {multiplier.role_id}
-                          </div>
+                          <Badge className={multiplier.multiplier >= 1.0 ? "bg-green-600" : "bg-orange-600"}>
+                            {multiplier.multiplier}x XP
+                          </Badge>
+                          <Badge variant={multiplier.enabled ? "default" : "secondary"}>
+                            {multiplier.enabled ? "Enabled" : "Disabled"}
+                          </Badge>
                         </div>
-                        <Badge className={multiplier.multiplier >= 1.0 ? "bg-green-600" : "bg-orange-600"}>
-                          {multiplier.multiplier}x XP
-                        </Badge>
-                        <Badge variant={multiplier.enabled ? "default" : "secondary"}>
-                          {multiplier.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => deleteMultiplier(multiplier.role_id)}
+                        >
+                          🗑️ Delete
+                        </Button>
                       </div>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => deleteMultiplier(multiplier.role_id)}
-                      >
-                        🗑️ Delete
-                      </Button>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </Card>
