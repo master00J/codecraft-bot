@@ -239,7 +239,12 @@ class UserStatsManager {
   /**
    * Get user stats with ranks
    */
-  async getUserStats(guildId, userId) {
+  async getUserStats(guildId, userId, config = null) {
+    // Get config if not provided
+    if (!config) {
+      config = await this.getStatsConfig(guildId);
+    }
+
     // Get base stats
     const { data: stats } = await this.supabase
       .from('user_stats')
@@ -258,16 +263,21 @@ class UserStatsManager {
         .eq('user_id', userId)
         .single();
       if (!retryStats) return null;
-      return await this.enrichStats(guildId, userId, retryStats);
+      return await this.enrichStats(guildId, userId, retryStats, config);
     }
 
-    return await this.enrichStats(guildId, userId, stats);
+    return await this.enrichStats(guildId, userId, stats, config);
   }
 
   /**
    * Enrich stats with ranks and period data
    */
-  async enrichStats(guildId, userId, baseStats) {
+  async enrichStats(guildId, userId, baseStats, config = null) {
+    // Get config if not provided
+    if (!config) {
+      config = await this.getStatsConfig(guildId);
+    }
+
     // Get message rank
     let messageRank = null;
     try {
@@ -322,14 +332,15 @@ class UserStatsManager {
       }
     }
 
-    // Get period stats
-    const periods = await this.getPeriodStats(guildId, userId);
+    // Get period stats (filtered by config)
+    const periods = await this.getPeriodStats(guildId, userId, config);
 
     // Get top channels
     const topChannels = await this.getTopChannels(guildId, userId, 5);
 
-    // Get daily stats for chart (last 14 days)
-    const dailyStats = await this.getDailyStats(guildId, userId, 14);
+    // Get daily stats for chart (use lookback_days from config)
+    const lookbackDays = config?.lookback_days || 14;
+    const dailyStats = await this.getDailyStats(guildId, userId, lookbackDays);
 
     return {
       ...baseStats,
@@ -344,19 +355,29 @@ class UserStatsManager {
   /**
    * Get stats for different time periods
    */
-  async getPeriodStats(guildId, userId) {
+  async getPeriodStats(guildId, userId, config = null) {
     const now = new Date();
     
     const periods = {
-      '1d': { days: 1 },
-      '7d': { days: 7 },
-      '14d': { days: 14 },
-      '30d': { days: 30 }
+      '1d': { days: 1, enabled: true },
+      '7d': { days: 7, enabled: true },
+      '14d': { days: 14, enabled: true },
+      '30d': { days: 30, enabled: false }
     };
+
+    // Apply config filters if provided
+    if (config) {
+      if (config.show_1d !== undefined) periods['1d'].enabled = config.show_1d;
+      if (config.show_7d !== undefined) periods['7d'].enabled = config.show_7d;
+      if (config.show_14d !== undefined) periods['14d'].enabled = config.show_14d;
+      if (config.show_30d !== undefined) periods['30d'].enabled = config.show_30d;
+    }
 
     const result = {};
 
-    for (const [key, { days }] of Object.entries(periods)) {
+    for (const [key, { days, enabled }] of Object.entries(periods)) {
+      // Skip if this period is disabled
+      if (!enabled) continue;
       const startDate = new Date(now);
       startDate.setDate(startDate.getDate() - days);
 
@@ -497,6 +518,7 @@ class UserStatsManager {
 
     return config || {
       guild_id: guildId,
+      card_background_url: null,
       card_border_color: '#5865F2',
       card_theme: 'dark',
       show_message_rank: true,

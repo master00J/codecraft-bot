@@ -1839,8 +1839,8 @@ async function handleStatsCommand(interaction) {
       return interaction.editReply('❌ Stats tracking is disabled for this server.');
     }
 
-    // Get user stats
-    const stats = await global.userStatsManager.getUserStats(interaction.guild.id, user.id);
+    // Get user stats (pass config so it can use lookback_days and period filters)
+    const stats = await global.userStatsManager.getUserStats(interaction.guild.id, user.id, statsConfig);
     
     if (!stats) {
       return interaction.editReply('❌ No stats found for this user.');

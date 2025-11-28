@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Save, BarChart3, Image, Palette, Eye, Calendar, Globe } from 'lucide-react';
+import { Loader2, Save, BarChart3, Image, Palette, Eye, Calendar, Globe, Upload } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 
@@ -44,6 +44,7 @@ export default function StatsConfigPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [config, setConfig] = useState<StatsConfig | null>(null);
 
   useEffect(() => {
@@ -101,6 +102,54 @@ export default function StatsConfigPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleBackgroundUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    
+    input.onchange = async (e: any) => {
+      const file = e.target?.files?.[0];
+      if (!file) return;
+
+      setUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`/api/comcraft/guilds/${guildId}/embeds/upload-image`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setConfig({ ...config!, card_background_url: result.url });
+          toast({
+            title: 'Success',
+            description: 'Background image uploaded successfully'
+          });
+        } else {
+          toast({
+            title: 'Error',
+            description: result.error || 'Upload failed',
+            variant: 'destructive'
+          });
+        }
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: 'Failed to upload image',
+          variant: 'destructive'
+        });
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    input.click();
   }
 
   if (loading) {
@@ -246,7 +295,7 @@ export default function StatsConfigPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="background_url">Background Image URL</Label>
+                  <Label htmlFor="background_url">Background Image</Label>
                   <div className="flex gap-2">
                     <Input
                       id="background_url"
@@ -260,13 +309,32 @@ export default function StatsConfigPage() {
                     />
                     <Button
                       variant="outline"
+                      onClick={handleBackgroundUpload}
+                      disabled={uploading}
+                      type="button"
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Upload
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
                       onClick={() => setConfig({ ...config, card_background_url: null })}
+                      type="button"
                     >
                       Clear
                     </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Optional background image URL for statistics cards. Leave empty for default gradient.
+                    Optional background image for statistics cards. Upload an image or paste a URL. Leave empty for default gradient.
                   </p>
                   {config.card_background_url && (
                     <div className="mt-2">

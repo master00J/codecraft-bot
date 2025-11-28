@@ -27,25 +27,54 @@ class StatsCardGenerator {
     this.padding = 32; // Iets meer ademruimte aan de randen
     this.cornerRadius = 24;
     
-    // Modern "Cyber/Dark" color palette
-    this.colors = {
-      background: '#090c10', // Darker background
-      cardBg: 'rgba(22, 27, 34, 0.7)',
-      cardBorder: 'rgba(240, 246, 252, 0.1)',
-      textPrimary: '#f0f6fc',
-      textSecondary: '#8b949e',
-      textMuted: '#6e7681',
-      
-      // Accents
-      accentBlue: '#58a6ff',
-      accentGreen: '#2ea043', // GitHub green style
-      accentPurple: '#bc8cff',
-      accentOrange: '#d29922',
-      accentRed: '#ff7b72',
-      
-      // Gradients helpers
-      glassWhite: 'rgba(255, 255, 255, 0.05)',
-    };
+    // Default dark theme colors
+    this.colors = this.getThemeColors('dark');
+  }
+
+  /**
+   * Get color palette based on theme
+   */
+  getThemeColors(theme = 'dark') {
+    if (theme === 'light') {
+      return {
+        background: '#ffffff',
+        cardBg: 'rgba(248, 250, 252, 0.9)',
+        cardBorder: 'rgba(15, 23, 42, 0.1)',
+        textPrimary: '#0f172a',
+        textSecondary: '#475569',
+        textMuted: '#94a3b8',
+        
+        // Accents
+        accentBlue: '#3b82f6',
+        accentGreen: '#10b981',
+        accentPurple: '#8b5cf6',
+        accentOrange: '#f59e0b',
+        accentRed: '#ef4444',
+        
+        // Gradients helpers
+        glassWhite: 'rgba(0, 0, 0, 0.05)',
+      };
+    } else {
+      // Dark theme (default)
+      return {
+        background: '#090c10',
+        cardBg: 'rgba(22, 27, 34, 0.7)',
+        cardBorder: 'rgba(240, 246, 252, 0.1)',
+        textPrimary: '#f0f6fc',
+        textSecondary: '#8b949e',
+        textMuted: '#6e7681',
+        
+        // Accents
+        accentBlue: '#58a6ff',
+        accentGreen: '#2ea043',
+        accentPurple: '#bc8cff',
+        accentOrange: '#d29922',
+        accentRed: '#ff7b72',
+        
+        // Gradients helpers
+        glassWhite: 'rgba(255, 255, 255, 0.05)',
+      };
+    }
   }
 
   async downloadImage(url, retries = 2) {
@@ -283,40 +312,45 @@ class StatsCardGenerator {
     return y + 95; // Gap
   }
 
-  drawRanksRow(ctx, x, y, width, stats) {
-    if (!stats.messageRank && !stats.voiceRank) return y;
+  drawRanksRow(ctx, x, y, width, stats, config = {}) {
+    const showMessageRank = config.show_message_rank !== false && stats.messageRank;
+    const showVoiceRank = config.show_voice_rank !== false && stats.voiceRank;
+    
+    if (!showMessageRank && !showVoiceRank) return y;
 
     const gap = 12;
-    const boxWidth = (width - gap) / 2;
+    const boxWidth = showMessageRank && showVoiceRank ? (width - gap) / 2 : width;
     const height = 60;
+    let currentX = x;
 
     // Message Rank
-    if (stats.messageRank) {
-      this.drawContainer(ctx, x, y, boxWidth, height, { bg: 'rgba(22, 27, 34, 0.4)', radius: 12 });
+    if (showMessageRank) {
+      this.drawContainer(ctx, currentX, y, boxWidth, height, { bg: this.colors.cardBg, radius: 12 });
       
       ctx.fillStyle = this.colors.textSecondary;
       ctx.font = '10px "Segoe UI", Arial';
       ctx.textAlign = 'left';
-      ctx.fillText('MSG RANK', x + 12, y + 18);
+      ctx.fillText('MSG RANK', currentX + 12, y + 18);
 
       ctx.fillStyle = this.colors.accentGreen;
       ctx.font = 'bold 24px "Segoe UI", Arial';
-      ctx.fillText(`#${stats.messageRank}`, x + 12, y + 46);
+      ctx.fillText(`#${stats.messageRank}`, currentX + 12, y + 46);
+      
+      currentX += boxWidth + gap;
     }
 
     // Voice Rank
-    if (stats.voiceRank) {
-      const vx = x + boxWidth + gap;
-      this.drawContainer(ctx, vx, y, boxWidth, height, { bg: 'rgba(22, 27, 34, 0.4)', radius: 12 });
+    if (showVoiceRank) {
+      this.drawContainer(ctx, currentX, y, boxWidth, height, { bg: this.colors.cardBg, radius: 12 });
       
       ctx.fillStyle = this.colors.textSecondary;
       ctx.font = '10px "Segoe UI", Arial';
       ctx.textAlign = 'left';
-      ctx.fillText('VOICE RANK', vx + 12, y + 18);
+      ctx.fillText('VOICE RANK', currentX + 12, y + 18);
 
       ctx.fillStyle = this.colors.accentPurple;
       ctx.font = 'bold 24px "Segoe UI", Arial';
-      ctx.fillText(`#${stats.voiceRank}`, vx + 12, y + 46);
+      ctx.fillText(`#${stats.voiceRank}`, currentX + 12, y + 46);
     }
 
     return y + height + 15;
@@ -463,6 +497,16 @@ class StatsCardGenerator {
     const cvs = createCanvas(this.width, this.height);
     const ctx = cvs.getContext('2d');
     
+    // Apply theme colors based on config
+    const theme = config.card_theme || 'dark';
+    this.colors = this.getThemeColors(theme);
+    
+    // Get border color from config
+    const borderColor = config.card_border_color || this.colors.accentBlue;
+    
+    // Save context for border drawing at the end
+    ctx.save();
+    
     // 1. Background
     this.roundedRect(ctx, 0, 0, this.width, this.height, this.cornerRadius);
     ctx.clip();
@@ -483,11 +527,19 @@ class StatsCardGenerator {
     } else {
       // Abstract gradient background if no image
       const grad = ctx.createRadialGradient(this.width, 0, 0, this.width, 0, 800);
-      grad.addColorStop(0, 'rgba(88, 166, 255, 0.15)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      if (theme === 'light') {
+        grad.addColorStop(0, 'rgba(59, 130, 246, 0.1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+      } else {
+        grad.addColorStop(0, 'rgba(88, 166, 255, 0.15)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+      }
       ctx.fillStyle = grad;
       ctx.fillRect(0,0,this.width, this.height);
     }
+    
+    // Draw border with custom color (after all content)
+    // We'll draw this at the end, before returning
 
     // Avatar Loading
     let avatarImage = null;
@@ -513,96 +565,116 @@ class StatsCardGenerator {
     
     curY = this.drawProfile(ctx, col1X, curY, sidebarW, { ...user, avatarImage }, stats);
     
-    // 2. Ranks (Message & Voice) - Compact Row
-    curY = this.drawRanksRow(ctx, col1X, curY, sidebarW, stats);
+    // 2. Ranks (Message & Voice) - Compact Row (only if enabled)
+    if ((config.show_message_rank !== false && stats.messageRank) || 
+        (config.show_voice_rank !== false && stats.voiceRank)) {
+      curY = this.drawRanksRow(ctx, col1X, curY, sidebarW, stats, config);
+    }
     
     // 3. Level Bar
     curY = this.drawLevelSection(ctx, col1X, curY, sidebarW, stats);
     
-    // 4. Top Channels
-    this.drawTopChannels(ctx, col1X, curY, sidebarW, stats.topChannels || []);
+    // 4. Top Channels (only if enabled)
+    if (config.show_top_channels !== false) {
+      this.drawTopChannels(ctx, col1X, curY, sidebarW, stats.topChannels || []);
+    }
 
 
     // === RIGHT MAIN AREA ===
-    // 1. Stat Cards Grid (2x2 or 4x1) -> Let's do 4x1 horizontal row to look sleek
+    // 1. Stat Cards Grid - dynamically based on enabled periods
     const periods = stats.periods || {};
-    const p7 = periods['7d'] || {};
     const p1 = periods['1d'] || {};
+    const p7 = periods['7d'] || {};
+    const p14 = periods['14d'] || {};
+    const p30 = periods['30d'] || {};
+
+    // Build list of enabled stat boxes
+    const statBoxes = [];
+    
+    if (config.show_1d !== false && (p1.messages !== undefined || p1.voiceHours !== undefined)) {
+      statBoxes.push({ type: 'messages', period: '1d', label: 'MSGS (24H)', value: (p1.messages || 0).toLocaleString(), subtitle: 'Daily activity', color: this.colors.accentGreen });
+      statBoxes.push({ type: 'voice', period: '1d', label: 'VOICE (24H)', value: (p1.voiceHours || 0) < 1 ? Math.round((p1.voiceHours || 0)*60)+'m' : (p1.voiceHours || 0).toFixed(1)+'h', subtitle: 'Daily time', color: this.colors.accentPurple });
+    }
+    
+    if (config.show_7d !== false && (p7.messages !== undefined || p7.voiceHours !== undefined)) {
+      statBoxes.push({ type: 'messages', period: '7d', label: 'MSGS (7D)', value: (p7.messages || 0).toLocaleString(), subtitle: 'Weekly activity', color: this.colors.accentGreen });
+      statBoxes.push({ type: 'voice', period: '7d', label: 'VOICE (7D)', value: (p7.voiceHours || 0) < 1 ? Math.round((p7.voiceHours || 0)*60)+'m' : (p7.voiceHours || 0).toFixed(1)+'h', subtitle: 'Weekly time', color: this.colors.accentPurple });
+    }
+    
+    if (config.show_14d !== false && (p14.messages !== undefined || p14.voiceHours !== undefined)) {
+      statBoxes.push({ type: 'messages', period: '14d', label: 'MSGS (14D)', value: (p14.messages || 0).toLocaleString(), subtitle: 'Bi-weekly activity', color: this.colors.accentGreen });
+      statBoxes.push({ type: 'voice', period: '14d', label: 'VOICE (14D)', value: (p14.voiceHours || 0) < 1 ? Math.round((p14.voiceHours || 0)*60)+'m' : (p14.voiceHours || 0).toFixed(1)+'h', subtitle: 'Bi-weekly time', color: this.colors.accentPurple });
+    }
+    
+    if (config.show_30d !== false && (p30.messages !== undefined || p30.voiceHours !== undefined)) {
+      statBoxes.push({ type: 'messages', period: '30d', label: 'MSGS (30D)', value: (p30.messages || 0).toLocaleString(), subtitle: 'Monthly activity', color: this.colors.accentGreen });
+      statBoxes.push({ type: 'voice', period: '30d', label: 'VOICE (30D)', value: (p30.voiceHours || 0) < 1 ? Math.round((p30.voiceHours || 0)*60)+'m' : (p30.voiceHours || 0).toFixed(1)+'h', subtitle: 'Monthly time', color: this.colors.accentPurple });
+    }
+
+    // If no boxes enabled, show at least 1d and 7d as fallback
+    if (statBoxes.length === 0) {
+      statBoxes.push({ type: 'messages', period: '1d', label: 'MSGS (24H)', value: (p1.messages || 0).toLocaleString(), subtitle: 'Daily activity', color: this.colors.accentGreen });
+      statBoxes.push({ type: 'messages', period: '7d', label: 'MSGS (7D)', value: (p7.messages || 0).toLocaleString(), subtitle: 'Weekly activity', color: this.colors.accentGreen });
+      statBoxes.push({ type: 'voice', period: '1d', label: 'VOICE (24H)', value: (p1.voiceHours || 0) < 1 ? Math.round((p1.voiceHours || 0)*60)+'m' : (p1.voiceHours || 0).toFixed(1)+'h', subtitle: 'Daily time', color: this.colors.accentPurple });
+      statBoxes.push({ type: 'voice', period: '7d', label: 'VOICE (7D)', value: (p7.voiceHours || 0) < 1 ? Math.round((p7.voiceHours || 0)*60)+'m' : (p7.voiceHours || 0).toFixed(1)+'h', subtitle: 'Weekly time', color: this.colors.accentPurple });
+    }
 
     const boxH = 90;
     const boxGap = 16;
-    const boxW = (mainW - (boxGap * 3)) / 4;
+    const numBoxes = Math.min(statBoxes.length, 4); // Limit to 4 boxes
+    const boxW = numBoxes > 1 ? (mainW - (boxGap * (numBoxes - 1))) / numBoxes : mainW;
     
     let sx = col2X;
     const sy = startY + 20; // Slight offset to align with avatar visual weight
 
-    // Box 1: Messages 24h
-    this.drawStatBox(ctx, sx, sy, boxW, boxH, 
-      'MSGS (24H)', 
-      (p1.messages || 0).toLocaleString(), 
-      'Daily activity', 
-      this.colors.accentGreen
-    );
-    
-    // Box 2: Messages 7d
-    sx += boxW + boxGap;
-    this.drawStatBox(ctx, sx, sy, boxW, boxH, 
-      'MSGS (7D)', 
-      (p7.messages || 0).toLocaleString(), 
-      'Weekly activity', 
-      this.colors.accentGreen
-    );
-
-    // Box 3: Voice 24h
-    sx += boxW + boxGap;
-    const voice1d = p1.voiceHours || 0;
-    this.drawStatBox(ctx, sx, sy, boxW, boxH, 
-      'VOICE (24H)', 
-      voice1d < 1 ? Math.round(voice1d*60)+'m' : voice1d.toFixed(1)+'h', 
-      'Daily time', 
-      this.colors.accentPurple
-    );
-
-    // Box 4: Voice 7d
-    sx += boxW + boxGap;
-    const voice7d = p7.voiceHours || 0;
-    this.drawStatBox(ctx, sx, sy, boxW, boxH, 
-      'VOICE (7D)', 
-      voice7d < 1 ? Math.round(voice7d*60)+'m' : voice7d.toFixed(1)+'h', 
-      'Weekly time', 
-      this.colors.accentPurple
-    );
-
-    // 2. Large Chart Area
-    // It takes the remaining height
-    const chartY = sy + boxH + 24;
-    const chartH = (startY + contentHeight) - chartY - 24; // -24 for footer space
-    
-    // Use real daily stats data if available
-    const mHistory = [];
-    const vHistory = [];
-    
-    if (stats.dailyStats && stats.dailyStats.length > 0) {
-      // Use actual daily data
-      stats.dailyStats.forEach(day => {
-        mHistory.push(day.messages || 0);
-        vHistory.push(day.voiceHours || 0);
-      });
-    } else {
-      // Fallback: generate empty data array (all zeros) if no data available
-      for(let i = 0; i < 14; i++) {
-        mHistory.push(0);
-        vHistory.push(0);
-      }
+    // Draw enabled stat boxes
+    for (let i = 0; i < numBoxes; i++) {
+      const box = statBoxes[i];
+      this.drawStatBox(ctx, sx, sy, boxW, boxH, box.label, box.value, box.subtitle, box.color);
+      sx += boxW + boxGap;
     }
-    
-    this.drawChart(ctx, col2X, chartY, mainW, chartH, mHistory, vHistory);
+
+    // 2. Large Chart Area (only if enabled)
+    if (config.show_charts !== false) {
+      const chartY = sy + boxH + 24;
+      const chartH = (startY + contentHeight) - chartY - 24; // -24 for footer space
+      
+      // Use real daily stats data if available
+      const mHistory = [];
+      const vHistory = [];
+      
+      if (stats.dailyStats && stats.dailyStats.length > 0) {
+        // Use actual daily data
+        stats.dailyStats.forEach(day => {
+          mHistory.push(day.messages || 0);
+          vHistory.push(day.voiceHours || 0);
+        });
+      } else {
+        // Fallback: generate empty data array (all zeros) if no data available
+        const lookbackDays = config.lookback_days || 14;
+        for(let i = 0; i < lookbackDays; i++) {
+          mHistory.push(0);
+          vHistory.push(0);
+        }
+      }
+      
+      this.drawChart(ctx, col2X, chartY, mainW, chartH, mHistory, vHistory);
+    }
 
     // Footer text
     ctx.fillStyle = this.colors.textMuted;
     ctx.font = '10px "Segoe UI", Arial';
     ctx.textAlign = 'right';
-    ctx.fillText('Powered by ComCraft', this.width - 24, this.height - 12);
+    const lookbackDays = config.lookback_days || 14;
+    const timezone = config.timezone || 'UTC';
+    ctx.fillText(`Lookback: ${lookbackDays} days • Timezone: ${timezone} • Powered by ComCraft`, this.width - 24, this.height - 12);
+
+    // Draw border with custom color (outside clip)
+    ctx.restore(); // Exit clip
+    this.roundedRect(ctx, 0, 0, this.width, this.height, this.cornerRadius);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
     return cvs.toBuffer('image/png');
   }
