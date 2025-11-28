@@ -65,8 +65,8 @@ module.exports = [
         .setName('status')
         .setDescription('View current cam-only voice settings')
     )
-    .addSubcommand(subcommand =>
-      subcommand
+    .addSubcommandGroup(subcommandGroup =>
+      subcommandGroup
         .setName('exempt')
         .setDescription('Manage exempt roles and users')
         .addSubcommand(subcommand =>

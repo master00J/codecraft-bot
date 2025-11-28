@@ -1,0 +1,432 @@
+{
+  "language": {
+    "english": "English",
+    "dutch": "Dutch"
+  },
+  "comcraft_ai": {
+    "tabs": {
+      "persona": "Persona",
+      "knowledge": "Knowledge base",
+      "settings": "Settings",
+      "memories": "Memories",
+      "usage": "Usage"
+    },
+    "title": "AI Assistant",
+    "subtitle": "Configure the persona, safeguards, and server knowledge for your AI moderator.",
+    "actions": {
+      "back": "Back to dashboard"
+    },
+    "memories": {
+      "title": "Memory log",
+      "description": "{count, plural, one {# stored memory} other {# stored memories}}",
+      "refresh": "Refresh",
+      "loading": "Loading memories…",
+      "empty": "No memories stored yet. Start chatting with the AI and important events will appear here.",
+      "filterAll": "All types",
+      "filterInteraction": "Conversations",
+      "filterEvent": "Events",
+      "filterFact": "Facts",
+      "filterSummary": "Summaries",
+      "toastDeletedTitle": "Memory removed",
+      "toastDeletedDescription": "The selected entry has been deleted."
+    },
+    "usage": {
+      "title": "Usage & quota",
+      "description": "Monitor how many AI tokens this guild has spent this month.",
+      "tierLabel": "Current tier: {tier}",
+      "limitLabel": "Monthly limit",
+      "usedLabel": "Tokens used",
+      "remainingLabel": "Tokens remaining",
+      "costLabel": "Estimated cost",
+      "progressLabel": "This month",
+      "resetLabel": "Quota resets on {date}",
+      "unlimited": "Unlimited",
+      "noData": "No usage recorded for this period yet.",
+      "limitReachedTitle": "Quota reached",
+      "limitReachedDescription": "The AI quota has been reached. It resets on {reset}. Upgrade your tier to unlock more capacity.",
+      "historyTitle": "Usage history",
+      "historyDescription": "Recent AI tasks executed by this guild.",
+      "historyEmpty": "No usage logs yet. Start using the AI assistant to see activity here.",
+      "table": {
+        "date": "Date",
+        "provider": "Provider",
+        "model": "Model",
+        "task": "Task",
+        "tokens": "Tokens",
+        "cost": "Cost"
+      },
+      "tokensTotal": "{value} total",
+      "tokensBreakdown": "{input} in \u2022 {output} out"
+    },
+    "featureDisabled": {
+      "title": "AI assistant is disabled",
+      "description": "Upgrade this guild’s tier to unlock the AI assistant feature."
+    },
+    "persona": {
+      "title": "Persona & tone",
+      "description": "Define how the AI introduces itself and which tone of voice it should use when responding inside your server.",
+      "assistantName": "Assistant name",
+      "assistantNameHelp": "Shown in dashboards and internal logs. The Discord bot name is managed separately.",
+      "systemPrompt": "System prompt",
+      "systemPlaceholder": "You are ComCraft AI, the helpful assistant for the {guild} community. You answer questions using the knowledge base and stay friendly yet concise...",
+      "systemHelp": "Provide background instructions that are prepended to every AI request. You can use {assistant} and {guild} placeholders. Keep it short and factual (max 6000 characters).",
+      "styleGuidelines": "Style guidelines",
+      "stylePlaceholder": "Always greet members by name. Mention server-specific terminology. If you are unsure, tell the user you will escalate it to staff...",
+      "styleHelp": "Tone-of-voice notes that help the AI match your community’s vibe. {assistant} and {guild} placeholders are supported (max 6000 characters).",
+      "save": "Save persona",
+      "badge": "Persona"
+    },
+    "settings": {
+      "title": "Permissions & providers",
+      "description": "Choose which AI capabilities are active. Model selection is managed centrally.",
+      "allowQuestions": "Enable /askai command",
+      "allowQuestionsHelp": "Allow members with access to run the slash command inside Discord.",
+      "allowModeration": "Enable AI moderation",
+      "allowModerationHelp": "Allow the bot to run automated moderation checks via the dashboard or future automations.",
+      "defaultProvider": "Default AI Provider",
+      "defaultProviderHelp": "Choose which AI provider to use by default. Claude is required for web search.",
+      "aiChat": "Enable AI chat channel",
+      "aiChatHelp": "Allow members to chat with the AI in a dedicated Discord channel without slash commands.",
+      "aiChatChannel": "Conversation channel",
+      "aiChatChannelHelp": "Members can talk to the AI in this channel. Pick a text channel.",
+      "aiChatThreads": "Reply in thread",
+      "aiChatThreadsHelp": "Start a new thread for each member conversation to keep channels tidy.",
+      "memory": "Enable AI memory",
+      "memoryHelp": "Store important events and facts so the AI can remember what happens on the server.",
+      "memoryMaxEntries": "Maximum stored memories",
+      "memoryMaxEntriesHelp": "Older or low-importance memories are pruned when this limit is exceeded.",
+      "memoryRetention": "Retention (days)",
+      "memoryRetentionHelp": "Memories older than this number of days are removed automatically.",
+      "selectChannel": "Select a channel",
+      "noChannel": "No channel selected",
+      "webSearch": "Enable web search (Claude)",
+      "webSearchHelp": "Allow the AI to fetch fresh information via Claude’s built-in web search tool. Uses extra tokens.",
+      "webSearchRequiresClaude": "Select Claude as the default provider to enable web search.",
+      "save": "Save settings",
+      "badge": "Settings"
+    },
+    "documents": {
+      "title": "Knowledge base",
+      "description": "Add short notes, FAQs, and server policies that the AI may quote from when answering members.",
+      "newTitle": "Add new entry",
+      "newPlaceholderTitle": "Entry title (optional)",
+      "newPlaceholderContent": "Paste rules, onboarding steps, giveaway policies…",
+      "pinLabel": "Pin to top priority",
+      "add": "Add entry",
+      "titlePlaceholder": "Entry title",
+      "pinned": "Pinned",
+      "updatedAt": "Updated {date}",
+      "save": "Save entry",
+      "empty": "No knowledge entries yet. Add your first note to guide the AI.",
+      "deleteConfirm": "Remove this knowledge entry?",
+      "badge": "Knowledge"
+    },
+    "toast": {
+      "loadError": {
+        "title": "Could not load AI settings",
+        "description": "Refresh the page or try again later."
+      },
+      "saved": {
+        "title": "Changes saved",
+        "description": "Your AI configuration has been updated."
+      },
+      "error": {
+        "title": "Something went wrong",
+        "description": "Please try again or contact support."
+      },
+      "validation": {
+        "title": "Missing information",
+        "contentRequired": "Please enter some content for this knowledge entry."
+      },
+      "documentCreated": "Knowledge entry added successfully.",
+      "deleted": {
+        "title": "Entry deleted",
+        "description": "The knowledge entry was removed."
+      }
+    },
+    "misc": {
+      "invalidGuild": "Guild not found or access denied.",
+      "loading": "Loading AI configuration…"
+    },
+    "badges": {
+      "enabled": "Enabled",
+      "memories": "Memories",
+      "persona": "Persona",
+      "documents": "Knowledge",
+      "settings": "Settings"
+    }
+  },
+  "navigation": {
+    "home": "Home",
+    "products": "Products",
+    "services": "Services",
+    "pricing": "Pricing",
+    "portfolio": "Portfolio",
+    "contact": "Contact",
+    "login": "Login",
+    "logout": "Logout",
+    "dashboard": "Dashboard",
+    "admin": "Admin"
+  },
+  "footer": {
+    "tagline": "Building digital solutions that drive success.",
+    "sections": {
+      "services": {
+        "title": "Services",
+        "all": "All Services",
+        "pricing": "Pricing",
+        "portfolio": "Portfolio",
+        "order": "Order Now"
+      },
+      "company": {
+        "title": "Company",
+        "home": "Home",
+        "contact": "Contact"
+      },
+      "support": {
+        "title": "Support",
+        "dashboard": "Dashboard",
+        "login": "Login",
+        "help": "Get Help",
+        "copyright": "© {year} CodeCraft"
+      }
+    },
+    "bottom": "© {year} CodeCraft Solutions. All rights reserved."
+  },
+  "home": {
+    "hero": {
+      "badge": "🚀 Trusted by 100+ clients worldwide",
+      "titleLine1": "Building Digital Solutions",
+      "titleLine2": "That Drive Success",
+      "description": "From Discord bots to e-commerce platforms, we transform your ideas into powerful digital experiences. Fast delivery, competitive pricing, and exceptional support.",
+      "ctaPrimary": "Start Your Project",
+      "ctaSecondary": "View Portfolio"
+    },
+    "services": {
+      "heading": "Our Services",
+      "subheading": "Professional development services tailored to your needs",
+      "cards": {
+        "discordBots": {
+          "title": "Discord Bots",
+          "description": "Custom Discord bots with moderation, games, AI integration, and more",
+          "price": "From $25",
+          "features": {
+            "customCommands": "Custom commands",
+            "database": "Database integration",
+            "support": "24/7 hosting support"
+          }
+        },
+        "ecommerce": {
+          "title": "E-Commerce",
+          "description": "Full-featured online stores with payment integration",
+          "price": "From $500",
+          "features": {
+            "payments": "Payment gateways",
+            "dashboard": "Admin dashboard",
+            "inventory": "Inventory management"
+          }
+        },
+        "webApps": {
+          "title": "Web Applications",
+          "description": "Modern, responsive websites and web applications",
+          "price": "From $150",
+          "features": {
+            "responsive": "Responsive design",
+            "seo": "SEO optimized",
+            "cms": "CMS integration"
+          }
+        }
+      }
+    },
+    "stats": {
+      "clients": "Happy Clients",
+      "projects": "Projects Completed",
+      "rating": "Average Rating",
+      "response": "Response Time"
+    },
+    "cta": {
+      "heading": "Ready to Start Your Project?",
+      "description": "Join our Discord server or login to get started with your project today. Free consultation and competitive pricing guaranteed.",
+      "primaryButton": "Login with Discord",
+      "secondaryButton": "Contact Us"
+    }
+  },
+  "dashboard": {
+    "layout": {
+      "links": {
+        "home": "Home",
+        "overview": "Overview",
+        "orders": "Orders",
+        "referrals": "Referrals",
+        "logout": "Logout"
+      }
+    }
+  },
+  "admin": {
+    "layout": {
+      "title": "Admin Panel",
+      "access": "Admin Access",
+      "links": {
+        "home": "Home",
+        "overview": "Overview",
+        "orders": "Orders",
+        "customers": "Customers",
+        "analytics": "Analytics",
+        "portfolio": "Portfolio",
+        "pricing": "Pricing",
+        "payments": "Payments",
+        "subscriptions": "Subscriptions",
+        "subscriptionTiers": "Subscription Tiers",
+        "discounts": "Discount Codes",
+        "deployments": "Deployments",
+        "chat": "Live Chat",
+        "settings": "Settings",
+        "userDashboard": "User Dashboard",
+        "logout": "Logout"
+      }
+    }
+  },
+  "comcraft_giveaways": {
+    "tabs": {
+      "basic": "Basics",
+      "embed": "Embed",
+      "rewards": "Rewards"
+    },
+    "title": "Giveaways",
+    "subtitle": "Launch and track your server giveaways from one place.",
+    "loading": "Loading giveaways…",
+    "actions": {
+      "start": "Start giveaway",
+      "startDisabled": "Upgrade required",
+      "cancel": "Cancel",
+      "confirm": "Start",
+      "saving": "Starting…",
+      "processing": "Working…",
+      "end": "End now",
+      "reroll": "Reroll winners",
+      "showAdvanced": "Show options",
+      "hideAdvanced": "Hide options",
+      "back": "Back to dashboard",
+      "reset": "Reset form"
+    },
+    "preview": {
+      "previewLabel": "Live preview",
+      "winnerCount": "{count, plural, one {# winner} other {# winners}}",
+      "defaultTitle": "🎉 Giveaway preview",
+      "defaultFooter": "Click the button below to enter!",
+      "defaultLineHost": "Hosted by @Host",
+      "defaultLineWinners": "Winners: {winners}",
+      "defaultLineParticipants": "Participants: {count}",
+      "defaultLineEnds": "Ends soon…",
+      "joinFallback": "🎉 Join",
+      "channelFallback": "select-channel",
+      "rewardSummaryTitle": "Rewards & follow-up",
+      "rewardRole": "Give role @{role}",
+      "rewardDm": "Send personalised DM to winners",
+      "rewardChannel": "Post follow-up in #{channel}"
+    },
+    "dialog": {
+      "title": "Start a new giveaway",
+      "description": "Set the prize, duration and access rules. The bot will post it instantly."
+    },
+    "fields": {
+      "prize": "Prize",
+      "prizePlaceholder": "VIP access, merch voucher, …",
+      "duration": "Duration (minutes)",
+      "durationHelp": "Between 1 minute and 7 days (10080 minutes).",
+      "winners": "Winners",
+      "winnersHelp": "Number of winners to draw (1 - 25).",
+      "channel": "Channel",
+      "channelPlaceholder": "Select a channel",
+      "noChannels": "No text channels available",
+      "role": "Required role",
+      "noRole": "No role required",
+      "embedTitle": "Embed title",
+      "embedDescription": "Embed description",
+      "embedColor": "Accent color",
+      "embedColorHelp": "Hex code, e.g. #FACC15",
+      "embedImageUrl": "Image URL",
+      "embedThumbnailUrl": "Thumbnail URL",
+      "embedFooter": "Footer text",
+      "joinButtonLabel": "Join button label",
+      "joinButtonHelp": "Leave empty for the default \"🎉 Join\" label.",
+      "ctaButtonLabel": "Link button label",
+      "ctaButtonUrl": "Link button URL",
+      "rewardRole": "Reward role",
+      "rewardRoleRemove": "Remove role after (minutes)",
+      "rewardRoleHelp": "0 keeps the role permanently. Max 43200 minutes (30 days).",
+      "rewardDmMessage": "Winner DM message",
+      "rewardDmPlaceholder": "Congrats! Use this code to claim your prize…",
+      "rewardChannel": "Announcement channel",
+      "rewardChannelNone": "No announcement",
+      "rewardChannelMessage": "Channel follow-up message",
+      "rewardChannelPlaceholder": "🎉 Congrats {winners}! Prize: {prize}",
+      "rewardChannelHelp": "You can use {winners}, {prize} and {guild} placeholders."
+    },
+    "featureDisabled": {
+      "title": "Giveaways are disabled",
+      "description": "Upgrade this guild’s subscription tier to unlock giveaway automation."
+    },
+    "sections": {
+      "activeTitle": "Active giveaways",
+      "activeDescription": "Monitor running giveaways and close them early if needed.",
+      "activeEmpty": "No active giveaways at the moment.",
+      "endedTitle": "Recent giveaways",
+      "endedDescription": "Review winners and reroll if you need new results.",
+      "endedEmpty": "No completed giveaways yet.",
+      "embedOptionsTitle": "Embed customization",
+      "embedOptionsDescription": "Style the giveaway card with your own title, colors and media.",
+      "rewardOptionsTitle": "Automatic rewards",
+      "rewardOptionsDescription": "Grant roles, send follow-up messages and customize winner DMs."
+    },
+    "labels": {
+      "entries": "{count, plural, one {# entry} other {# entries}}",
+      "noWinners": "No winners selected",
+      "hostedBy": "Hosted by {host}",
+      "unknownHost": "unknown",
+      "endsAt": "Ends {time}",
+      "endedAt": "Ended {time}",
+      "channel": "Posted in {channel}",
+      "requiredRole": "Requirement: {role}",
+      "unknownRole": "unknown role",
+      "noRoleSelected": "no role",
+      "unknownChannel": "unknown channel",
+      "winners": "Winners: {winners}"
+    },
+    "toast": {
+      "loadError": {
+        "title": "Could not load giveaways",
+        "description": "Refresh the page or try again later."
+      },
+      "featureDisabled": {
+        "title": "Feature unavailable",
+        "description": "Giveaways are disabled for this guild’s tier."
+      },
+      "validation": {
+        "title": "Missing information",
+        "prize": "Enter a prize for the giveaway.",
+        "channel": "Select a channel where the bot can post.",
+        "ctaLabel": "Provide a label when adding a link button.",
+        "rewardChannel": "Select a channel for the reward announcement.",
+        "rewardRoleDuration": "Role removal must be between 0 and 43200 minutes."
+      },
+      "started": {
+        "title": "Giveaway started",
+        "description": "The bot posted the giveaway in the selected channel."
+      },
+      "ended": {
+        "title": "Giveaway ended",
+        "description": "Winners were drawn successfully."
+      },
+      "rerolled": {
+        "title": "Giveaway rerolled",
+        "description": "New winners were selected."
+      },
+      "error": {
+        "title": "Something went wrong",
+        "description": "Please try again or contact support."
+      }
+    }
+  }
+}
+

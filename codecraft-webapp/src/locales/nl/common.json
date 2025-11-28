@@ -1,0 +1,430 @@
+{
+  "language": {
+    "english": "Engels",
+    "dutch": "Nederlands"
+  },
+  "comcraft_ai": {
+    "tabs": {
+      "persona": "Persona",
+      "knowledge": "Kennisbank",
+      "settings": "Instellingen",
+      "memories": "Herinneringen",
+      "usage": "Verbruik"
+    },
+    "title": "AI Assistant",
+    "subtitle": "Configure the persona, safeguards, and server knowledge for your AI moderator.",
+    "actions": {
+      "back": "Back to dashboard"
+    },
+    "memories": {
+      "title": "Geheugenoverzicht",
+      "description": "{count, plural, one {# opgeslagen herinnering} other {# opgeslagen herinneringen}}",
+      "refresh": "Vernieuwen",
+      "loading": "Herinneringen laden…",
+      "empty": "Er zijn nog geen herinneringen opgeslagen. Laat leden met de AI praten en belangrijke gebeurtenissen verschijnen hier.",
+      "filterAll": "Alle types",
+      "filterInteraction": "Conversaties",
+      "filterEvent": "Events",
+      "filterFact": "Feiten",
+      "filterSummary": "Samenvattingen",
+      "toastDeletedTitle": "Herinnering verwijderd",
+      "toastDeletedDescription": "De geselecteerde herinnering is verwijderd."
+    },
+    "usage": {
+      "title": "Verbruik & quotum",
+      "description": "Volg hoeveel AI-tokens deze guild deze maand heeft besteed.",
+      "tierLabel": "Huidige tier: {tier}",
+      "limitLabel": "Maandelijkse limiet",
+      "usedLabel": "Gebruikte tokens",
+      "remainingLabel": "Resterende tokens",
+      "costLabel": "Geschatte kost",
+      "progressLabel": "Deze maand",
+      "resetLabel": "Quota wordt opnieuw ingesteld op {date}",
+      "unlimited": "Onbeperkt",
+      "noData": "Er is nog geen verbruik geregistreerd voor deze periode.",
+      "limitReachedTitle": "Quota bereikt",
+      "limitReachedDescription": "Het AI-quotum is op. Het wordt opnieuw ingesteld op {reset}. Upgrade je tier voor extra capaciteit.",
+      "historyTitle": "Verbruiksgeschiedenis",
+      "historyDescription": "Recente AI-taken die voor deze guild zijn uitgevoerd.",
+      "historyEmpty": "Nog geen verbruikslogs. Gebruik de AI-assistent om activiteit te zien.",
+      "table": {
+        "date": "Datum",
+        "provider": "Provider",
+        "model": "Model",
+        "task": "Taak",
+        "tokens": "Tokens",
+        "cost": "Kosten"
+      },
+      "tokensTotal": "{value} totaal",
+      "tokensBreakdown": "{input} in \u2022 {output} uit"
+    },
+    "featureDisabled": {
+      "title": "AI assistant is disabled",
+      "description": "Upgrade this guild’s tier to unlock the AI assistant feature."
+    },
+    "persona": {
+      "title": "Persona & tone",
+      "description": "Define how the AI introduces itself and which tone of voice it should use when responding inside your server.",
+      "assistantName": "Assistant name",
+      "assistantNameHelp": "Shown in dashboards and internal logs. The Discord bot name is managed separately.",
+      "systemPrompt": "System prompt",
+      "systemPlaceholder": "You are ComCraft AI, the helpful assistant for the {guild} community. You answer questions using the knowledge base and stay friendly yet concise...",
+      "systemHelp": "Geef achtergrondinstructies die aan elke AI-aanvraag worden toegevoegd. Je kunt de placeholders {assistant} en {guild} gebruiken. Hou het kort en feitelijk (max 6000 tekens).",
+      "styleGuidelines": "Style guidelines",
+      "stylePlaceholder": "Always greet members by name. Mention server-specific terminology. If you are unsure, tell the user you will escalate it to staff...",
+      "styleHelp": "Notities over tone of voice zodat de AI bij je community past. Placeholders {assistant} en {guild} worden ondersteund (max 6000 tekens).",
+      "save": "Save persona"
+    },
+    "settings": {
+      "title": "Toegang & providers",
+      "description": "Kies welke AI-mogelijkheden actief zijn. De modelkeuze wordt centraal beheerd.",
+      "allowQuestions": "/askai-command inschakelen",
+      "allowQuestionsHelp": "Geef leden met toegang de mogelijkheid om het slash-commando in Discord te gebruiken.",
+      "allowModeration": "AI-moderatie activeren",
+      "allowModerationHelp": "Laat de bot automatische moderatiechecks uitvoeren via het dashboard of toekomstige automatiseringen.",
+      "defaultProvider": "Standaard AI-provider",
+      "defaultProviderHelp": "Kies welke AI-provider standaard gebruikt wordt. Claude is nodig voor web search.",
+      "aiChat": "AI-chatkanaal inschakelen",
+      "aiChatHelp": "Sta leden toe om zonder slash-commando met de AI te praten in een apart kanaal.",
+      "aiChatChannel": "Gesprekskanaal",
+      "aiChatChannelHelp": "Leden kunnen in dit kanaal met de AI praten. Kies een tekstkanaal.",
+      "aiChatThreads": "Antwoord in thread",
+      "aiChatThreadsHelp": "Start voor elk gesprek een nieuwe thread zodat het kanaal overzichtelijk blijft.",
+      "memory": "AI-geheugen inschakelen",
+      "memoryHelp": "Bewaar belangrijke gebeurtenissen en feiten zodat de AI zich herinnert wat er gebeurt op de server.",
+      "memoryMaxEntries": "Maximum aantal herinneringen",
+      "memoryMaxEntriesHelp": "Oudere of minder belangrijke herinneringen worden verwijderd zodra deze limiet is bereikt.",
+      "memoryRetention": "Bewaartermijn (dagen)",
+      "memoryRetentionHelp": "Herinneringen ouder dan dit aantal dagen worden automatisch verwijderd.",
+      "selectChannel": "Kies een kanaal",
+      "noChannel": "Geen kanaal gekozen",
+      "webSearch": "Webzoekfunctie inschakelen (Claude)",
+      "webSearchHelp": "Laat de AI actuele informatie ophalen via de ingebouwde Claude web search tool. Verbruikt extra tokens.",
+      "webSearchRequiresClaude": "Selecteer Claude als standaardprovider om web search te activeren.",
+      "save": "Instellingen opslaan"
+    },
+    "documents": {
+      "title": "Knowledge base",
+      "description": "Add short notes, FAQs, and server policies that the AI may quote from when answering members.",
+      "newTitle": "Add new entry",
+      "newPlaceholderTitle": "Entry title (optional)",
+      "newPlaceholderContent": "Paste rules, onboarding steps, giveaway policies…",
+      "pinLabel": "Pin to top priority",
+      "add": "Add entry",
+      "titlePlaceholder": "Entry title",
+      "pinned": "Pinned",
+      "updatedAt": "Updated {date}",
+      "save": "Save entry",
+      "empty": "No knowledge entries yet. Add your first note to guide the AI.",
+      "deleteConfirm": "Remove this knowledge entry?",
+      "badge": "Kennis"
+    },
+    "toast": {
+      "loadError": {
+        "title": "Could not load AI settings",
+        "description": "Refresh the page or try again later."
+      },
+      "saved": {
+        "title": "Changes saved",
+        "description": "Your AI configuration has been updated."
+      },
+      "error": {
+        "title": "Something went wrong",
+        "description": "Please try again or contact support."
+      },
+      "validation": {
+        "title": "Missing information",
+        "contentRequired": "Please enter some content for this knowledge entry."
+      },
+      "documentCreated": "Knowledge entry added successfully.",
+      "deleted": {
+        "title": "Entry deleted",
+        "description": "The knowledge entry was removed."
+      }
+    },
+    "misc": {
+      "invalidGuild": "Guild not found or access denied.",
+      "loading": "Loading AI configuration…"
+    },
+    "badges": {
+      "enabled": "Ingeschakeld",
+      "memories": "Herinneringen",
+      "persona": "Persona",
+      "documents": "Kennis",
+      "settings": "Instellingen"
+    }
+  },
+  "navigation": {
+    "home": "Home",
+    "products": "Producten",
+    "services": "Diensten",
+    "pricing": "Prijzen",
+    "portfolio": "Portfolio",
+    "contact": "Contact",
+    "login": "Inloggen",
+    "logout": "Uitloggen",
+    "dashboard": "Dashboard",
+    "admin": "Admin"
+  },
+  "footer": {
+    "tagline": "Wij bouwen digitale oplossingen die resultaat leveren.",
+    "sections": {
+      "services": {
+        "title": "Diensten",
+        "all": "Alle diensten",
+        "pricing": "Prijzen",
+        "portfolio": "Portfolio",
+        "order": "Plaats een bestelling"
+      },
+      "company": {
+        "title": "Bedrijf",
+        "home": "Home",
+        "contact": "Contact"
+      },
+      "support": {
+        "title": "Support",
+        "dashboard": "Dashboard",
+        "login": "Inloggen",
+        "help": "Hulp nodig?",
+        "copyright": "© {year} CodeCraft"
+      }
+    },
+    "bottom": "© {year} CodeCraft Solutions. Alle rechten voorbehouden."
+  },
+  "home": {
+    "hero": {
+      "badge": "🚀 Vertrouwd door meer dan 100 klanten wereldwijd",
+      "titleLine1": "Digitale oplossingen bouwen",
+      "titleLine2": "Die resultaat opleveren",
+      "description": "Van Discord bots tot e-commerce platformen: wij vertalen jouw idee naar krachtige digitale ervaringen. Snelle oplevering, scherpe prijzen en top support.",
+      "ctaPrimary": "Start je project",
+      "ctaSecondary": "Bekijk portfolio"
+    },
+    "services": {
+      "heading": "Onze diensten",
+      "subheading": "Professionele development services op maat",
+      "cards": {
+        "discordBots": {
+          "title": "Discord bots",
+          "description": "Custom Discord bots met moderatie, games, AI-integratie en meer",
+          "price": "Vanaf €25",
+          "features": {
+            "customCommands": "Custom commands",
+            "database": "Database-integratie",
+            "support": "24/7 hosting support"
+          }
+        },
+        "ecommerce": {
+          "title": "E-commerce",
+          "description": "Volledige webshops met betalingsintegraties",
+          "price": "Vanaf €500",
+          "features": {
+            "payments": "Betaalproviders",
+            "dashboard": "Admin dashboard",
+            "inventory": "Voorraadbeheer"
+          }
+        },
+        "webApps": {
+          "title": "Webapplicaties",
+          "description": "Moderne, responsive websites en webapplicaties",
+          "price": "Vanaf €150",
+          "features": {
+            "responsive": "Responsive design",
+            "seo": "SEO geoptimaliseerd",
+            "cms": "CMS-integratie"
+          }
+        }
+      }
+    },
+    "stats": {
+      "clients": "Tevreden klanten",
+      "projects": "Projecten afgerond",
+      "rating": "Gemiddelde beoordeling",
+      "response": "Reactietijd"
+    },
+    "cta": {
+      "heading": "Klaar om te starten?",
+      "description": "Join onze Discord server of log in om vandaag nog te beginnen. Gratis adviesgesprek en scherpe tarieven gegarandeerd.",
+      "primaryButton": "Login met Discord",
+      "secondaryButton": "Neem contact op"
+    }
+  },
+  "dashboard": {
+    "layout": {
+      "links": {
+        "home": "Home",
+        "overview": "Overzicht",
+        "orders": "Bestellingen",
+        "referrals": "Referrals",
+        "logout": "Uitloggen"
+      }
+    }
+  },
+  "admin": {
+    "layout": {
+      "title": "Admin Paneel",
+      "access": "Admin Toegang",
+      "links": {
+        "home": "Home",
+        "overview": "Overzicht",
+        "orders": "Bestellingen",
+        "customers": "Klanten",
+        "analytics": "Analytics",
+        "portfolio": "Portfolio",
+        "pricing": "Prijzen",
+        "payments": "Betalingen",
+        "subscriptions": "Abonnementen",
+        "subscriptionTiers": "Abonnementsniveaus",
+        "discounts": "Kortingscodes",
+        "deployments": "Deployments",
+        "chat": "Live chat",
+        "settings": "Instellingen",
+        "userDashboard": "Gebruikersdashboard",
+        "logout": "Uitloggen"
+      }
+    }
+  },
+  "comcraft_giveaways": {
+    "tabs": {
+      "basic": "Basis",
+      "embed": "Embed",
+      "rewards": "Beloningen"
+    },
+    "title": "Giveaways",
+    "subtitle": "Start en volg giveaways voor je server via één overzicht.",
+    "loading": "Giveaways laden…",
+    "actions": {
+      "start": "Giveaway starten",
+      "startDisabled": "Upgrade vereist",
+      "cancel": "Annuleren",
+      "confirm": "Starten",
+      "saving": "Bezig…",
+      "processing": "Bezig…",
+      "end": "Nu beëindigen",
+      "reroll": "Winnaars rerollen",
+      "showAdvanced": "Opties tonen",
+      "hideAdvanced": "Opties verbergen",
+      "back": "Back to dashboard",
+      "reset": "Reset form"
+    },
+    "preview": {
+      "previewLabel": "Live preview",
+      "winnerCount": "{count, plural, one {# winnaar} other {# winnaars}}",
+      "defaultTitle": "🎉 Giveaway voorbeeld",
+      "defaultFooter": "Klik op de knop hieronder om mee te doen!",
+      "defaultLineHost": "Gehost door @Host",
+      "defaultLineWinners": "Winnaars: {winners}",
+      "defaultLineParticipants": "Deelnemers: {count}",
+      "defaultLineEnds": "Eindigt binnenkort…",
+      "joinFallback": "🎉 Join",
+      "channelFallback": "kies-kanaal",
+      "rewardSummaryTitle": "Beloningen & follow-up",
+      "rewardRole": "Rol @{role} toekennen",
+      "rewardDm": "Persoonlijke DM sturen naar winnaars",
+      "rewardChannel": "Follow-up posten in #{channel}"
+    },
+    "dialog": {
+      "title": "Nieuwe giveaway",
+      "description": "Stel prijs, duur en toegang in. De bot plaatst het bericht direct."
+    },
+    "fields": {
+      "prize": "Prijs",
+      "prizePlaceholder": "VIP-toegang, merch voucher, …",
+      "duration": "Duur (minuten)",
+      "durationHelp": "Tussen 1 minuut en 7 dagen (10080 minuten).",
+      "winners": "Winnaars",
+      "winnersHelp": "Aantal winnaars (1 - 25).",
+      "channel": "Kanaal",
+      "channelPlaceholder": "Kies een kanaal",
+      "noChannels": "Geen tekstkanalen beschikbaar",
+      "role": "Vereiste rol",
+      "noRole": "Geen rol vereist",
+      "embedTitle": "Embedtitel",
+      "embedDescription": "Embedbeschrijving",
+      "embedColor": "Accentkleur",
+      "embedColorHelp": "Hexcode, bijv. #FACC15",
+      "embedImageUrl": "Afbeelding URL",
+      "embedThumbnailUrl": "Thumbnail URL",
+      "embedFooter": "Footertekst",
+      "joinButtonLabel": "Join-knop label",
+      "joinButtonHelp": "Laat leeg voor het standaardlabel \"🎉 Join\".",
+      "ctaButtonLabel": "Linkknop label",
+      "ctaButtonUrl": "Linkknop URL",
+      "rewardRole": "Beloningsrol",
+      "rewardRoleRemove": "Rol verwijderen na (minuten)",
+      "rewardRoleHelp": "0 laat de rol staan. Max 43200 minuten (30 dagen).",
+      "rewardDmMessage": "DM-bericht voor winnaars",
+      "rewardDmPlaceholder": "Gefeliciteerd! Gebruik deze code om je prijs te claimen…",
+      "rewardChannel": "Aankondigingskanaal",
+      "rewardChannelNone": "Geen aankondiging",
+      "rewardChannelMessage": "Bericht in kanaal",
+      "rewardChannelPlaceholder": "🎉 Gefeliciteerd {winners}! Prijs: {prize}",
+      "rewardChannelHelp": "Gebruik de placeholders {winners}, {prize} en {guild}."
+    },
+    "featureDisabled": {
+      "title": "Giveaways uitgeschakeld",
+      "description": "Upgrade de licentie van deze guild om giveaway-automatisering te gebruiken."
+    },
+    "sections": {
+      "activeTitle": "Actieve giveaways",
+      "activeDescription": "Hou lopende giveaways in de gaten en sluit ze indien nodig eerder.",
+      "activeEmpty": "Er zijn momenteel geen actieve giveaways.",
+      "endedTitle": "Recente giveaways",
+      "endedDescription": "Bekijk winnaars en reroll indien nodig.",
+      "endedEmpty": "Nog geen afgeronde giveaways.",
+      "embedOptionsTitle": "Embed aanpassen",
+      "embedOptionsDescription": "Stijl de giveawaykaart met eigen titel, kleuren en media.",
+      "rewardOptionsTitle": "Automatische beloningen",
+      "rewardOptionsDescription": "Deel rollen uit, stuur follow-up berichten en pas DM's aan."
+    },
+    "labels": {
+      "entries": "{count, plural, one {# deelname} other {# deelnames}}",
+      "noWinners": "Geen winnaars geselecteerd",
+      "hostedBy": "Gehost door {host}",
+      "unknownHost": "onbekend",
+      "endsAt": "Eindigt op {time}",
+      "endedAt": "Geëindigd op {time}",
+      "channel": "Geplaatst in {channel}",
+      "requiredRole": "Vereiste: {role}",
+      "unknownRole": "onbekende rol",
+      "noRoleSelected": "geen rol",
+      "unknownChannel": "onbekend kanaal",
+      "winners": "Winnaars: {winners}"
+    },
+    "toast": {
+      "loadError": {
+        "title": "Giveaways laden mislukt",
+        "description": "Ververs de pagina of probeer het later opnieuw."
+      },
+      "featureDisabled": {
+        "title": "Functie niet beschikbaar",
+        "description": "Giveaways zijn uitgeschakeld voor deze tier."
+      },
+      "validation": {
+        "title": "Ontbrekende gegevens",
+        "prize": "Vul een prijs voor de giveaway in.",
+        "channel": "Selecteer een kanaal waar de bot kan posten.",
+        "ctaLabel": "Geef een label op wanneer je een linkknop toevoegt.",
+        "rewardChannel": "Selecteer een kanaal voor het beloningsbericht.",
+        "rewardRoleDuration": "Rolverwijdering moet tussen 0 en 43200 minuten liggen."
+      },
+      "started": {
+        "title": "Giveaway gestart",
+        "description": "De bot heeft de giveaway gepost in het gekozen kanaal."
+      },
+      "ended": {
+        "title": "Giveaway beëindigd",
+        "description": "Winnaars zijn succesvol getrokken."
+      },
+      "rerolled": {
+        "title": "Nieuwe winnaars",
+        "description": "Er is een nieuwe selectie winnaars gemaakt."
+      },
+      "error": {
+        "title": "Er ging iets mis",
+        "description": "Probeer het opnieuw of neem contact op met support."
+      }
+    }
+  }
+}
+

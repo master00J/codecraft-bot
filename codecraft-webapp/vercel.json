@@ -1,7 +1,9 @@
 {
-  "buildCommand": "npm install && npm run build",
-  "outputDirectory": ".next",
-  "installCommand": "npm install",
-  "framework": "nextjs"
+  "crons": [
+    {
+      "path": "/api/cron/auto-scale",
+      "schedule": "*/10 * * * *"
+    }
+  ]
 }
 

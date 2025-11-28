@@ -33,7 +33,6 @@ import {
   Vote,
   Video
 } from 'lucide-react';
-import { Toaster } from '@/components/ui/toaster';
 
 interface NavItem {
   name: string;
@@ -80,7 +79,6 @@ export default function GuildDashboardLayout({
     { name: 'Moderation', href: `/comcraft/dashboard/${guildId}#moderation`, icon: Shield },
     { name: 'Commands', href: `/comcraft/dashboard/${guildId}#commands`, icon: MessageSquare },
     { name: 'Streaming', href: `/comcraft/dashboard/${guildId}#streaming`, icon: Tv },
-    { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video },
     { name: 'Birthdays', href: `/comcraft/dashboard/${guildId}#birthdays`, icon: Calendar },
     { name: 'Feedback', href: `/comcraft/dashboard/${guildId}#feedback`, icon: MessageCircle },
     { name: 'Tickets', href: `/comcraft/dashboard/${guildId}#tickets`, icon: Ticket },
@@ -96,6 +94,7 @@ export default function GuildDashboardLayout({
     { name: 'Game News', href: `/comcraft/dashboard/${guildId}/game-news`, icon: Newspaper },
     { name: 'Scheduled Messages', href: `/comcraft/dashboard/${guildId}/scheduled-messages`, icon: Clock },
     { name: 'Vote Kick', href: `/comcraft/dashboard/${guildId}/vote-kick`, icon: Vote },
+    { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings },
   ];
@@ -213,9 +212,6 @@ export default function GuildDashboardLayout({
       <main className="flex-1 ml-64 min-h-screen">
         {children}
       </main>
-      
-      {/* Toast Notifications */}
-      <Toaster />
     </div>
   );
 }

@@ -1701,25 +1701,30 @@ client.on('interactionCreate', async (interaction) => {
           });
         }
 
-        const subcommand = interaction.options.getSubcommand();
-        switch (subcommand) {
-          case 'enable':
-            await global.camOnlyVoiceHandlers.handleEnable(interaction);
-            break;
-          case 'disable':
-            await global.camOnlyVoiceHandlers.handleDisable(interaction);
-            break;
-          case 'status':
-            await global.camOnlyVoiceHandlers.handleStatus(interaction);
-            break;
-          case 'exempt':
-            await global.camOnlyVoiceHandlers.handleExempt(interaction);
-            break;
-          default:
-            await interaction.reply({ 
-              content: '❌ Unknown subcommand', 
-              ephemeral: true 
-            });
+        // Check if it's a subcommand group (exempt) or regular subcommand
+        const subcommandGroup = interaction.options.getSubcommandGroup(false);
+        if (subcommandGroup === 'exempt') {
+          // Handle exempt subcommand group
+          await global.camOnlyVoiceHandlers.handleExempt(interaction);
+        } else {
+          // Handle regular subcommands
+          const subcommand = interaction.options.getSubcommand(false);
+          switch (subcommand) {
+            case 'enable':
+              await global.camOnlyVoiceHandlers.handleEnable(interaction);
+              break;
+            case 'disable':
+              await global.camOnlyVoiceHandlers.handleDisable(interaction);
+              break;
+            case 'status':
+              await global.camOnlyVoiceHandlers.handleStatus(interaction);
+              break;
+            default:
+              await interaction.reply({ 
+                content: '❌ Unknown subcommand', 
+                ephemeral: true 
+              });
+          }
         }
         break;
 
