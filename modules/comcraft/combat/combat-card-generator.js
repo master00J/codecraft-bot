@@ -200,17 +200,32 @@ class CombatCardGenerator {
     ctx.fillStyle = this.colors.accentOrange;
     ctx.font = 'bold 32px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText((stats.combat_level || 1).toString(), padding + 12, curY + 42);
+    ctx.fillText(combatLevel.toString(), padding + 12, curY + 42);
     
     curY += levelCardH + 16;
     
     // XP Progress Card
-    const xpForNext = xpManager.xpForNextLevel(stats.combat_level);
-    const xpForCurrent = xpManager.xpForLevel(stats.combat_level);
-    const currentXP = stats.combat_xp || 0;
+    const combatLevel = stats.combat_level || 1;
+    const xpForNext = xpManager.xpForNextLevel(combatLevel);
+    const xpForCurrent = xpManager.xpForLevel(combatLevel);
+    
+    // Ensure combat_xp is a number
+    const currentXP = parseInt(stats.combat_xp) || 0;
     const xpProgress = Math.max(0, currentXP - xpForCurrent); // Ensure non-negative
     const xpNeeded = xpForNext - xpForCurrent;
     const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, (xpProgress / xpNeeded) * 100)) : 100;
+    
+    // Debug logging (can be removed later)
+    console.log('[CombatCard] XP Debug:', {
+      combat_xp: stats.combat_xp,
+      currentXP: currentXP,
+      combat_level: combatLevel,
+      xpForCurrent: xpForCurrent,
+      xpForNext: xpForNext,
+      xpProgress: xpProgress,
+      xpNeeded: xpNeeded,
+      progressPercent: progressPercent
+    });
     
     const xpCardH = 90;
     this.drawGlassCard(ctx, padding, curY, sidebarW, xpCardH, {

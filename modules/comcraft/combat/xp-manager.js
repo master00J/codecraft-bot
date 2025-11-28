@@ -96,12 +96,20 @@ class CombatXPManager {
         throw error;
       }
 
-      const winRate = data.total_duels > 0 
+      const winRate = (data.total_duels > 0 && data.duels_won !== undefined) 
         ? ((data.duels_won / data.total_duels) * 100).toFixed(1)
         : 0;
 
       return {
-        ...data,
+        combat_xp: data.combat_xp ?? 0,
+        combat_level: data.combat_level ?? 1,
+        duels_won: data.duels_won ?? 0,
+        duels_lost: data.duels_lost ?? 0,
+        total_duels: data.total_duels ?? 0,
+        total_damage_dealt: data.total_damage_dealt ?? 0,
+        total_damage_taken: data.total_damage_taken ?? 0,
+        highest_win_streak: data.highest_win_streak ?? 0,
+        current_win_streak: data.current_win_streak ?? 0,
         win_rate: parseFloat(winRate),
       };
     } catch (error) {

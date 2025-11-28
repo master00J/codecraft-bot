@@ -3730,6 +3730,14 @@ async function handleCombatRankCommand(interaction) {
       });
     }
 
+    // Debug: Log stats to see what we're getting
+    console.log('[CombatRankCommand] Stats received:', {
+      combat_xp: stats.combat_xp,
+      combat_level: stats.combat_level,
+      duels_won: stats.duels_won,
+      duels_lost: stats.duels_lost
+    });
+
     // Generate combat stats card
     try {
       const avatarURL = targetUser.displayAvatarURL({ 
