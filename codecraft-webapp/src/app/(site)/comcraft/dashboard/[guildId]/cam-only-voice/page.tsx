@@ -59,8 +59,8 @@ export default function CamOnlyVoicePage() {
 
       const [configData, channelsData, rolesData] = await Promise.all([
         configRes.json(),
-        channelsRes.json(),
-        rolesRes.json()
+        channelsRes.json().catch(() => ({ success: false, channels: {} })),
+        rolesRes.json().catch(() => ({ success: false, roles: [] }))
       ]);
 
       if (configData.config) {
@@ -70,22 +70,60 @@ export default function CamOnlyVoicePage() {
         setSelectedExemptUsers(configData.config.exempt_users || []);
       }
 
-      // Filter voice channels
-      const voiceChannels = (channelsData.channels?.voice || []).filter((ch: any) => ch.type === 2);
-      setChannels(voiceChannels);
+      // Filter voice channels (handle errors gracefully)
+      if (channelsData.success && channelsData.channels) {
+        const voiceChannels = (channelsData.channels?.voice || []).filter((ch: any) => ch.type === 2);
+        setChannels(voiceChannels);
+        
+        // Filter text channels for log channel
+        const textChs = (channelsData.channels?.text || []).filter((ch: any) => ch.type === 0);
+        setTextChannels(textChs);
+      } else {
+        // If bot API is unavailable, set empty arrays
+        setChannels([]);
+        setTextChannels([]);
+        console.warn('Bot API unavailable - channels not loaded');
+      }
       
-      // Filter text channels for log channel
-      const textChs = (channelsData.channels?.text || []).filter((ch: any) => ch.type === 0);
-      setTextChannels(textChs);
-      
-      setRoles(rolesData.roles || []);
+      // Handle roles (handle errors gracefully)
+      if (rolesData.success && rolesData.roles) {
+        setRoles(rolesData.roles || []);
+      } else {
+        setRoles([]);
+        console.warn('Bot API unavailable - roles not loaded');
+      }
     } catch (error: any) {
       console.error('Error loading cam-only voice config:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load cam-only voice configuration',
-        variant: 'destructive'
-      });
+      
+      // If config failed to load, create default config
+      if (!config) {
+        setConfig({
+          enabled: false,
+          channel_ids: [],
+          grace_period_seconds: 10,
+          warning_enabled: true,
+          max_warnings: 2,
+          exempt_roles: [],
+          exempt_users: [],
+          log_channel_id: null
+        });
+      }
+      
+      // Only show error toast if it's a critical error (not just bot API unavailable)
+      if (!configRes.ok) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load cam-only voice configuration',
+          variant: 'destructive'
+        });
+      } else {
+        // Bot API unavailable, but config loaded - show warning
+        toast({
+          title: 'Warning',
+          description: 'Bot API unavailable - some features may be limited',
+          variant: 'default'
+        });
+      }
     } finally {
       setLoading(false);
     }

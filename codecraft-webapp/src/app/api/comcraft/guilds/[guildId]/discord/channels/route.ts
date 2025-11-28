@@ -28,11 +28,20 @@ async function callBotAPI(endpoint: string, method: string = 'GET', body?: any) 
     });
 
     clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Bot API returned ${response.status}: ${response.statusText}`);
+    }
+    
     return response.json();
-  } catch (error) {
+  } catch (error: any) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('Bot API timeout - is the bot running?');
+    }
+    // Re-throw with more context
+    if (error.message?.includes('ECONNREFUSED') || error.cause?.code === 'ECONNREFUSED') {
+      throw new Error('Bot API connection refused - is the bot running?');
     }
     throw error;
   }
@@ -51,8 +60,18 @@ export async function GET(
 
     const result = await callBotAPI(`/api/discord/${params.guildId}/channels`);
     return NextResponse.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching channels:', error);
+    
+    // If bot API is unavailable, return empty object instead of error
+    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout') || error.message?.includes('Bot API')) {
+      return NextResponse.json({ 
+        success: false, 
+        channels: {},
+        error: 'Bot API unavailable - channels cannot be loaded at this time'
+      });
+    }
+    
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
