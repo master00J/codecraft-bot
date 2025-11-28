@@ -184,6 +184,9 @@ class CombatCardGenerator {
     ctx.fillText(user.username, padding + sidebarW/2, curY);
     curY += 30;
     
+    // Get combat level first (used in multiple places)
+    const combatLevel = stats.combat_level || 1;
+    
     // Combat Level - Large Display
     const levelCardH = 80;
     this.drawGlassCard(ctx, padding, curY, sidebarW, levelCardH, {
@@ -205,7 +208,6 @@ class CombatCardGenerator {
     curY += levelCardH + 16;
     
     // XP Progress Card
-    const combatLevel = stats.combat_level || 1;
     const xpForNext = xpManager.xpForNextLevel(combatLevel);
     const xpForCurrent = xpManager.xpForLevel(combatLevel);
     
