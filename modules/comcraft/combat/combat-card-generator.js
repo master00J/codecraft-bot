@@ -187,12 +187,51 @@ class CombatCardGenerator {
     // Ensure combat_xp is a number
     const currentXP = parseInt(stats.combat_xp) || 0;
     
-    // Calculate actual level from XP to ensure it matches the XP (level in DB might be out of sync)
+    // Calculate level from XP - this might give next level, so we verify
     const calculatedLevel = xpManager.calculateLevel(currentXP);
-    // Use calculated level if it differs from DB level (XP is source of truth)
-    const combatLevel = calculatedLevel;
     
-    // Combat Level - Large Display
+    // Find the actual level: the highest level where user has enough XP
+    let actualLevel = 1;
+    for (let level = calculatedLevel; level >= 1; level--) {
+      const xpForLevel = xpManager.xpForLevel(level);
+      if (currentXP >= xpForLevel) {
+        actualLevel = level;
+        break;
+      }
+    }
+    
+    // Fallback: if no level found, use calculated level - 1
+    if (actualLevel === 1 && calculatedLevel > 1) {
+      actualLevel = Math.max(1, calculatedLevel - 1);
+    }
+    
+    // Use actualLevel for display and calculations
+    const combatLevel = actualLevel;
+    
+    // Calculate XP progress for the actual level
+    const xpForCurrentLevel = xpManager.xpForLevel(combatLevel);
+    const xpForNextLevel = xpManager.xpForNextLevel(combatLevel);
+    
+    // XP progress is how much XP they have ABOVE the current level's requirement
+    const xpProgress = Math.max(0, currentXP - xpForCurrentLevel);
+    const xpNeeded = xpForNextLevel - xpForCurrentLevel;
+    const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, (xpProgress / xpNeeded) * 100)) : 100;
+    
+    // Debug logging
+    console.log('[CombatCard] XP Debug:', {
+      combat_xp: stats.combat_xp,
+      currentXP: currentXP,
+      calculatedLevel: calculatedLevel,
+      actualLevel: actualLevel,
+      combatLevel: combatLevel,
+      xpForCurrentLevel: xpForCurrentLevel,
+      xpForNextLevel: xpForNextLevel,
+      xpProgress: xpProgress,
+      xpNeeded: xpNeeded,
+      progressPercent: progressPercent
+    });
+    
+    // Combat Level - Large Display (now we know the correct level)
     const levelCardH = 80;
     this.drawGlassCard(ctx, padding, curY, sidebarW, levelCardH, {
       bgColor: 'rgba(255, 69, 0, 0.15)',
@@ -211,27 +250,6 @@ class CombatCardGenerator {
     ctx.fillText(combatLevel.toString(), padding + 12, curY + 42);
     
     curY += levelCardH + 16;
-    
-    // XP Progress Card
-    const xpForCurrent = xpManager.xpForLevel(combatLevel);
-    const xpForNext = xpManager.xpForNextLevel(combatLevel);
-    
-    // Calculate XP progress for current level
-    const xpProgress = Math.max(0, currentXP - xpForCurrent);
-    const xpNeeded = xpForNext - xpForCurrent;
-    const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, (xpProgress / xpNeeded) * 100)) : 100;
-    
-    // Debug logging (can be removed later)
-    console.log('[CombatCard] XP Debug:', {
-      combat_xp: stats.combat_xp,
-      currentXP: currentXP,
-      combat_level: combatLevel,
-      xpForCurrent: xpForCurrent,
-      xpForNext: xpForNext,
-      xpProgress: xpProgress,
-      xpNeeded: xpNeeded,
-      progressPercent: progressPercent
-    });
     
     const xpCardH = 90;
     this.drawGlassCard(ctx, padding, curY, sidebarW, xpCardH, {
