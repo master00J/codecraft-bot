@@ -119,6 +119,5 @@ module.exports = [
             .setDescription('List all exempt roles and users')
         )
     )
-    .toJSON()
 ];
 
