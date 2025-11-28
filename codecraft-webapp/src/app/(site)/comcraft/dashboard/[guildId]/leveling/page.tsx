@@ -23,6 +23,7 @@ export default function LevelingConfig() {
   const [config, setConfig] = useState<any>({});
   const [rewards, setRewards] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [rankMultipliers, setRankMultipliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -31,6 +32,14 @@ export default function LevelingConfig() {
     level: 5,
     role_id: '',
     message: ''
+  });
+
+  // New rank multiplier form
+  const [newMultiplier, setNewMultiplier] = useState({
+    role_id: '',
+    role_name: '',
+    multiplier: 1.5,
+    enabled: true
   });
 
   useEffect(() => {
@@ -46,6 +55,13 @@ export default function LevelingConfig() {
       setConfig(data.config || {});
       setRewards(data.rewards || []);
       setLeaderboard(data.leaderboard || []);
+
+      // Fetch rank multipliers
+      const multipliersResponse = await fetch(`/api/comcraft/guilds/${guildId}/leveling/rank-multipliers`);
+      if (multipliersResponse.ok) {
+        const multipliersData = await multipliersResponse.json();
+        setRankMultipliers(multipliersData.multipliers || []);
+      }
     } catch (error) {
       console.error('Error fetching leveling data:', error);
       toast({
@@ -143,6 +159,69 @@ export default function LevelingConfig() {
     }
   };
 
+  const addMultiplier = async () => {
+    try {
+      if (!newMultiplier.role_id || !newMultiplier.multiplier) {
+        toast({
+          title: 'Missing fields',
+          description: 'Please fill in Role ID and Multiplier.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/leveling/rank-multipliers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMultiplier)
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Multiplier created',
+          description: `Rank multiplier has been added (${newMultiplier.multiplier}x).`,
+        });
+        fetchData();
+        setNewMultiplier({ role_id: '', role_name: '', multiplier: 1.5, enabled: true });
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: 'Create failed',
+          description: errorData.error || 'We could not add this multiplier. Please try again.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Create failed',
+        description: 'We could not add this multiplier. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const deleteMultiplier = async (roleId: string) => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/leveling/rank-multipliers?role_id=${roleId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Multiplier deleted',
+          description: 'The rank multiplier has been removed.',
+        });
+        fetchData();
+      }
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: 'We could not remove this multiplier. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -210,12 +289,15 @@ export default function LevelingConfig() {
         </div>
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="w-full grid grid-cols-3 bg-muted/50 p-2 rounded-lg">
+          <TabsList className="w-full grid grid-cols-4 bg-muted/50 p-2 rounded-lg">
             <TabsTrigger value="settings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Settings
             </TabsTrigger>
             <TabsTrigger value="rewards" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Rewards
+            </TabsTrigger>
+            <TabsTrigger value="rank-multipliers" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Rank Multipliers
             </TabsTrigger>
             <TabsTrigger value="leaderboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Leaderboard
@@ -400,6 +482,118 @@ export default function LevelingConfig() {
                         variant="destructive" 
                         size="sm"
                         onClick={() => deleteReward(reward.id)}
+                      >
+                        🗑️ Delete
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Rank Multipliers Tab */}
+          <TabsContent value="rank-multipliers" className="space-y-6">
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-2">🎭 Rank XP Multipliers</h2>
+              <p className="text-muted-foreground mb-6">
+                Set custom XP multipliers for specific Discord roles. Users with these roles will earn more (or less) XP per message.
+                <br />
+                <span className="text-sm">If a user has multiple roles with multipliers, the highest multiplier will be used.</span>
+              </p>
+
+              {/* Add New Multiplier */}
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-6">
+                <h3 className="font-semibold mb-4">Add New Rank Multiplier</h3>
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Role ID</Label>
+                    <Input 
+                      value={newMultiplier.role_id}
+                      onChange={(e) => setNewMultiplier({...newMultiplier, role_id: e.target.value})}
+                      placeholder="123456789012345678"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Discord Role ID
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Role Name (optional)</Label>
+                    <Input 
+                      value={newMultiplier.role_name}
+                      onChange={(e) => setNewMultiplier({...newMultiplier, role_name: e.target.value})}
+                      placeholder="VIP Member"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      For display only
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Multiplier</Label>
+                    <Input 
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="10"
+                      value={newMultiplier.multiplier}
+                      onChange={(e) => setNewMultiplier({...newMultiplier, multiplier: parseFloat(e.target.value) || 1.0})}
+                      placeholder="1.5"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      1.5 = 150% XP, 2.0 = 200% XP
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Enabled</Label>
+                    <div className="flex items-center h-10">
+                      <input 
+                        type="checkbox"
+                        checked={newMultiplier.enabled}
+                        onChange={(e) => setNewMultiplier({...newMultiplier, enabled: e.target.checked})}
+                        className="w-4 h-4"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <Button onClick={addMultiplier} className="mt-4">
+                  ➕ Add Multiplier
+                </Button>
+              </div>
+
+              {/* Multipliers List */}
+              <div className="space-y-3">
+                {rankMultipliers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No rank multipliers configured yet.
+                    <br />
+                    <span className="text-sm">Add one above to give specific roles bonus XP!</span>
+                  </div>
+                ) : (
+                  rankMultipliers.map((multiplier) => (
+                    <div key={multiplier.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <div className="font-semibold">
+                            {multiplier.role_name || `Role ${multiplier.role_id}`}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Role ID: {multiplier.role_id}
+                          </div>
+                        </div>
+                        <Badge className={multiplier.multiplier >= 1.0 ? "bg-green-600" : "bg-orange-600"}>
+                          {multiplier.multiplier}x XP
+                        </Badge>
+                        <Badge variant={multiplier.enabled ? "default" : "secondary"}>
+                          {multiplier.enabled ? "Enabled" : "Disabled"}
+                        </Badge>
+                      </div>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => deleteMultiplier(multiplier.role_id)}
                       >
                         🗑️ Delete
                       </Button>

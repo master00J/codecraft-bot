@@ -45,6 +45,42 @@ class XPManager {
   }
 
   /**
+   * Get rank-based XP multiplier for user's roles
+   * Returns the highest multiplier if user has multiple roles with multipliers
+   */
+  async getRankMultiplier(guildId, roleIds) {
+    try {
+      if (!roleIds || roleIds.length === 0) {
+        return null;
+      }
+
+      const { data, error } = await this.supabase
+        .from('rank_xp_multipliers')
+        .select('role_id, role_name, multiplier')
+        .eq('guild_id', guildId)
+        .eq('enabled', true)
+        .in('role_id', roleIds)
+        .order('multiplier', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        // No multiplier found or error - this is fine, return null
+        if (error.code === 'PGRST116') {
+          return null; // No rows found
+        }
+        console.error('Error fetching rank multiplier:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in getRankMultiplier:', error);
+      return null;
+    }
+  }
+
+  /**
    * Calculate level from XP
    */
   calculateLevel(xp) {
@@ -103,14 +139,39 @@ class XPManager {
 
       // Calculate XP with subscription tier boost
       const subscriptionLimits = await configManager.getSubscriptionLimits(guild.id);
-      const xpBoost = subscriptionLimits?.xp_boost || 1.0;
+      const subscriptionBoost = subscriptionLimits?.xp_boost || 1.0;
       
-      console.log(`   🚀 XP Boost: ${xpBoost}x (${guildConfig.subscription_tier || 'free'} tier)`);
+      console.log(`   🚀 Subscription Boost: ${subscriptionBoost}x (${guildConfig.subscription_tier || 'free'} tier)`);
+
+      // Get rank-based XP multiplier (if user has roles with multipliers)
+      let rankMultiplier = 1.0;
+      try {
+        // Try to get member from guild cache or fetch it
+        let member = guild.members.cache.get(user.id);
+        if (!member && message.member) {
+          member = message.member;
+        }
+        
+        if (member && member.roles && member.roles.cache) {
+          const roleIds = Array.from(member.roles.cache.keys());
+          const rankMultiplierData = await this.getRankMultiplier(guild.id, roleIds);
+          if (rankMultiplierData) {
+            rankMultiplier = parseFloat(rankMultiplierData.multiplier) || 1.0;
+            console.log(`   🎭 Rank Multiplier: ${rankMultiplier}x (Role: ${rankMultiplierData.role_name || rankMultiplierData.role_id})`);
+          }
+        }
+      } catch (error) {
+        // If we can't get member roles, just continue with multiplier 1.0
+        console.log(`   ⚠️  Could not fetch member roles for rank multiplier: ${error.message}`);
+      }
+
+      // Combine both multipliers
+      const totalBoost = subscriptionBoost * rankMultiplier;
       
       const xpGain = this.calculateXP(
         levelingConfig.xp_min,
         levelingConfig.xp_max,
-        xpBoost
+        totalBoost
       );
 
       // Get or create user level record
