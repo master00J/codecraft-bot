@@ -1178,6 +1178,20 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // Handle duel challenge button from embed builder
+    if (interaction.customId === 'duel_challenge' || interaction.customId.startsWith('duel_challenge_')) {
+      const allowed = await featureGate.checkFeatureOrReply(
+        interaction,
+        interaction.guild?.id,
+        'pvp_duels',
+        'Premium'
+      );
+      if (!allowed) return;
+      
+      await handleDuelChallengeButton(interaction);
+      return;
+    }
+
     return await autoRolesManager.handleButtonInteraction(interaction);
   }
 
@@ -1197,6 +1211,20 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
       return await handleFeedbackSubmitModal(interaction);
+    }
+
+    // Handle duel challenge modal from embed builder
+    if (interaction.customId === 'duel_challenge_modal') {
+      const allowed = await featureGate.checkFeatureOrReply(
+        interaction,
+        interaction.guild?.id,
+        'pvp_duels',
+        'Premium'
+      );
+      if (!allowed) return;
+      
+      await handleDuelChallengeModal(interaction);
+      return;
     }
 
     // Casino bet modals are handled BEFORE license check (at the top of interactionCreate)
@@ -3011,6 +3039,247 @@ async function handleChallengeCommand(interaction) {
   }
 }
 
+// Handle duel challenge button from embed builder
+async function handleDuelChallengeButton(interaction) {
+  if (!duelManager) {
+    return interaction.reply({
+      content: '❌ Duel system is not available.',
+      ephemeral: true
+    });
+  }
+
+  if (!economyManager) {
+    return interaction.reply({
+      content: '❌ Economy system is not available.',
+      ephemeral: true
+    });
+  }
+
+  // Show modal to select opponent and bet amount
+  const modal = new ModalBuilder()
+    .setCustomId('duel_challenge_modal')
+    .setTitle('⚔️ Challenge to Duel');
+
+  const opponentInput = new TextInputBuilder()
+    .setCustomId('opponent')
+    .setLabel('Opponent (User ID, mention, or username)')
+    .setPlaceholder('@username or user ID')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMinLength(1)
+    .setMaxLength(100);
+
+  const betInput = new TextInputBuilder()
+    .setCustomId('bet_amount')
+    .setLabel('Bet Amount (coins)')
+    .setPlaceholder('100')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMinLength(1)
+    .setMaxLength(10);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(opponentInput),
+    new ActionRowBuilder().addComponents(betInput)
+  );
+
+  await interaction.showModal(modal);
+}
+
+// Handle duel challenge modal submission
+async function handleDuelChallengeModal(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!duelManager) {
+    return interaction.editReply({
+      content: '❌ Duel system is not available.',
+    });
+  }
+
+  if (!economyManager) {
+    return interaction.editReply({
+      content: '❌ Economy system is not available.',
+    });
+  }
+
+  try {
+    const opponentInput = interaction.fields.getTextInputValue('opponent');
+    const betAmountInput = interaction.fields.getTextInputValue('bet_amount');
+    
+    const betAmount = parseInt(betAmountInput);
+    if (isNaN(betAmount) || betAmount <= 0) {
+      return interaction.editReply({
+        content: '❌ Invalid bet amount. Please enter a positive number.',
+      });
+    }
+
+    // Try to resolve opponent from input (could be mention, user ID, or username)
+    let opponent = null;
+    
+    // Try to extract user ID from mention
+    const mentionMatch = opponentInput.match(/<@!?(\d+)>/);
+    if (mentionMatch) {
+      try {
+        opponent = await interaction.guild.members.fetch(mentionMatch[1]).then(m => m.user);
+      } catch (e) {
+        // User not found
+      }
+    }
+    
+    // Try as user ID
+    if (!opponent && /^\d+$/.test(opponentInput.trim())) {
+      try {
+        opponent = await interaction.guild.members.fetch(opponentInput.trim()).then(m => m.user);
+      } catch (e) {
+        // User not found
+      }
+    }
+    
+    // Try to find by username
+    if (!opponent) {
+      const username = opponentInput.trim().toLowerCase();
+      const members = await interaction.guild.members.fetch();
+      const found = members.find(m => 
+        m.user.username.toLowerCase() === username || 
+        m.user.displayName.toLowerCase() === username ||
+        m.user.tag.toLowerCase() === username
+      );
+      if (found) opponent = found.user;
+    }
+
+    if (!opponent) {
+      return interaction.editReply({
+        content: '❌ Could not find that user. Please use a mention (@username), user ID, or exact username.',
+      });
+    }
+
+    const challenger = interaction.user;
+    const guildId = interaction.guild.id;
+
+    // Validation
+    if (opponent.id === challenger.id) {
+      return interaction.editReply({
+        content: '❌ You cannot challenge yourself!',
+      });
+    }
+
+    // Check if challenging the bot itself
+    const isBotChallenge = opponent.id === client.user.id;
+
+    if (opponent.bot && !isBotChallenge) {
+      return interaction.editReply({
+        content: '❌ You cannot challenge other bots! But you can challenge me if you dare... 😏',
+      });
+    }
+
+    // Create the challenge
+    const challenge = await duelManager.createChallenge(
+      guildId,
+      challenger.id,
+      opponent.id,
+      betAmount,
+      economyManager
+    );
+
+    if (!challenge.success) {
+      return interaction.editReply({
+        content: `❌ ${challenge.error}`,
+      });
+    }
+
+    // If challenging the bot, auto-accept with AI response
+    if (isBotChallenge) {
+      return await handleBotChallengeMainBot(
+        interaction,
+        duelManager,
+        economyManager,
+        client,
+        challenger,
+        betAmount,
+        challenge.duelId,
+        guildId
+      );
+    }
+
+    // Get combat stats and equipped items for both players
+    let challengerData = null;
+    let challengedData = null;
+
+    try {
+      // Get challenger combat level
+      let challengerCombatLevel = 1;
+      if (combatXPManager) {
+        const challengerStats = await combatXPManager.getCombatStats(guildId, challenger.id);
+        challengerCombatLevel = challengerStats?.combat_level || 1;
+      }
+
+      // Get challenged combat level
+      let challengedCombatLevel = 1;
+      if (combatXPManager) {
+        const challengedStats = await combatXPManager.getCombatStats(guildId, opponent.id);
+        challengedCombatLevel = challengedStats?.combat_level || 1;
+      }
+
+      // Get equipped items
+      let challengerEquipped = { weapon: null, armor: null };
+      let challengedEquipped = { weapon: null, armor: null };
+      
+      if (inventoryManager) {
+        challengerEquipped = await inventoryManager.getEquippedItems(guildId, challenger.id);
+        challengedEquipped = await inventoryManager.getEquippedItems(guildId, opponent.id);
+      }
+
+      challengerData = {
+        combatLevel: challengerCombatLevel,
+        equipped: challengerEquipped,
+      };
+
+      challengedData = {
+        combatLevel: challengedCombatLevel,
+        equipped: challengedEquipped,
+      };
+    } catch (error) {
+      console.error('Error fetching player data for challenge embed:', error);
+    }
+
+    // Build challenge embed with player data
+    const { embed, components } = await duelManager.buildChallengeEmbed(
+      challenger,
+      opponent,
+      betAmount,
+      challenge.duelId,
+      challengerData,
+      challengedData
+    );
+
+    const message = await interaction.channel.send({
+      content: `${opponent}, you have been challenged by ${challenger}!`,
+      embeds: [embed],
+      components,
+    });
+
+    // Store the pending challenge
+    duelManager.storePendingChallenge(message.id, {
+      duelId: challenge.duelId,
+      challengerId: challenger.id,
+      challengedId: opponent.id,
+      betAmount,
+      guildId,
+      channelId: interaction.channel.id,
+    });
+
+    await interaction.editReply({
+      content: `✅ Duel challenge sent to ${opponent}! Check the channel to see if they accept.`,
+    });
+
+  } catch (error) {
+    console.error('Error in handleDuelChallengeModal:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while creating the challenge. Please try again later.',
+    });
+  }
+}
+
 async function handleBotChallengeMainBot(interaction, duelManager, economyManager, client, challenger, betAmount, duelId, guildId) {
   try {
     // Acceptance responses
@@ -3662,7 +3931,7 @@ async function handleCasinoButton(interaction, featureGate) {
       .setTimestamp();
 
     try {
-      await interaction.editReply({ embeds: [loadingEmbed] });
+    await interaction.editReply({ embeds: [loadingEmbed] });
     } catch (error) {
       console.error('❌ Error showing loading embed:', error);
     }
@@ -4422,10 +4691,21 @@ async function handleCasinoBetModal(interaction) {
         .setStyle(ButtonStyle.Primary)
     );
 
+    // Keep GIF in result if it exists
+    if (slotsGif) {
+      embed.setImage('attachment://slots-spin.gif');
+      return interaction.editReply({ 
+        content: null,
+        embeds: [embed], 
+        files: [slotsGif], // Keep GIF in result
+        components: [row] 
+      });
+    }
+
     return interaction.editReply({ 
       content: null,
       embeds: [embed], 
-      files: [], // Remove GIF from result
+      files: [],
       components: [row] 
     });
   }
@@ -6143,7 +6423,7 @@ app.post('/api/feedback/:guildId/submissions/:submissionId/complete', async (req
 // Post embed to Discord channel
 app.post('/api/embeds/post', async (req, res) => {
   try {
-    const { guildId, channelId, embed, mentionRoleId, pinMessage } = req.body;
+    const { guildId, channelId, embed, isCapsule, embeds, components, content, mentionRoleId, pinMessage } = req.body;
 
     // Check if this guild uses a custom bot
     let botClient = client;
@@ -6176,6 +6456,118 @@ app.post('/api/embeds/post', async (req, res) => {
     const channel = guild.channels.cache.get(channelId);
     if (!channel || !channel.isTextBased()) {
       return res.json({ success: false, error: 'Channel not found or not text-based' });
+    }
+
+    // Handle Capsules (multiple embeds + components)
+    if (isCapsule && embeds && Array.isArray(embeds)) {
+      const CapsuleBuilder = require('./modules/comcraft/messaging/capsule-builder');
+      const capsule = CapsuleBuilder.create();
+
+      // Add content if provided
+      if (content) {
+        capsule.setContent(content);
+      }
+
+      // Add all embeds
+      for (const embedData of embeds.slice(0, 10)) { // Max 10 embeds
+        const embedOptions = {
+          title: embedData.title,
+          description: embedData.description,
+          color: embedData.color,
+          url: embedData.url,
+          thumbnail: embedData.thumbnail?.url,
+          image: embedData.image?.url,
+          footer: embedData.footer ? {
+            text: embedData.footer.text,
+            icon_url: embedData.footer.icon_url
+          } : undefined,
+          author: embedData.author ? {
+            name: embedData.author.name,
+            icon_url: embedData.author.icon_url,
+            url: embedData.author.url
+          } : undefined,
+          fields: embedData.fields || [],
+          timestamp: embedData.timestamp ? new Date(embedData.timestamp) : undefined
+        };
+
+        // Convert color string to int if needed
+        if (embedOptions.color && typeof embedOptions.color === 'string') {
+          embedOptions.color = parseInt(embedOptions.color.replace('#', ''), 16);
+        }
+
+        capsule.addSection(embedOptions);
+      }
+
+      // Add components (buttons/select menus)
+      if (components && Array.isArray(components)) {
+        for (const componentRow of components.slice(0, 5)) { // Max 5 rows
+          if (componentRow.type === 1 || !componentRow.type) { // ActionRow or raw array
+            const buttons = [];
+            const componentsInRow = componentRow.components || componentRow;
+            
+            for (const component of componentsInRow) {
+              if (component.type === 2 || (!component.type && component.custom_id)) { // Button
+                const buttonData = {
+                  customId: component.custom_id || component.customId,
+                  label: component.label,
+                  style: component.style,
+                  url: component.url,
+                  disabled: component.disabled || false
+                };
+                
+                // Handle emoji (can be object with name or just string)
+                if (component.emoji) {
+                  if (typeof component.emoji === 'object' && component.emoji.name) {
+                    buttonData.emoji = component.emoji.name;
+                  } else if (typeof component.emoji === 'string') {
+                    buttonData.emoji = component.emoji;
+                  }
+                }
+                
+                buttons.push(buttonData);
+              } else if (component.type === 3 || (!component.type && component.options)) { // Select Menu
+                capsule.addSelectMenu({
+                  customId: component.custom_id || component.customId,
+                  placeholder: component.placeholder || 'Select an option...',
+                  options: component.options || [],
+                  minValues: component.min_values || component.minValues || 1,
+                  maxValues: component.max_values || component.maxValues || 1,
+                  disabled: component.disabled || false
+                });
+              }
+            }
+            if (buttons.length > 0) {
+              capsule.addButtons(buttons);
+            }
+          }
+        }
+      }
+
+      // Build and send capsule
+      const payload = capsule.build();
+      
+      // Add role mention to content if provided
+      if (mentionRoleId) {
+        payload.content = (payload.content || '') + ` <@&${mentionRoleId}>`;
+      }
+
+      const message = await channel.send(payload);
+
+      if (pinMessage) {
+        try {
+          await message.pin();
+        } catch (err) {
+          console.error('Failed to pin message:', err);
+        }
+      }
+
+      console.log(`📦 Posted capsule (${embeds.length} embeds) to ${guild.name}/#${channel.name} (using ${botClient === client ? 'main' : 'custom'} bot)`);
+      return res.json({ success: true, messageId: message.id });
+    }
+
+    // Handle regular embed (backward compatible)
+    if (!embed) {
+      return res.json({ success: false, error: 'Embed or capsule data required' });
     }
 
     // Validate that embed has at least title or description
@@ -6260,14 +6652,82 @@ app.post('/api/embeds/post', async (req, res) => {
       discordEmbed.timestamp = embed.timestamp;
     }
 
-    let content = '';
+    // Handle components (buttons/action rows)
+    let messageComponents = [];
+    if (components && Array.isArray(components) && components.length > 0) {
+      // Validate and convert components to Discord format
+      for (const row of components) {
+        if (row.type === 1 && row.components && Array.isArray(row.components)) {
+          // ActionRow
+          const actionRow = new ActionRowBuilder();
+          
+          for (const button of row.components) {
+            if (button.type === 2) {
+              // Button
+              const buttonBuilder = new ButtonBuilder();
+              
+              if (button.style === 5) {
+                // Link button
+                if (button.url) {
+                  buttonBuilder.setURL(button.url);
+                  buttonBuilder.setStyle(ButtonStyle.Link);
+                } else {
+                  continue; // Skip invalid link button
+                }
+              } else {
+                // Regular button
+                if (!button.custom_id) {
+                  continue; // Skip buttons without custom_id
+                }
+                
+                const styleMap = {
+                  1: ButtonStyle.Primary,
+                  2: ButtonStyle.Secondary,
+                  3: ButtonStyle.Success,
+                  4: ButtonStyle.Danger
+                };
+                
+                buttonBuilder
+                  .setCustomId(button.custom_id)
+                  .setStyle(styleMap[button.style] || ButtonStyle.Primary);
+              }
+              
+              if (button.label) {
+                buttonBuilder.setLabel(button.label);
+              }
+              
+              if (button.emoji) {
+                if (typeof button.emoji === 'string') {
+                  buttonBuilder.setEmoji(button.emoji);
+                } else if (button.emoji.name) {
+                  buttonBuilder.setEmoji(button.emoji.name);
+                }
+              }
+              
+              if (button.disabled) {
+                buttonBuilder.setDisabled(true);
+              }
+              
+              actionRow.addComponents(buttonBuilder);
+            }
+          }
+          
+          if (actionRow.components.length > 0) {
+            messageComponents.push(actionRow);
+          }
+        }
+      }
+    }
+
+    let messageContent = content || '';
     if (mentionRoleId) {
-      content = `<@&${mentionRoleId}>`;
+      messageContent = (messageContent ? messageContent + ' ' : '') + `<@&${mentionRoleId}>`;
     }
 
     const message = await channel.send({
-      content: content || undefined,
+      content: messageContent || undefined,
       embeds: [discordEmbed],
+      components: messageComponents.length > 0 ? messageComponents : undefined,
     });
 
     if (pinMessage) {
@@ -6281,7 +6741,7 @@ app.post('/api/embeds/post', async (req, res) => {
     console.log(`📝 Posted embed to ${guild.name}/#${channel.name} (using ${botClient === client ? 'main' : 'custom'} bot)`);
     res.json({ success: true, messageId: message.id });
   } catch (error) {
-    console.error('Error posting embed:', error);
+    console.error('Error posting embed/capsule:', error);
     res.json({ success: false, error: error.message });
   }
 });
