@@ -90,6 +90,7 @@ export default function GuildDashboardLayout({
     { name: 'Economy', href: `/comcraft/dashboard/${guildId}#economy`, icon: DollarSign },
     { name: 'Casino', href: `/comcraft/dashboard/${guildId}#casino`, icon: Gamepad2 },
     { name: 'Analytics', href: `/comcraft/dashboard/${guildId}#analytics`, icon: BarChart3 },
+    { name: 'Statistics', href: `/comcraft/dashboard/${guildId}/stats`, icon: BarChart3 },
     { name: 'Reactions', href: `/comcraft/dashboard/${guildId}#auto-reactions`, icon: SmilePlus },
     { name: 'Events', href: `/comcraft/dashboard/${guildId}/events`, icon: Gift },
     { name: 'Giveaways', href: `/comcraft/dashboard/${guildId}/giveaways`, icon: Sparkles },

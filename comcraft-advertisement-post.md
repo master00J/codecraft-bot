@@ -73,11 +73,7 @@
 - **Auto-Reactions**: React with emojis on trigger words
 - **Welcome Messages**: Customizable welcome messages for new members
 
-### 🎵 **Music System**
-- High-quality music playback
-- YouTube and other platform support
-- Queue management
-- Playlist support
+
 
 ### 📊 **Analytics Dashboard**
 - Comprehensive web dashboard for bot management
@@ -108,43 +104,6 @@
 - Birthday manager
 - Web dashboard access
 
-### ⭐ **Starter Tier** - $4.99/month or $49.99/year
-**Ideal for growing communities:**
-- Everything in Free, plus:
-- Advanced leveling with role rewards
-- Enhanced moderation features
-- Unlimited stream notifications
-- Support tickets (20/month)
-- Custom commands (25 max)
-- Giveaways (10/month)
-- Reaction roles
-- Better analytics
-- Basic AI quota (100 requests/month)
-
-### 👑 **Premium Tier** - $14.99/month or $149.99/year
-**Most Popular - Perfect for active gaming communities:**
-- Everything in Starter, plus:
-- Full economy & casino system
-- Auto-reactions
-- Game news (all games)
-- Unlimited giveaways
-- Unlimited support tickets
-- Custom commands (100 max)
-- Advanced analytics
-- Custom bot colors & embeds
-- AI features (500 requests/month)
-
-### 🏢 **Enterprise Tier** - $49.99/month or $499.99/year
-**Everything Included - NO LIMITS:**
-- Custom branded bot (own name, avatar, status)
-- Unlimited everything
-- Priority support
-- Unlimited AI requests
-- Full API access
-- White-label options
-- Dedicated support channel
-- Custom features on request
-- **NEW SERVERS GET 30 DAYS FREE TRIAL!**
 
 ---
 
@@ -199,8 +158,8 @@ All features are easily configurable through our web interface - no coding knowl
 
 ## 🔗 Links
 
-- **Website:** [https://codecraft-solutions.com/en/products/comcraft](https://codecraft-solutions.com/en/products/comcraft)
-- **Dashboard:** [https://codecraft-solutions.com/dashboard](https://codecraft-solutions.com/dashboard)
+- **Website:** [https://codecraft-solutions.com/en/products/comcraft]
+- **Dashboard:** [https://codecraft-solutions.com/dashboard]
 - **Documentation:** Available in dashboard
 - **Support:** Dedicated support channels for Enterprise users
 
