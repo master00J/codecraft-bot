@@ -76,6 +76,9 @@ const VoteRewardsScheduler = require('./modules/comcraft/vote-rewards/scheduler'
 // const MusicCommands = require('./modules/comcraft/music/commands');
 const VoteKickManager = require('./modules/comcraft/vote-kick/manager');
 const VoteKickCommands = require('./modules/comcraft/vote-kick/commands');
+const CamOnlyVoiceManager = require('./modules/comcraft/cam-only-voice/manager');
+const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands');
+const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -509,6 +512,22 @@ client.once('ready', async () => {
   setInterval(() => {
     voteKickManager.cleanupExpiredSessions();
   }, 5 * 60 * 1000);
+
+  // Initialize Cam-Only Voice Manager
+  let camOnlyVoiceManager = null;
+  let camOnlyVoiceHandlers = null;
+  try {
+    camOnlyVoiceManager = new CamOnlyVoiceManager(client);
+    camOnlyVoiceHandlers = new CamOnlyVoiceHandlers(camOnlyVoiceManager);
+    await camOnlyVoiceManager.initialize();
+    global.camOnlyVoiceManager = camOnlyVoiceManager;
+    global.camOnlyVoiceHandlers = camOnlyVoiceHandlers;
+    console.log('✅ Cam-Only Voice Manager initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Cam-Only Voice Manager:', error.message);
+    global.camOnlyVoiceManager = null;
+    global.camOnlyVoiceHandlers = null;
+  }
 
   // Register slash commands (will include music commands if initialized)
   await registerCommands(client);
@@ -1021,6 +1040,19 @@ client.on('guildMemberRemove', async (member) => {
   if (!(await ensureGuildLicense(member.guild.id))) return;
   await welcomeHandler.handleMemberLeave(member);
   await analyticsTracker.trackMemberLeave(member);
+});
+
+// ================================================================
+// VOICE STATE UPDATE (Cam-Only Voice)
+// ================================================================
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  try {
+    if (global.camOnlyVoiceManager) {
+      await global.camOnlyVoiceManager.handleVoiceStateUpdate(oldState, newState);
+    }
+  } catch (error) {
+    console.error('❌ [Cam-Only Voice] Error in voiceStateUpdate handler:', error);
+  }
 });
 
 // ================================================================
@@ -1657,6 +1689,37 @@ client.on('interactionCreate', async (interaction) => {
           await global.voteKickCommands.handleVoteKick(interaction);
         } else {
           await interaction.reply({ content: '❌ Vote kick system not initialized', ephemeral: true });
+        }
+        break;
+
+      // ============ CAM-ONLY VOICE COMMANDS ============
+      case 'cam-only':
+        if (!global.camOnlyVoiceHandlers) {
+          return interaction.reply({ 
+            content: '❌ Cam-only voice system not initialized', 
+            ephemeral: true 
+          });
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        switch (subcommand) {
+          case 'enable':
+            await global.camOnlyVoiceHandlers.handleEnable(interaction);
+            break;
+          case 'disable':
+            await global.camOnlyVoiceHandlers.handleDisable(interaction);
+            break;
+          case 'status':
+            await global.camOnlyVoiceHandlers.handleStatus(interaction);
+            break;
+          case 'exempt':
+            await global.camOnlyVoiceHandlers.handleExempt(interaction);
+            break;
+          default:
+            await interaction.reply({ 
+              content: '❌ Unknown subcommand', 
+              ephemeral: true 
+            });
         }
         break;
 
@@ -5485,6 +5548,12 @@ async function registerCommands(clientInstance) {
     const voteKickCmds = global.voteKickCommands.getCommands();
     commandBuilders.push(...voteKickCmds);
     console.log(`✅ Added ${voteKickCmds.length} vote kick commands to registration`);
+  }
+
+  // Add cam-only voice commands
+  if (camOnlyVoiceCommands && Array.isArray(camOnlyVoiceCommands)) {
+    commandBuilders.push(...camOnlyVoiceCommands);
+    console.log(`✅ Added ${camOnlyVoiceCommands.length} cam-only voice commands to registration`);
   }
 
   const commands = commandBuilders.map((command) => command.toJSON());
