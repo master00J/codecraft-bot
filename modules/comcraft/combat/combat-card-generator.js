@@ -200,17 +200,17 @@ class CombatCardGenerator {
     ctx.fillStyle = this.colors.accentOrange;
     ctx.font = 'bold 32px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(stats.combat_level.toString(), padding + 12, curY + 42);
+    ctx.fillText((stats.combat_level || 1).toString(), padding + 12, curY + 42);
     
     curY += levelCardH + 16;
     
     // XP Progress Card
     const xpForNext = xpManager.xpForNextLevel(stats.combat_level);
     const xpForCurrent = xpManager.xpForLevel(stats.combat_level);
-    const currentXP = stats.combat_xp;
-    const xpProgress = currentXP - xpForCurrent;
+    const currentXP = stats.combat_xp || 0;
+    const xpProgress = Math.max(0, currentXP - xpForCurrent); // Ensure non-negative
     const xpNeeded = xpForNext - xpForCurrent;
-    const progressPercent = xpNeeded > 0 ? (xpProgress / xpNeeded) * 100 : 100;
+    const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, (xpProgress / xpNeeded) * 100)) : 100;
     
     const xpCardH = 90;
     this.drawGlassCard(ctx, padding, curY, sidebarW, xpCardH, {
@@ -268,7 +268,9 @@ class CombatCardGenerator {
     ctx.textAlign = 'left';
     ctx.fillText('🎯 Win Rate', boxX + 12, statsY + 12);
     
-    const winRate = stats.total_duels > 0 ? ((stats.duels_won / stats.total_duels) * 100).toFixed(1) : 0;
+    const winRate = (stats.total_duels > 0 && stats.duels_won !== undefined) 
+      ? ((stats.duels_won / stats.total_duels) * 100).toFixed(1) 
+      : '0.0';
     ctx.fillStyle = this.colors.accentGreen;
     ctx.font = 'bold 24px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
@@ -276,7 +278,7 @@ class CombatCardGenerator {
     
     ctx.fillStyle = this.colors.textMuted;
     ctx.font = '10px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(`${stats.duels_won}W / ${stats.duels_lost}L`, boxX + 12, statsY + 65);
+    ctx.fillText(`${stats.duels_won || 0}W / ${stats.duels_lost || 0}L`, boxX + 12, statsY + 65);
     
     // Wins
     boxX += statBoxW + gap;
@@ -289,7 +291,7 @@ class CombatCardGenerator {
     ctx.fillStyle = this.colors.accentGreen;
     ctx.font = 'bold 24px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(stats.duels_won.toString(), boxX + 12, statsY + 40);
+    ctx.fillText((stats.duels_won || 0).toString(), boxX + 12, statsY + 40);
     
     // Row 2: Losses, Win Streak
     statsY += statBoxH + gap;
@@ -305,7 +307,7 @@ class CombatCardGenerator {
     ctx.fillStyle = this.colors.accentRed;
     ctx.font = 'bold 24px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(stats.duels_lost.toString(), boxX + 12, statsY + 40);
+    ctx.fillText((stats.duels_lost || 0).toString(), boxX + 12, statsY + 40);
     
     // Win Streak
     boxX += statBoxW + gap;
@@ -318,11 +320,11 @@ class CombatCardGenerator {
     ctx.fillStyle = this.colors.accentYellow;
     ctx.font = 'bold 24px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(stats.current_win_streak.toString(), boxX + 12, statsY + 40);
+    ctx.fillText((stats.current_win_streak || 0).toString(), boxX + 12, statsY + 40);
     
     ctx.fillStyle = this.colors.textMuted;
     ctx.font = '10px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(`Best: ${stats.highest_win_streak}`, boxX + 12, statsY + 65);
+    ctx.fillText(`Best: ${stats.highest_win_streak || 0}`, boxX + 12, statsY + 65);
     
     // Row 3: Damage Dealt, Damage Taken
     statsY += statBoxH + gap;
