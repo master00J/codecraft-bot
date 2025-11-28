@@ -33,6 +33,7 @@ import {
   Vote,
   Video
 } from 'lucide-react';
+import { Toaster } from '@/components/ui/toaster';
 
 interface NavItem {
   name: string;
@@ -212,6 +213,9 @@ export default function GuildDashboardLayout({
       <main className="flex-1 ml-64 min-h-screen">
         {children}
       </main>
+      
+      {/* Toast Notifications */}
+      <Toaster />
     </div>
   );
 }
