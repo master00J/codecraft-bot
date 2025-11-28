@@ -50,12 +50,18 @@ export default function CamOnlyVoicePage() {
 
   async function fetchData() {
     setLoading(true);
+    let configRes: Response | null = null;
+    let configLoaded = false;
+    
     try {
-      const [configRes, channelsRes, rolesRes] = await Promise.all([
+      const [configResponse, channelsRes, rolesRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/cam-only-voice`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/channels`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/roles`)
       ]);
+
+      configRes = configResponse;
+      configLoaded = configRes.ok;
 
       const [configData, channelsData, rolesData] = await Promise.all([
         configRes.json(),
@@ -92,6 +98,15 @@ export default function CamOnlyVoicePage() {
         setRoles([]);
         console.warn('Bot API unavailable - roles not loaded');
       }
+      
+      // Show warning if bot API is unavailable but config loaded
+      if (configLoaded && (!channelsData.success || !rolesData.success)) {
+        toast({
+          title: 'Warning',
+          description: 'Bot API unavailable - some features may be limited',
+          variant: 'default'
+        });
+      }
     } catch (error: any) {
       console.error('Error loading cam-only voice config:', error);
       
@@ -109,19 +124,12 @@ export default function CamOnlyVoicePage() {
         });
       }
       
-      // Only show error toast if it's a critical error (not just bot API unavailable)
-      if (!configRes.ok) {
+      // Only show error toast if config failed to load
+      if (!configLoaded) {
         toast({
           title: 'Error',
           description: 'Failed to load cam-only voice configuration',
           variant: 'destructive'
-        });
-      } else {
-        // Bot API unavailable, but config loaded - show warning
-        toast({
-          title: 'Warning',
-          description: 'Bot API unavailable - some features may be limited',
-          variant: 'default'
         });
       }
     } finally {
