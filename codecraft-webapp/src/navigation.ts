@@ -1,20 +1,13 @@
-import { createNavigation } from 'next-intl/navigation';
-import { defineRouting } from 'next-intl/routing';
+import {createNavigation} from 'next-intl/navigation';
+import {defaultLocale, locales} from '@/lib/i18n';
 
-// Define routing configuration matching your [locale] folder structure
-export const routing = defineRouting({
-  // A list of all locales that are supported
-  locales: ['en', 'nl'],
+export const localePrefix = 'always';
 
-  // Used when no locale matches
-  defaultLocale: 'en',
-  
-  // Always show locale prefix in URL
-  localePrefix: 'always'
+const {Link, redirect, usePathname, useRouter} = createNavigation({
+  locales,
+  defaultLocale,
+  localePrefix,
 });
 
-// Lightweight wrappers around Next.js' navigation APIs
-// that will consider the routing configuration
-export const { Link, redirect, usePathname, useRouter, getPathname } =
-  createNavigation(routing);
+export {Link, redirect, usePathname, useRouter};
 
