@@ -172,7 +172,7 @@ export default function Analytics() {
             <div>
               <h1 className="text-3xl font-bold mb-2">📊 Analytics Dashboard</h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Inzicht in je server activiteit en engagement
+                Insights into your server activity and engagement
               </p>
             </div>
             <div className="flex gap-2">
@@ -181,9 +181,9 @@ export default function Analytics() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="7">Laatste 7 dagen</SelectItem>
-                  <SelectItem value="30">Laatste 30 dagen</SelectItem>
-                  <SelectItem value="90">Laatste 90 dagen</SelectItem>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
                 </SelectContent>
               </Select>
               <Button asChild variant="outline">
@@ -197,28 +197,28 @@ export default function Analytics() {
         <div className="grid md:grid-cols-4 gap-4 mb-8">
           <Card className="p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Totaal Berichten
+              Total Messages
             </div>
             <div className="text-3xl font-bold">{data.totals.messages.toLocaleString()}</div>
           </Card>
 
           <Card className="p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Nieuwe Leden
+              New Members
             </div>
             <div className="text-3xl font-bold text-green-600">+{data.totals.joins}</div>
           </Card>
 
           <Card className="p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Members Vertrokken
+              Members Left
             </div>
             <div className="text-3xl font-bold text-red-600">-{data.totals.leaves}</div>
           </Card>
 
           <Card className="p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Netto Groei
+              Net Growth
             </div>
             <div className={`text-3xl font-bold ${data.totals.netGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {data.totals.netGrowth >= 0 ? '+' : ''}{data.totals.netGrowth}
@@ -228,60 +228,60 @@ export default function Analytics() {
 
         {/* Daily Activity Chart */}
         <Card className="p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">📈 Dagelijkse Activiteit</h2>
+          <h2 className="text-xl font-bold mb-4">📈 Daily Activity</h2>
           {data.dailyStats.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={data.dailyStats}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="date" 
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('nl-NL', { month: 'short', day: 'numeric' })}
+                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 />
                 <YAxis />
                 <Tooltip 
-                  labelFormatter={(value) => new Date(value).toLocaleDateString('nl-NL')}
+                  labelFormatter={(value) => new Date(value).toLocaleDateString('en-US')}
                 />
                 <Legend />
-                <Area type="monotone" dataKey="total_messages" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} name="Berichten" />
-                <Area type="monotone" dataKey="unique_active_users" stroke="#10B981" fill="#10B981" fillOpacity={0.4} name="Actieve Users" />
+                <Area type="monotone" dataKey="total_messages" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} name="Messages" />
+                <Area type="monotone" dataKey="unique_active_users" stroke="#10B981" fill="#10B981" fillOpacity={0.4} name="Active Users" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
             <div className="text-center py-12 text-gray-600">
-              <p>Nog geen activiteit geregistreerd</p>
-              <p className="text-sm mt-2">Berichten zullen hier verschijnen zodra er activiteit is</p>
+              <p>No activity registered yet</p>
+              <p className="text-sm mt-2">Messages will appear here once there is activity</p>
             </div>
           )}
         </Card>
 
         {/* Member Growth Chart */}
         <Card className="p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">👥 Member Groei</h2>
+          <h2 className="text-xl font-bold mb-4">👥 Member Growth</h2>
           {data.dailyStats.length > 0 ? (
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={data.dailyStats}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="date" 
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('nl-NL', { month: 'short', day: 'numeric' })}
+                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 />
                 <YAxis />
-                <Tooltip labelFormatter={(value) => new Date(value).toLocaleDateString('nl-NL')} />
+                <Tooltip labelFormatter={(value) => new Date(value).toLocaleDateString('en-US')} />
                 <Legend />
                 <Line type="monotone" dataKey="new_joins" stroke="#10B981" name="Joins" strokeWidth={2} />
                 <Line type="monotone" dataKey="leaves" stroke="#EF4444" name="Leaves" strokeWidth={2} />
-                <Line type="monotone" dataKey="net_growth" stroke="#3B82F6" name="Netto" strokeWidth={3} />
+                <Line type="monotone" dataKey="net_growth" stroke="#3B82F6" name="Net" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="text-center py-12 text-gray-600">Nog geen member data</div>
+            <div className="text-center py-12 text-gray-600">No member data yet</div>
           )}
         </Card>
 
         <div className="grid md:grid-cols-2 gap-8 mb-8">
           {/* Top Channels */}
           <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4">🔥 Top Channels (Laatste 7 Dagen)</h2>
+            <h2 className="text-xl font-bold mb-4">🔥 Top Channels (Last 7 Days)</h2>
             {data.topChannels.length > 0 ? (
               <div className="space-y-3">
                 {data.topChannels.map((channel: any, index: number) => (
@@ -291,7 +291,7 @@ export default function Analytics() {
                       <div>
                         <div className="font-semibold">#{channel.channel_name}</div>
                         <div className="text-sm text-gray-600">
-                          {channel.unique_users} users • {channel.messages} berichten
+                          {channel.unique_users} users • {channel.messages} messages
                         </div>
                       </div>
                     </div>
@@ -300,13 +300,13 @@ export default function Analytics() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-600">Nog geen channel data</div>
+              <div className="text-center py-8 text-gray-600">No channel data yet</div>
             )}
           </Card>
 
           {/* Top Users */}
           <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4">⭐ Top Actieve Members</h2>
+            <h2 className="text-xl font-bold mb-4">⭐ Top Active Members</h2>
             {data.topUsers.length > 0 ? (
               <div className="space-y-3">
                 {data.topUsers.slice(0, 10).map((user: any, index: number) => (
@@ -318,7 +318,7 @@ export default function Analytics() {
                       <div>
                         <div className="font-semibold">{user.username}</div>
                         <div className="text-sm text-gray-600">
-                          Level {user.level} • {user.total_messages} berichten
+                          Level {user.level} • {user.total_messages} messages
                         </div>
                       </div>
                     </div>
@@ -327,46 +327,46 @@ export default function Analytics() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-600">Nog geen user data</div>
+              <div className="text-center py-8 text-gray-600">No user data yet</div>
             )}
           </Card>
         </div>
 
         {/* Retention Metrics */}
         <Card className="p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">🎯 Member Retention & Conversie</h2>
+          <h2 className="text-xl font-bold mb-4">🎯 Member Retention & Conversion</h2>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <h3 className="font-semibold mb-4">Retention Rates</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span>24 uur retentie</span>
+                  <span>24 hour retention</span>
                   <Badge className="text-lg">{data.retention.retention24hRate}%</Badge>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span>7 dagen retentie</span>
+                  <span>7 day retention</span>
                   <Badge className="text-lg">{data.retention.retention7dRate}%</Badge>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span>30 dagen retentie</span>
+                  <span>30 day retention</span>
                   <Badge className="text-lg">{data.retention.retention30dRate}%</Badge>
                 </div>
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold mb-4">Conversie Metrics</h3>
+              <h3 className="font-semibold mb-4">Conversion Metrics</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <span>Join → First Message</span>
                   <Badge className="text-lg bg-green-600">{data.retention.conversionRate}%</Badge>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span>Gem. tijd tot eerste bericht</span>
+                  <span>Avg. time to first message</span>
                   <Badge className="text-lg">{data.retention.avgMinutesToFirstMessage} min</Badge>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span>Totaal nieuwe members</span>
+                  <span>Total new members</span>
                   <Badge className="text-lg">{data.retention.totalJoined}</Badge>
                 </div>
               </div>
@@ -376,9 +376,9 @@ export default function Analytics() {
 
         {/* Hourly Activity Heatmap */}
         <Card className="p-6">
-          <h2 className="text-xl font-bold mb-4">🕐 Beste Tijdstippen (Gemiddeld)</h2>
+          <h2 className="text-xl font-bold mb-4">🕐 Best Times (Average)</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Wanneer is je server het meest actief? Gebruik dit om events/streams te plannen!
+            When is your server most active? Use this to plan events/streams!
           </p>
           {data.hourlyHeatmap.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
@@ -390,25 +390,25 @@ export default function Analytics() {
                 />
                 <YAxis />
                 <Tooltip 
-                  labelFormatter={(value) => `${value}:00 uur`}
-                  formatter={(value, name) => [value, name === 'messages' ? 'Berichten' : 'Actieve Users']}
+                  labelFormatter={(value) => `${value}:00`}
+                  formatter={(value, name) => [value, name === 'messages' ? 'Messages' : 'Active Users']}
                 />
                 <Legend />
-                <Bar dataKey="messages" fill="#3B82F6" name="Berichten per uur" />
+                <Bar dataKey="messages" fill="#3B82F6" name="Messages per hour" />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="text-center py-12 text-gray-600">Nog geen uurdata beschikbaar</div>
+            <div className="text-center py-12 text-gray-600">No hourly data available yet</div>
           )}
           
           <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <div className="text-sm">
-              <strong>💡 Tip:</strong> De hoogste piek is het beste moment om:
+              <strong>💡 Tip:</strong> The highest peak is the best time to:
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Streams te plannen (meer viewers)</li>
-                <li>Belangrijke announcements te posten</li>
-                <li>Events te hosten (meer deelname)</li>
-                <li>Giveaways te starten</li>
+                <li>Schedule streams (more viewers)</li>
+                <li>Post important announcements</li>
+                <li>Host events (more participation)</li>
+                <li>Start giveaways</li>
               </ul>
             </div>
           </div>

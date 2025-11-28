@@ -1342,10 +1342,6 @@ client.on('interactionCreate', async (interaction) => {
   try {
     switch (commandName) {
       // ============ LEVELING COMMANDS ============
-      case 'rank':
-        await handleRankCommand(interaction);
-        break;
-
       case 'stats':
         await handleStatsCommand(interaction);
         break;
@@ -1826,120 +1822,6 @@ client.on('interactionCreate', async (interaction) => {
 // COMMAND HANDLERS
 // ================================================================
 
-async function handleRankCommand(interaction) {
-  await interaction.deferReply();
-
-  const user = interaction.options.getUser('user') || interaction.user;
-  const rankData = await xpManager.getUserLevel(interaction.guild.id, user.id);
-
-  // Get leveling config with customization
-  const levelingConfig = await configManager.getLevelingConfig(interaction.guild.id);
-
-  try {
-    console.log(`[RankCommand] Generating rank card for ${user.username} (${user.id})`);
-    console.log(`[RankCommand] Leveling config:`, {
-      hasBackground: !!levelingConfig?.rank_card_background_url,
-      backgroundUrl: levelingConfig?.rank_card_background_url,
-      borderColor: levelingConfig?.rank_card_border_color,
-      xpBarStyle: levelingConfig?.xp_bar_style,
-      xpBarColor: levelingConfig?.xp_bar_color
-    });
-
-    // Check if canvas is available (rankCardGenerator already checks this, but we verify here too)
-    try {
-      const canvas = require('canvas');
-      if (!canvas || !canvas.createCanvas) {
-        throw new Error('Canvas module is not available. Please install canvas: npm install canvas');
-      }
-      console.log('[RankCommand] Canvas module is available');
-    } catch (canvasError) {
-      console.error('[RankCommand] Canvas check failed:', canvasError.message);
-      throw new Error('Canvas module is not available. Please install canvas: npm install canvas');
-    }
-
-    // Generate rank card image
-    // Use PNG format for avatar since canvas doesn't support webp
-    const avatarURL = user.displayAvatarURL({ 
-      size: 256, 
-      extension: 'png',
-      forceStatic: true 
-    });
-    
-    const rankCardBuffer = await rankCardGenerator.generateRankCard({
-      user: {
-        username: user.username,
-        avatarURL: avatarURL
-      },
-      rankData: {
-        level: rankData.level,
-        rank: rankData.rank,
-        xp: rankData.xp,
-        xpForNext: rankData.xpForNext,
-        totalMessages: rankData.totalMessages
-      },
-      config: levelingConfig || {}
-    });
-
-    if (!rankCardBuffer || rankCardBuffer.length === 0) {
-      throw new Error('Rank card buffer is empty');
-    }
-
-    console.log(`[RankCommand] Rank card generated successfully, size: ${rankCardBuffer.length} bytes`);
-
-    // Create attachment
-    const attachment = new AttachmentBuilder(rankCardBuffer, { name: 'rank-card.png' });
-
-    // Create embed with the generated image
-    const borderColor = levelingConfig?.rank_card_border_color || '#5865F2';
-  const embed = new EmbedBuilder()
-      .setColor(borderColor)
-      .setTitle(`📊 Rank Card - ${user.username}`)
-      .setImage('attachment://rank-card.png')
-      .setFooter({ text: `Rank #${rankData.rank} • Level ${rankData.level} • ${rankData.totalMessages.toLocaleString()} Messages` })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed], files: [attachment] });
-    console.log(`[RankCommand] Rank card sent successfully`);
-  } catch (error) {
-    console.error('[RankCommand] Error generating rank card:', error.message);
-    console.error('[RankCommand] Error stack:', error.stack);
-    console.error('[RankCommand] Error details:', {
-      name: error.name,
-      code: error.code,
-      message: error.message
-    });
-    console.log('[RankCommand] Falling back to embed format');
-    
-    // Fallback to embed if image generation fails
-    const borderColor = levelingConfig?.rank_card_border_color || '#5865F2';
-    const currentLevelXP = rankData.xp % rankData.xpForNext;
-    const xpProgress = Math.floor((currentLevelXP / rankData.xpForNext) * 100);
-    const xpBar = xpManager.generateXPBar(xpProgress, levelingConfig || {});
-    
-    const description = `**${user.username}**'s Leveling Stats\n\n` +
-      `🏆 **Rank:** #${rankData.rank}\n` +
-      `⭐ **Level:** ${rankData.level}\n` +
-      `💬 **Messages:** ${rankData.totalMessages.toLocaleString()}`;
-    
-    const embed = new EmbedBuilder()
-      .setColor(borderColor)
-      .setTitle(`📊 Rank Card`)
-      .setDescription(description)
-      .setThumbnail(user.displayAvatarURL({ size: 256, dynamic: true }))
-    .addFields(
-        { 
-          name: '📊 XP Progress', 
-          value: `\`${xpBar}\` **${xpProgress}%**\n\`${currentLevelXP.toLocaleString()} / ${rankData.xpForNext.toLocaleString()} XP\`\n**Total XP:** ${rankData.xp.toLocaleString()}`, 
-          inline: false 
-        }
-      )
-      .setFooter({ text: `Rank #${rankData.rank} • Level ${rankData.level}` })
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
-  }
-}
-
 async function handleStatsCommand(interaction) {
   await interaction.deferReply();
 
@@ -1962,6 +1844,14 @@ async function handleStatsCommand(interaction) {
     
     if (!stats) {
       return interaction.editReply('❌ No stats found for this user.');
+    }
+
+    // Get level and XP data
+    let levelData = null;
+    try {
+      levelData = await xpManager.getUserLevel(interaction.guild.id, user.id);
+    } catch (error) {
+      console.error('[StatsCommand] Error fetching level data:', error);
     }
 
     // Get guild member for server joined date
@@ -1988,56 +1878,22 @@ async function handleStatsCommand(interaction) {
         },
         stats: {
           ...stats,
-          server_joined_at: member?.joinedAt?.toISOString() || stats.server_joined_at
+          server_joined_at: member?.joinedAt?.toISOString() || stats.server_joined_at,
+          level: levelData?.level || 0,
+          xp: levelData?.xp || 0,
+          xpForNext: levelData?.xpForNext || 100,
+          levelRank: levelData?.rank || null
         },
         config: statsConfig
       });
 
       const attachment = new AttachmentBuilder(statsCardBuffer, { name: 'stats-card.png' });
 
-      const borderColor = statsConfig.card_border_color || '#5865F2';
-      const embed = new EmbedBuilder()
-        .setColor(borderColor)
-        .setTitle(`📊 Statistics - ${user.username}`)
-        .setImage('attachment://stats-card.png')
-        .setFooter({ 
-          text: `Message Rank #${stats.messageRank || 'N/A'} • Voice Rank #${stats.voiceRank || 'N/A'}` 
-        })
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed], files: [attachment] });
+      // Send as standalone image without embed
+      await interaction.editReply({ files: [attachment], embeds: [] });
     } catch (error) {
       console.error('[StatsCommand] Error generating stats card:', error);
-      
-      // Fallback to embed format
-      const borderColor = statsConfig.card_border_color || '#5865F2';
-      const embed = new EmbedBuilder()
-        .setColor(borderColor)
-        .setTitle(`📊 Statistics - ${user.username}`)
-        .setThumbnail(user.displayAvatarURL({ size: 256, dynamic: true }))
-        .addFields(
-          {
-            name: '🏆 Server Ranks',
-            value: `Message: #${stats.messageRank || 'N/A'}\nVoice: #${stats.voiceRank || 'N/A'}`,
-            inline: true
-          },
-          {
-            name: '💬 Messages',
-            value: `Total: ${stats.total_messages?.toLocaleString() || 0}\n` +
-              (stats.periods?.['7d'] ? `7d: ${stats.periods['7d'].messages.toLocaleString()}` : ''),
-            inline: true
-          },
-          {
-            name: '🔊 Voice Activity',
-            value: `Total: ${global.userStatsManager.formatHours((stats.total_voice_seconds || 0) / 3600)}\n` +
-              (stats.periods?.['7d'] ? `7d: ${global.userStatsManager.formatHours(stats.periods['7d'].voiceHours)}` : ''),
-            inline: true
-          }
-        )
-        .setFooter({ text: 'Powered by ComCraft' })
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply('❌ An error occurred while generating the stats card.');
     }
   } catch (error) {
     console.error('[StatsCommand] Error:', error);
@@ -2616,7 +2472,7 @@ async function handleHelpCommand(interaction) {
     .addFields(
       {
         name: '📊 Leveling',
-        value: '`/rank` - View your rank\n`/leaderboard` - Server leaderboard'
+        value: '`/stats` - View your stats and rank\n`/leaderboard` - Server leaderboard'
       },
       {
         name: '🛡️ Moderation',
@@ -3118,7 +2974,7 @@ async function handleConvertCommand(interaction) {
           inline: true,
         }
       )
-      .setFooter({ text: `💡 Use /balance to check your coins, /rank to check your XP` })
+      .setFooter({ text: `💡 Use /balance to check your coins, /stats to check your stats and XP` })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

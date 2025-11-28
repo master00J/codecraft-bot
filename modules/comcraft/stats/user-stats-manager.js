@@ -328,12 +328,16 @@ class UserStatsManager {
     // Get top channels
     const topChannels = await this.getTopChannels(guildId, userId, 5);
 
+    // Get daily stats for chart (last 14 days)
+    const dailyStats = await this.getDailyStats(guildId, userId, 14);
+
     return {
       ...baseStats,
       messageRank,
       voiceRank,
       periods,
-      topChannels
+      topChannels,
+      dailyStats
     };
   }
 
@@ -387,18 +391,98 @@ class UserStatsManager {
   }
 
   /**
+   * Get daily statistics for chart (last 14 days)
+   */
+  async getDailyStats(guildId, userId, days = 14) {
+    const now = new Date();
+    const dailyStats = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+
+      // Get messages for this day
+      const { data: messagesData } = await this.supabase
+        .from('analytics_events')
+        .select('id', { count: 'exact', head: false })
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .eq('event_type', 'message')
+        .gte('created_at', date.toISOString())
+        .lt('created_at', nextDate.toISOString());
+
+      // Get voice time for this day
+      // Get all sessions that overlap with this day (started on or before, ended on or after)
+      const { data: allVoiceSessions } = await this.supabase
+        .from('voice_sessions')
+        .select('joined_at, left_at, duration_seconds, is_active')
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .lte('joined_at', nextDate.toISOString());
+
+      const messages = messagesData?.length || 0;
+      
+      // Calculate voice seconds for this day
+      let voiceSeconds = 0;
+      if (allVoiceSessions && allVoiceSessions.length > 0) {
+        allVoiceSessions.forEach(session => {
+          const sessionStart = new Date(session.joined_at);
+          const sessionEnd = session.is_active 
+            ? now 
+            : (session.left_at ? new Date(session.left_at) : sessionStart);
+          
+          // Check if session overlaps with this day
+          if (sessionStart < nextDate && sessionEnd > date) {
+            // Calculate overlap
+            const overlapStart = sessionStart > date ? sessionStart : date;
+            const overlapEnd = sessionEnd < nextDate ? sessionEnd : nextDate;
+            const overlapSeconds = Math.floor((overlapEnd - overlapStart) / 1000);
+            voiceSeconds += Math.max(0, overlapSeconds);
+          }
+        });
+      }
+
+      dailyStats.push({
+        date: date.toISOString().split('T')[0], // YYYY-MM-DD format
+        messages,
+        voiceHours: voiceSeconds / 3600,
+        voiceSeconds
+      });
+    }
+
+    return dailyStats;
+  }
+
+  /**
    * Get top channels for user
    */
   async getTopChannels(guildId, userId, limit = 5) {
-    const { data: channels } = await this.supabase
+    // Get all channels for this user
+    const { data: allChannels } = await this.supabase
       .from('user_channel_stats')
       .select('channel_id, channel_name, channel_type, message_count, voice_seconds')
       .eq('guild_id', guildId)
-      .eq('user_id', userId)
-      .order('message_count', { ascending: false })
-      .limit(limit);
+      .eq('user_id', userId);
 
-    return channels || [];
+    if (!allChannels || allChannels.length === 0) {
+      return [];
+    }
+
+    // Sort by combined activity score (messages + voice time)
+    // Voice seconds converted to approximate message equivalent (1 hour = ~100 messages)
+    const sortedChannels = allChannels
+      .map(channel => ({
+        ...channel,
+        activityScore: (channel.message_count || 0) + ((channel.voice_seconds || 0) / 3600) * 100
+      }))
+      .sort((a, b) => b.activityScore - a.activityScore)
+      .slice(0, limit);
+
+    return sortedChannels;
   }
 
   /**
