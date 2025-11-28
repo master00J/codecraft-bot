@@ -367,14 +367,14 @@ export default function CamOnlyVoicePage() {
                   Log Channel
                 </Label>
                 <Select
-                  value={config.log_channel_id || ''}
-                  onValueChange={(value) => setConfig({ ...config, log_channel_id: value || null })}
+                  value={config.log_channel_id || 'none'}
+                  onValueChange={(value) => setConfig({ ...config, log_channel_id: value === 'none' ? null : value })}
                 >
                   <SelectTrigger className="max-w-xs">
                     <SelectValue placeholder="Select a log channel (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {textChannels.map((channel) => (
                       <SelectItem key={channel.id} value={channel.id}>
                         {channel.name}
