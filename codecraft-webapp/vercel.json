@@ -1,8 +1,7 @@
 {
-  "buildCommand": "cd codecraft-webapp && npm install && npm run build",
-  "outputDirectory": "codecraft-webapp/.next",
-  "installCommand": "cd codecraft-webapp && npm install",
-  "framework": "nextjs",
-  "rootDirectory": "codecraft-webapp"
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "framework": "nextjs"
 }
 
