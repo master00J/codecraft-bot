@@ -11,6 +11,7 @@ function createMessageCreateHandler({
   xpManager,
   getAutoReactionsManager = null, // Optional: auto-reactions manager getter
   ticketManager = null, // Optional: ticket manager for transcript logging
+  userStatsManager = null, // Optional: user stats manager
 }) {
   return async function handleMessageCreate(message) {
     if (!message.guild || message.author.bot) return;
@@ -30,6 +31,20 @@ function createMessageCreateHandler({
 
     // Track message for analytics
     await analyticsTracker.trackMessage(message);
+
+    // Track message for user stats
+    if (userStatsManager && message.guild && message.author && !message.author.bot) {
+      try {
+        await userStatsManager.trackMessage(
+          message.guild.id,
+          message.author.id,
+          message.channel.id,
+          message.channel.name
+        );
+      } catch (error) {
+        console.error('[MessageCreate] Error tracking user stats:', error.message);
+      }
+    }
 
     // Auto-moderation check
     const violations = await autoMod.checkMessage(message);

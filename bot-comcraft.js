@@ -79,6 +79,8 @@ const VoteKickCommands = require('./modules/comcraft/vote-kick/commands');
 const CamOnlyVoiceManager = require('./modules/comcraft/cam-only-voice/manager');
 const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands');
 const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
+const userStatsManager = require('./modules/comcraft/stats/user-stats-manager');
+const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generator');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -328,6 +330,7 @@ const handleMessageCreate = createMessageCreateHandler({
   xpManager,
   getAutoReactionsManager, // Pass the auto-reactions manager getter
   ticketManager, // Pass ticket manager for transcript logging
+  userStatsManager, // Pass user stats manager for tracking
 });
 
 const {
@@ -673,6 +676,15 @@ client.once('ready', async () => {
     console.log('🎁 Vote Rewards Scheduler initialized');
   } catch (error) {
     console.error('❌ Failed to initialize Vote Rewards Scheduler:', error.message);
+  }
+
+  // Initialize User Stats Manager
+  try {
+    global.userStatsManager = userStatsManager;
+    console.log('📊 User Stats Manager initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize User Stats Manager:', error.message);
+    global.userStatsManager = null;
   }
 
   // Economy Manager is already initialized above (before AI handlers)
@@ -1043,15 +1055,59 @@ client.on('guildMemberRemove', async (member) => {
 });
 
 // ================================================================
-// VOICE STATE UPDATE (Cam-Only Voice)
+// VOICE STATE UPDATE (Cam-Only Voice + Stats Tracking)
 // ================================================================
 client.on('voiceStateUpdate', async (oldState, newState) => {
   try {
+    // Cam-only voice handling
     if (global.camOnlyVoiceManager) {
       await global.camOnlyVoiceManager.handleVoiceStateUpdate(oldState, newState);
     }
+
+    // User stats tracking
+    if (global.userStatsManager) {
+      const guildId = newState.guild?.id || oldState.guild?.id;
+      const userId = newState.id || oldState.id;
+
+      if (!guildId || !userId) return;
+
+      // User joined a voice channel
+      if (!oldState.channelId && newState.channelId) {
+        const channel = newState.channel;
+        if (channel && channel.type === 2) { // Voice channel
+          await global.userStatsManager.trackVoiceJoin(
+            guildId,
+            userId,
+            channel.id,
+            channel.name
+          );
+        }
+      }
+
+      // User left a voice channel
+      if (oldState.channelId && !newState.channelId) {
+        await global.userStatsManager.trackVoiceLeave(guildId, userId);
+      }
+
+      // User switched channels
+      if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+        // End old session
+        await global.userStatsManager.trackVoiceLeave(guildId, userId);
+        
+        // Start new session
+        const channel = newState.channel;
+        if (channel && channel.type === 2) { // Voice channel
+          await global.userStatsManager.trackVoiceJoin(
+            guildId,
+            userId,
+            channel.id,
+            channel.name
+          );
+        }
+      }
+    }
   } catch (error) {
-    console.error('❌ [Cam-Only Voice] Error in voiceStateUpdate handler:', error);
+    console.error('❌ [Voice State Update] Error:', error);
   }
 });
 
@@ -1288,6 +1344,10 @@ client.on('interactionCreate', async (interaction) => {
       // ============ LEVELING COMMANDS ============
       case 'rank':
         await handleRankCommand(interaction);
+        break;
+
+      case 'stats':
+        await handleStatsCommand(interaction);
         break;
 
       case 'leaderboard':
@@ -1877,6 +1937,111 @@ async function handleRankCommand(interaction) {
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
+  }
+}
+
+async function handleStatsCommand(interaction) {
+  await interaction.deferReply();
+
+  const user = interaction.options.getUser('user') || interaction.user;
+  
+  if (!global.userStatsManager) {
+    return interaction.editReply('❌ Stats tracking is not available at this time.');
+  }
+
+  try {
+    // Get stats config
+    const statsConfig = await global.userStatsManager.getStatsConfig(interaction.guild.id);
+    
+    if (!statsConfig.enabled) {
+      return interaction.editReply('❌ Stats tracking is disabled for this server.');
+    }
+
+    // Get user stats
+    const stats = await global.userStatsManager.getUserStats(interaction.guild.id, user.id);
+    
+    if (!stats) {
+      return interaction.editReply('❌ No stats found for this user.');
+    }
+
+    // Get guild member for server joined date
+    let member = null;
+    try {
+      member = await interaction.guild.members.fetch(user.id);
+    } catch (error) {
+      console.error('[StatsCommand] Error fetching member:', error);
+    }
+
+    // Generate stats card
+    try {
+      const avatarURL = user.displayAvatarURL({ 
+        size: 256, 
+        extension: 'png',
+        forceStatic: true 
+      });
+
+      const statsCardBuffer = await statsCardGenerator.generateStatsCard({
+        user: {
+          username: user.username,
+          avatarURL: avatarURL,
+          guildName: interaction.guild.name
+        },
+        stats: {
+          ...stats,
+          server_joined_at: member?.joinedAt?.toISOString() || stats.server_joined_at
+        },
+        config: statsConfig
+      });
+
+      const attachment = new AttachmentBuilder(statsCardBuffer, { name: 'stats-card.png' });
+
+      const borderColor = statsConfig.card_border_color || '#5865F2';
+      const embed = new EmbedBuilder()
+        .setColor(borderColor)
+        .setTitle(`📊 Statistics - ${user.username}`)
+        .setImage('attachment://stats-card.png')
+        .setFooter({ 
+          text: `Message Rank #${stats.messageRank || 'N/A'} • Voice Rank #${stats.voiceRank || 'N/A'}` 
+        })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed], files: [attachment] });
+    } catch (error) {
+      console.error('[StatsCommand] Error generating stats card:', error);
+      
+      // Fallback to embed format
+      const borderColor = statsConfig.card_border_color || '#5865F2';
+      const embed = new EmbedBuilder()
+        .setColor(borderColor)
+        .setTitle(`📊 Statistics - ${user.username}`)
+        .setThumbnail(user.displayAvatarURL({ size: 256, dynamic: true }))
+        .addFields(
+          {
+            name: '🏆 Server Ranks',
+            value: `Message: #${stats.messageRank || 'N/A'}\nVoice: #${stats.voiceRank || 'N/A'}`,
+            inline: true
+          },
+          {
+            name: '💬 Messages',
+            value: `Total: ${stats.total_messages?.toLocaleString() || 0}\n` +
+              (stats.periods?.['7d'] ? `7d: ${stats.periods['7d'].messages.toLocaleString()}` : ''),
+            inline: true
+          },
+          {
+            name: '🔊 Voice Activity',
+            value: `Total: ${global.userStatsManager.formatHours((stats.total_voice_seconds || 0) / 3600)}\n` +
+              (stats.periods?.['7d'] ? `7d: ${global.userStatsManager.formatHours(stats.periods['7d'].voiceHours)}` : ''),
+            inline: true
+          }
+        )
+        .setFooter({ text: 'Powered by ComCraft' })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+    }
+  } catch (error) {
+    console.error('[StatsCommand] Error:', error);
+    await interaction.editReply('❌ An error occurred while fetching stats.');
   }
 }
 
@@ -4885,13 +5050,12 @@ async function registerCommands(clientInstance) {
     // Leveling
     new SlashCommandBuilder()
       .setName('rank')
-      .setDescription('View your rank and level')
-      .addUserOption((option) =>
-        option
-          .setName('user')
-          .setDescription('User to view (optional)')
-          .setRequired(false)
-      ),
+      .setDescription('Check your rank')
+      .addUserOption((option) => option.setName('user').setDescription('User to check').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('stats')
+      .setDescription('View detailed user statistics')
+      .addUserOption((option) => option.setName('user').setDescription('User to check stats for').setRequired(false)),
 
     new SlashCommandBuilder().setName('leaderboard').setDescription('View the server leaderboard'),
 
