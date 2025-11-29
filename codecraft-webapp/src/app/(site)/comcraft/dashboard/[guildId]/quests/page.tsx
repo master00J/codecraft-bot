@@ -34,6 +34,15 @@ interface Quest {
   visible: boolean;
   max_completions?: number;
   completion_cooldown_hours?: number;
+  chain_id?: string | null;
+  chain_position?: number | null;
+  difficulty?: string;
+  rarity?: string;
+  deadline_at?: string | null;
+  time_limit_hours?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  milestones?: Array<{ progress: number; rewards: { coins?: number; xp?: number }; message?: string }>;
 }
 
 export default function QuestsConfig() {
