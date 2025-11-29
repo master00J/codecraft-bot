@@ -279,6 +279,7 @@ Please verify:
         console.log(`📤 Creating server via Application API: POST /api/application/servers`)
         console.log(`   Panel URL: ${this.config.panelUrl}`)
         console.log(`   API Key: ${this.config.apiKey ? `${this.config.apiKey.substring(0, 10)}...` : 'MISSING'}`)
+        console.log(`   Startup Command: ${serverData.startup}`)
         
         const response = await this.request<{ attributes: ServerDetails } | { data: { attributes: ServerDetails } }>(
           '/servers',

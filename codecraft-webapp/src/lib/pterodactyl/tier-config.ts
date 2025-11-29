@@ -190,7 +190,7 @@ export const PTERODACTYL_CONFIG = {
   DEFAULT_USER_ID: parseInt(process.env.PTERODACTYL_DEFAULT_USER_ID || '1'),
   
   // Startup command (optional)
-  STARTUP_COMMAND: process.env.BOT_STARTUP_COMMAND || 'node index.js',
+  STARTUP_COMMAND: process.env.BOT_STARTUP_COMMAND || 'bash start.sh',
   
   // Docker image (set in egg)
   // Note: nodejs_22 is LTS (recommended), nodejs_23 is also available but not LTS
