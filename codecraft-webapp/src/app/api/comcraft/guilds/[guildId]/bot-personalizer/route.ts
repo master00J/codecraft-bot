@@ -443,13 +443,60 @@ export async function POST(
           );
           console.log(`✅ Bot files deployed directly - index.js is ready`);
           
-          // Create a startup script that ensures dependencies are installed before starting
+          // Create a startup script that pulls from GitHub, installs dependencies, and starts the bot
+          const repoUrl = process.env.GIT_REPOSITORY_URL || 'https://github.com/master00J/codecraft-bot.git';
+          const branch = process.env.GIT_BRANCH || 'main';
+          
+          // Remove .git suffix if present for URL construction
+          const cleanRepoUrl = repoUrl.replace(/\.git$/, '');
+          
           const startupScript = `#!/bin/bash
 cd /home/container
 
 # Load environment variables from .env if it exists
 if [ -f .env ]; then
     export $(cat .env | grep -v '^#' | xargs)
+fi
+
+# Pull latest code from GitHub if repository exists
+if [ -d .git ]; then
+    echo "📥 Pulling latest code from GitHub..."
+    git pull origin ${branch} 2>&1 || echo "⚠️  Git pull failed (continuing with existing files)"
+elif [ -f index.js ]; then
+    echo "ℹ️  No git repository found, initializing for future pulls..."
+    git init 2>/dev/null || true
+    git remote add origin ${cleanRepoUrl} 2>/dev/null || git remote set-url origin ${cleanRepoUrl} 2>/dev/null || true
+    git fetch origin ${branch} 2>/dev/null || true
+fi
+
+# Download files if index.js doesn't exist
+if [ ! -f index.js ]; then
+    echo "📥 Downloading bot files from GitHub..."
+    REPO_URL="${repoUrl}"
+    BRANCH="${branch}"
+    
+    # Clone to temp directory
+    TEMP_DIR="/tmp/bot-clone-\$\$"
+    git clone --depth 1 --branch "\$BRANCH" "\$REPO_URL" "\$TEMP_DIR" 2>&1 || {
+        echo "⚠️  Failed to clone repository, trying direct download..."
+        # Try direct download as fallback
+        curl -L "\${REPO_URL//.git/}/archive/\${BRANCH}.zip" -o /tmp/bot.zip 2>&1 || {
+            echo "❌ Failed to download bot files"
+            exit 1
+        }
+        unzip -q /tmp/bot.zip -d /tmp/ 2>&1 || rm -f /tmp/bot.zip
+        TEMP_DIR="/tmp/codecraft-bot-\${BRANCH}"
+    }
+    
+    if [ -d "\$TEMP_DIR" ]; then
+        # Copy files
+        cp "\$TEMP_DIR/index.js" ./ 2>/dev/null || true
+        cp "\$TEMP_DIR/package.json" ./ 2>/dev/null || true
+        cp -r "\$TEMP_DIR/modules" ./ 2>/dev/null || true
+        rm -rf "\$TEMP_DIR"
+        echo "✅ Bot files downloaded"
+    fi
+    rm -f /tmp/bot.zip 2>/dev/null || true
 fi
 
 # Always check and install dependencies if package.json exists
