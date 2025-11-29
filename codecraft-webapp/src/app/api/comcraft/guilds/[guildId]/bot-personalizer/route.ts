@@ -408,135 +408,6 @@ export async function POST(
         // Files are automatically deployed via Install Script in the Egg configuration
         // No need to manually upload files - Install Script handles this
         console.log(`📦 Bot files will be deployed automatically via Install Script`);
-          
-          // Create a startup script that pulls from GitHub, installs dependencies, and starts the bot
-          const repoUrl = process.env.GIT_REPOSITORY_URL || 'https://github.com/master00J/codecraft-bot.git';
-          const branch = process.env.GIT_BRANCH || 'main';
-          
-          // Remove .git suffix if present for URL construction
-          const cleanRepoUrl = repoUrl.replace(/\.git$/, '');
-          
-          const startupScript = `#!/bin/bash
-cd /home/container
-
-# Load environment variables from .env if it exists
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
-fi
-
-# Pull latest code from GitHub if repository exists
-if [ -d .git ]; then
-    echo "📥 Pulling latest code from GitHub..."
-    git pull origin ${branch} 2>&1 || echo "⚠️  Git pull failed (continuing with existing files)"
-elif [ -f index.js ]; then
-    echo "ℹ️  No git repository found, initializing for future pulls..."
-    git init 2>/dev/null || true
-    git remote add origin ${cleanRepoUrl} 2>/dev/null || git remote set-url origin ${cleanRepoUrl} 2>/dev/null || true
-    git fetch origin ${branch} 2>/dev/null || true
-fi
-
-# Download files if index.js doesn't exist
-if [ ! -f index.js ]; then
-    echo "📥 Downloading bot files from GitHub..."
-    REPO_URL="${repoUrl}"
-    BRANCH="${branch}"
-    
-    # Clone to temp directory
-    TEMP_DIR="/tmp/bot-clone-\$\$"
-    git clone --depth 1 --branch "\$BRANCH" "\$REPO_URL" "\$TEMP_DIR" 2>&1 || {
-        echo "⚠️  Failed to clone repository, trying direct download..."
-        # Try direct download as fallback
-        curl -L "\${REPO_URL//.git/}/archive/\${BRANCH}.zip" -o /tmp/bot.zip 2>&1 || {
-            echo "❌ Failed to download bot files"
-            exit 1
-        }
-        unzip -q /tmp/bot.zip -d /tmp/ 2>&1 || rm -f /tmp/bot.zip
-        TEMP_DIR="/tmp/codecraft-bot-\${BRANCH}"
-    }
-    
-    if [ -d "\$TEMP_DIR" ]; then
-        # Copy files
-        cp "\$TEMP_DIR/index.js" ./ 2>/dev/null || true
-        cp "\$TEMP_DIR/package.json" ./ 2>/dev/null || true
-        cp -r "\$TEMP_DIR/modules" ./ 2>/dev/null || true
-        rm -rf "\$TEMP_DIR"
-        echo "✅ Bot files downloaded"
-    fi
-    rm -f /tmp/bot.zip 2>/dev/null || true
-fi
-
-# Always check and install dependencies if package.json exists
-if [ -f package.json ]; then
-    if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ]; then
-        echo "📦 Installing dependencies (this may take a few minutes)..."
-        npm install --production --loglevel=error || {
-            echo "⚠️  npm install failed, trying with --legacy-peer-deps..."
-            npm install --production --legacy-peer-deps --loglevel=error || {
-                echo "❌ Failed to install dependencies"
-                exit 1
-            }
-        }
-        echo "✅ Dependencies installed"
-    else
-        echo "✅ Dependencies already installed"
-    fi
-else
-    echo "⚠️  package.json not found - dependencies cannot be installed"
-fi
-
-# Start bot
-echo "🚀 Starting bot..."
-exec node index.js
-`;
-          
-          await client.uploadFile(pterodactylServer.uuid, 'start.sh', startupScript);
-          console.log(`✅ Startup script created`);
-          
-          // Make the script executable via Pterodactyl file API (using private method via any cast)
-          try {
-            // @ts-ignore - accessing private request method
-            await client.request(
-              `/servers/${pterodactylServer.uuid}/files/chmod`,
-              {
-                method: 'POST',
-                body: JSON.stringify({
-                  root: '/home/container',
-                  files: ['start.sh'],
-                  mode: '755'
-                })
-              },
-              'client'
-            );
-            console.log(`✅ Startup script made executable`);
-          } catch (chmodError: any) {
-            console.warn(`⚠️  Could not make start.sh executable via API:`, chmodError.message);
-            // Try via command instead (server needs to be online)
-            try {
-              await client.sendCommand(pterodactylServer.uuid, 'chmod +x start.sh');
-              console.log(`✅ Startup script made executable via command`);
-            } catch (cmdError: any) {
-              console.warn(`⚠️  Could not make start.sh executable:`, cmdError.message);
-              console.log(`ℹ️  Script will be created - Pterodactyl can execute it with 'bash start.sh'`);
-            }
-          }
-          
-          // Set startup command to use the script (ensures dependencies are installed)
-          // IMPORTANT: This must be done AFTER deployBotFilesDirectly so start.sh exists
-          // We use Application API to update server details
-          try {
-            await client.setStartupCommand(pterodactylServer.uuid, 'bash start.sh');
-            console.log(`✅ Startup command set to: bash start.sh`);
-          } catch (startupError: any) {
-            console.warn(`⚠️  Could not set startup command automatically:`, startupError.message);
-            console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: bash start.sh`);
-            console.log(`   This ensures dependencies are installed before the bot starts`);
-            console.log(`   Location: Panel → Server → Startup → Startup Command`);
-          }
-        } catch (deployError: any) {
-          console.error(`❌ Failed to deploy bot files directly:`, deployError.message);
-          console.log(`ℹ️  Fallback: You may need to manually configure deployment`);
-          // Don't throw - continue with other setup
-        }
         
         console.log(`✅ Environment variables automatically set for custom bot:`);
         console.log(`   Bot-specific:`);
@@ -552,15 +423,8 @@ exec node index.js
         if (process.env.ANTHROPIC_API_KEY) console.log(`   - ANTHROPIC_API_KEY: ✅`);
         if (process.env.DISCORD_CLIENT_ID) console.log(`   - DISCORD_CLIENT_ID: ✅`);
       } catch (envError: any) {
-        console.warn(`⚠️  Could not automatically set environment variables:`, envError.message);
-        console.log(`ℹ️  Fallback: You may need to set these manually in Pterodactyl panel:`);
-        console.log(`   1. Go to: https://control.sparkedhost.us/server/${pterodactylServer.identifier}`);
-        console.log(`   2. Go to "Startup" tab`);
-        console.log(`   3. Set these variables:`);
-        console.log(`      - DISCORD_BOT_TOKEN: ${botToken.substring(0, 10)}...`);
-        console.log(`      - GUILD_ID: ${params.guildId}`);
-        console.log(`      - BOT_APPLICATION_ID: ${botUser.id}`);
-        console.log(`      - NODE_ENV: production`);
+        console.warn(`⚠️  Error during server setup:`, envError.message);
+        // Don't throw - server is created, just log the error
       }
 
       // Update database with Pterodactyl server info
