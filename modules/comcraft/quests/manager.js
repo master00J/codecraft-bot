@@ -265,6 +265,34 @@ class QuestManager {
    * Check if user meets quest prerequisites
    */
   async checkPrerequisites(guildId, userId, quest) {
+    // Check quest chain prerequisites first
+    if (quest.chain_id && quest.chain_position) {
+      // If this is not the first quest in the chain, check if previous quest is completed
+      if (quest.chain_position > 1) {
+        const { data: chainQuests } = await this.supabase
+          .from('quests')
+          .select('id')
+          .eq('chain_id', quest.chain_id)
+          .eq('chain_position', quest.chain_position - 1)
+          .maybeSingle();
+
+        if (chainQuests) {
+          const { data: prevProgress } = await this.supabase
+            .from('quest_progress')
+            .select('completed')
+            .eq('guild_id', guildId)
+            .eq('user_id', userId)
+            .eq('quest_id', chainQuests.id)
+            .maybeSingle();
+
+          if (!prevProgress || !prevProgress.completed) {
+            return false; // Previous quest in chain not completed
+          }
+        }
+      }
+    }
+
+    // Check regular prerequisites
     if (!quest.prerequisite_quest_ids || quest.prerequisite_quest_ids.length === 0) {
       return true;
     }
@@ -372,6 +400,11 @@ class QuestManager {
 
       // Send notification to user (optional)
       await this.sendCompletionNotification(quest, userId, rewards);
+
+      // Check if quest is part of a chain and if chain is completed
+      if (quest.chain_id) {
+        await this.checkChainCompletion(quest.guild_id, userId, quest.chain_id, quest);
+      }
 
       // Return rewards for the command handler to process
       return { success: true, rewards };

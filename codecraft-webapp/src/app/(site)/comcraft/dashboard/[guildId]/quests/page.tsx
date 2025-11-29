@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Trash2, Edit, Plus, BarChart3 } from 'lucide-react';
+import { Trash2, Edit, Plus, BarChart3, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface Quest {
   id: string;
@@ -46,6 +46,20 @@ export default function QuestsConfig() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('quests');
+
+  // Quest Chains state
+  const [chains, setChains] = useState<any[]>([]);
+  const [newChain, setNewChain] = useState({
+    name: '',
+    description: '',
+    emoji: '🔗',
+    difficulty: 'normal' as 'easy' | 'normal' | 'hard' | 'expert',
+    reward_bonus: 1.0,
+    chain_rewards: { coins: 0, xp: 0 },
+    enabled: true,
+    quest_ids: [] as string[]
+  });
+  const [editingChain, setEditingChain] = useState<any | null>(null);
 
   // New quest form
   const [newQuest, setNewQuest] = useState({
@@ -80,6 +94,7 @@ export default function QuestsConfig() {
     if (guildId) {
       fetchQuests();
       fetchAnalytics();
+      fetchChains();
     }
   }, [guildId]);
 
@@ -112,6 +127,125 @@ export default function QuestsConfig() {
     } catch (error) {
       console.error('Error fetching analytics:', error);
     }
+  };
+
+  const fetchChains = async () => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/quests/chains`);
+      if (response.ok) {
+        const data = await response.json();
+        setChains(data.chains || []);
+      }
+    } catch (error) {
+      console.error('Error fetching chains:', error);
+      toast({
+        title: 'Failed to load chains',
+        description: 'Could not load quest chains. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const saveChain = async () => {
+    setSaving(true);
+    try {
+      const chainData = {
+        name: newChain.name,
+        description: newChain.description || null,
+        emoji: newChain.emoji,
+        difficulty: newChain.difficulty,
+        reward_bonus: newChain.reward_bonus,
+        chain_rewards: newChain.chain_rewards,
+        enabled: newChain.enabled,
+        quest_ids: newChain.quest_ids
+      };
+
+      const url = `/api/comcraft/guilds/${guildId}/quests/chains`;
+      const method = editingChain ? 'PATCH' : 'POST';
+      const body = editingChain
+        ? { id: editingChain.id, ...chainData }
+        : chainData;
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (response.ok) {
+        toast({
+          title: editingChain ? 'Chain updated' : 'Chain created',
+          description: `Quest chain "${newChain.name}" has been ${editingChain ? 'updated' : 'created'} successfully.`,
+        });
+        
+        // Reset form
+        setNewChain({
+          name: '',
+          description: '',
+          emoji: '🔗',
+          difficulty: 'normal',
+          reward_bonus: 1.0,
+          chain_rewards: { coins: 0, xp: 0 },
+          enabled: true,
+          quest_ids: []
+        });
+        setEditingChain(null);
+        fetchChains();
+        fetchQuests(); // Refresh quests to show chain assignments
+      } else {
+        throw new Error('Failed to save chain');
+      }
+    } catch (error) {
+      toast({
+        title: 'Save failed',
+        description: 'Could not save quest chain. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteChain = async (chainId: string) => {
+    if (!confirm('Are you sure you want to delete this quest chain? This will unlink all quests from the chain.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/quests/chains?id=${chainId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Chain deleted',
+          description: 'The quest chain has been deleted successfully.',
+        });
+        fetchChains();
+        fetchQuests();
+      }
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: 'Could not delete the chain. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const startEditingChain = (chain: any) => {
+    setEditingChain(chain);
+    setNewChain({
+      name: chain.name,
+      description: chain.description || '',
+      emoji: chain.emoji || '🔗',
+      difficulty: (chain.difficulty || 'normal') as 'easy' | 'normal' | 'hard' | 'expert',
+      reward_bonus: chain.reward_bonus || 1.0,
+      chain_rewards: chain.chain_rewards || { coins: 0, xp: 0 },
+      enabled: chain.enabled ?? true,
+      quest_ids: chain.quests ? chain.quests.map((q: any) => q.id) : []
+    });
+    setActiveTab('chains');
   };
 
   const saveQuest = async () => {
@@ -851,17 +985,354 @@ export default function QuestsConfig() {
         <TabsContent value="chains" className="space-y-4">
           <Card className="p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Quest Chains</h2>
-              <Button>
+              <div>
+                <h2 className="text-xl font-semibold">Quest Chains</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Link multiple quests together. Users must complete quests in order to unlock the next quest in the chain.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setEditingChain(null);
+                  setNewChain({
+                    name: '',
+                    description: '',
+                    emoji: '🔗',
+                    difficulty: 'normal',
+                    reward_bonus: 1.0,
+                    chain_rewards: { coins: 0, xp: 0 },
+                    enabled: true,
+                    quest_ids: []
+                  });
+                }}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Chain
               </Button>
             </div>
-            <div className="text-center py-8 text-muted-foreground">
-              Quest Chains allow you to link multiple quests together. Complete quests in order to unlock the next quest in the chain.
-              <br />
-              <span className="text-xs mt-2 block">This feature is coming soon!</span>
-            </div>
+
+            {chains.length === 0 && !editingChain ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No quest chains created yet. Create your first chain to link quests together!
+              </div>
+            ) : editingChain || newChain.name || newChain.quest_ids.length > 0 ? (
+              <div className="space-y-4 mt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="chain_name">Chain Name *</Label>
+                    <Input
+                      id="chain_name"
+                      value={newChain.name}
+                      onChange={(e) => setNewChain({ ...newChain, name: e.target.value })}
+                      placeholder="Beginner Quest Line"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="chain_emoji">Emoji</Label>
+                    <Input
+                      id="chain_emoji"
+                      value={newChain.emoji}
+                      onChange={(e) => setNewChain({ ...newChain, emoji: e.target.value })}
+                      placeholder="🔗"
+                      maxLength={2}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="chain_description">Description</Label>
+                  <Textarea
+                    id="chain_description"
+                    value={newChain.description}
+                    onChange={(e) => setNewChain({ ...newChain, description: e.target.value })}
+                    placeholder="A series of quests for new players to complete."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="chain_difficulty">Difficulty</Label>
+                    <Select
+                      value={newChain.difficulty}
+                      onValueChange={(value) => setNewChain({ ...newChain, difficulty: value as 'easy' | 'normal' | 'hard' | 'expert' })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                        <SelectItem value="expert">Expert</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="reward_bonus">Reward Bonus Multiplier</Label>
+                    <Input
+                      id="reward_bonus"
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      value={newChain.reward_bonus}
+                      onChange={(e) => setNewChain({ ...newChain, reward_bonus: parseFloat(e.target.value) || 1.0 })}
+                      placeholder="1.0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Multiplier for completing entire chain (e.g., 1.5 = 50% bonus)</p>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <Label className="text-base font-semibold">Chain Completion Rewards (Optional)</Label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Additional rewards given when a user completes the entire chain.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Coins</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={newChain.chain_rewards.coins || 0}
+                        onChange={(e) => setNewChain({
+                          ...newChain,
+                          chain_rewards: { ...newChain.chain_rewards, coins: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <Label>XP</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={newChain.chain_rewards.xp || 0}
+                        onChange={(e) => setNewChain({
+                          ...newChain,
+                          chain_rewards: { ...newChain.chain_rewards, xp: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <Label className="text-base font-semibold">Quest Order *</Label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Select quests in the order they should be completed. Drag to reorder.
+                  </p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded p-3">
+                    {newChain.quest_ids.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground text-sm">
+                        No quests selected. Select quests below to add them to the chain.
+                      </div>
+                    ) : (
+                      newChain.quest_ids.map((questId, index) => {
+                        const quest = quests.find(q => q.id === questId);
+                        if (!quest) return null;
+                        return (
+                          <div key={questId} className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <span className="text-sm font-medium w-6">{index + 1}.</span>
+                            <span className="text-lg">{quest.emoji}</span>
+                            <span className="flex-1 text-sm">{quest.name}</span>
+                            <div className="flex gap-1">
+                              {index > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const updated = [...newChain.quest_ids];
+                                    [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+                                    setNewChain({ ...newChain, quest_ids: updated });
+                                  }}
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {index < newChain.quest_ids.length - 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const updated = [...newChain.quest_ids];
+                                    [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+                                    setNewChain({ ...newChain, quest_ids: updated });
+                                  }}
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setNewChain({
+                                    ...newChain,
+                                    quest_ids: newChain.quest_ids.filter(id => id !== questId)
+                                  });
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <Label>Available Quests</Label>
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        if (value && !newChain.quest_ids.includes(value)) {
+                          setNewChain({
+                            ...newChain,
+                            quest_ids: [...newChain.quest_ids, value]
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a quest to add to chain..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {quests
+                          .filter(q => !newChain.quest_ids.includes(q.id) && !q.chain_id)
+                          .map((quest) => (
+                            <SelectItem key={quest.id} value={quest.id}>
+                              {quest.emoji} {quest.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="chain_enabled"
+                      checked={newChain.enabled}
+                      onCheckedChange={(checked) => setNewChain({ ...newChain, enabled: checked })}
+                    />
+                    <Label htmlFor="chain_enabled">Enabled</Label>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    onClick={saveChain}
+                    disabled={saving || !newChain.name || newChain.quest_ids.length === 0}
+                  >
+                    {saving ? 'Saving...' : editingChain ? 'Update Chain' : 'Create Chain'}
+                  </Button>
+                  {(editingChain || newChain.name) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingChain(null);
+                        setNewChain({
+                          name: '',
+                          description: '',
+                          emoji: '🔗',
+                          difficulty: 'normal',
+                          reward_bonus: 1.0,
+                          chain_rewards: { coins: 0, xp: 0 },
+                          enabled: true,
+                          quest_ids: []
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 mt-4">
+                {chains.map((chain) => (
+                  <Card key={chain.id} className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-2xl">{chain.emoji || '🔗'}</span>
+                          <h3 className="text-lg font-semibold">{chain.name}</h3>
+                          <Badge variant={chain.enabled ? 'default' : 'secondary'}>
+                            {chain.enabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                          {chain.difficulty && (
+                            <Badge variant={
+                              chain.difficulty === 'easy' ? 'default' :
+                              chain.difficulty === 'normal' ? 'secondary' :
+                              chain.difficulty === 'hard' ? 'destructive' : 'outline'
+                            }>
+                              {chain.difficulty}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {chain.description && (
+                          <p className="text-sm text-muted-foreground mb-2">{chain.description}</p>
+                        )}
+
+                        <div className="text-sm space-y-1">
+                          <div>
+                            <span className="font-medium">Quests:</span> {chain.total_quests || (chain.quests?.length || 0)}
+                          </div>
+                          {chain.reward_bonus && chain.reward_bonus > 1.0 && (
+                            <div>
+                              <span className="font-medium">Reward Bonus:</span> {((chain.reward_bonus - 1) * 100).toFixed(0)}%
+                            </div>
+                          )}
+                          {chain.chain_rewards && (chain.chain_rewards.coins > 0 || chain.chain_rewards.xp > 0) && (
+                            <div>
+                              <span className="font-medium">Completion Rewards:</span>{' '}
+                              {chain.chain_rewards.coins > 0 && `${chain.chain_rewards.coins} coins`}
+                              {chain.chain_rewards.coins > 0 && chain.chain_rewards.xp > 0 && ' + '}
+                              {chain.chain_rewards.xp > 0 && `${chain.chain_rewards.xp} XP`}
+                            </div>
+                          )}
+                        </div>
+
+                        {chain.quests && chain.quests.length > 0 && (
+                          <div className="mt-3">
+                            <div className="text-xs font-medium text-muted-foreground mb-1">Quest Order:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {chain.quests
+                                .sort((a: any, b: any) => (a.chain_position || 0) - (b.chain_position || 0))
+                                .map((quest: any, idx: number) => (
+                                  <Badge key={quest.id} variant="outline" className="text-xs">
+                                    {idx + 1}. {quest.name}
+                                  </Badge>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEditingChain(chain)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteChain(chain.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
           </Card>
         </TabsContent>
 
