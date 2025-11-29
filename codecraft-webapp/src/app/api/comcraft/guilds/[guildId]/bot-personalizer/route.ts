@@ -393,55 +393,21 @@ export async function POST(
       const serverType = apiMode === 'splitter' ? 'sub-server' : 'standalone server';
       console.log(`✅ Pterodactyl ${serverType} created: ${pterodactylServer.identifier} (${pterodactylServer.uuid})`);
 
-      // Set environment variables for the custom bot
-      // Note: Sub-servers inherit Git repository from parent, but need their own bot token
-      // This happens AUTOMATICALLY - no manual setup needed!
+      // Environment variables are already set during server creation via Application API
+      // The Install Script will handle downloading files and installing dependencies
+      // We just need to wait for the server to be ready and then start it
       try {
-        console.log(`⚙️  Automatically setting environment variables for custom bot...`);
+        console.log(`✅ Environment variables already set during server creation`);
         console.log(`   Server UUID: ${pterodactylServer.uuid}`);
+        console.log(`   Install Script will automatically clone repo and install dependencies`);
         
-        // Wait for server installation to complete before setting environment variables
+        // Wait a bit for server installation to complete
         console.log(`⏳ Waiting for server installation to complete...`);
-        await client.waitForServerReady(pterodactylServer.uuid, 120000); // Max 2 minutes
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds for install
         
-        // Set custom bot environment variables AUTOMATICALLY
-        // Include both bot-specific and shared environment variables
-        const envVars: Record<string, string> = {
-          // Bot-specific (unique per sub-server)
-          'DISCORD_BOT_TOKEN': botToken,
-          'GUILD_ID': params.guildId,
-          'BOT_APPLICATION_ID': botUser.id,
-          'NODE_ENV': 'production',
-          
-          // Shared environment variables (same for all bots)
-          // These should be set in Vercel environment variables
-          ...(process.env.SUPABASE_URL && { 'SUPABASE_URL': process.env.SUPABASE_URL }),
-          ...(process.env.SUPABASE_SERVICE_ROLE_KEY && { 'SUPABASE_SERVICE_ROLE_KEY': process.env.SUPABASE_SERVICE_ROLE_KEY }),
-          ...(process.env.CLAUDE_API_KEY && { 'CLAUDE_API_KEY': process.env.CLAUDE_API_KEY }),
-          ...(process.env.GEMINI_API_KEY && { 'GEMINI_API_KEY': process.env.GEMINI_API_KEY }),
-          ...(process.env.ANTHROPIC_API_KEY && { 'ANTHROPIC_API_KEY': process.env.ANTHROPIC_API_KEY }),
-          ...(process.env.DISCORD_CLIENT_ID && { 'DISCORD_CLIENT_ID': process.env.DISCORD_CLIENT_ID }),
-          
-          // Twitch environment variables (required by egg)
-          'TWITCH_CLIENT_ID': process.env.TWITCH_CLIENT_ID || '',
-          'TWITCH_CLIENT_SECRET': process.env.TWITCH_CLIENT_SECRET || '',
-          'TWITCH_EVENTSUB_SECRET': process.env.TWITCH_EVENTSUB_SECRET || '',
-        };
-        
-        await client.setEnvironmentVariables(pterodactylServer.uuid, envVars);
-        
-        // Deploy bot files directly from GitHub (downloads and uploads immediately)
-        // This ensures index.js exists immediately so the bot can start with default startup command
-        const githubToken = process.env.GITHUB_TOKEN || process.env.GITHUB_PAT;
-        try {
-          console.log(`📦 Deploying bot files directly from GitHub...`);
-          await client.deployBotFilesDirectly(
-            pterodactylServer.uuid,
-            process.env.GIT_REPOSITORY_URL || 'https://github.com/master00J/codecraft-solutions',
-            process.env.GIT_BRANCH || 'main',
-            githubToken
-          );
-          console.log(`✅ Bot files deployed directly - index.js is ready`);
+        // Files are automatically deployed via Install Script in the Egg configuration
+        // No need to manually upload files - Install Script handles this
+        console.log(`📦 Bot files will be deployed automatically via Install Script`);
           
           // Create a startup script that pulls from GitHub, installs dependencies, and starts the bot
           const repoUrl = process.env.GIT_REPOSITORY_URL || 'https://github.com/master00J/codecraft-bot.git';
