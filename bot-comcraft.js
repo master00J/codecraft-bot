@@ -82,6 +82,7 @@ const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers
 const userStatsManager = require('./modules/comcraft/stats/user-stats-manager');
 const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generator');
 const combatCardGenerator = require('./modules/comcraft/combat/combat-card-generator');
+const StockMarketManager = require('./modules/comcraft/economy/stock-market-manager');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -304,6 +305,17 @@ try {
   console.warn('Economy Manager not available:', error.message);
 }
 
+// Initialize Stock Market Manager
+let stockMarketManager = null;
+try {
+  if (StockMarketManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    stockMarketManager = new StockMarketManager();
+    global.stockMarketManager = stockMarketManager;
+  }
+} catch (error) {
+  console.warn('Stock Market Manager not available:', error.message);
+}
+
 const {
   runGuildAiPrompt,
   handleAskAiCommand,
@@ -366,6 +378,7 @@ let duelManager;
 let combatXPManager;
 let itemManager;
 let inventoryManager;
+let stockMarketManager;
 
 // ================================================================
 // BOT READY EVENT
@@ -667,6 +680,66 @@ client.once('ready', async () => {
     global.topggManager = topggManager;
   } catch (error) {
     console.error('❌ Failed to initialize Top.gg Manager:', error.message);
+  }
+
+  // Initialize Stock Market Price Updater
+  if (stockMarketManager) {
+    try {
+      // Update prices every 15 minutes for all guilds
+      setInterval(async () => {
+        try {
+          // Get all guild IDs that have stocks
+          const { data: stocks } = await stockMarketManager.supabase
+            .from('stock_market_stocks')
+            .select('guild_id')
+            .eq('status', 'active');
+
+          if (stocks && stocks.length > 0) {
+            const uniqueGuilds = [...new Set(stocks.map(s => s.guild_id))];
+            for (const guildId of uniqueGuilds) {
+              await stockMarketManager.updateStockPrices(guildId);
+            }
+            console.log(`📈 [Stock Market] Updated prices for ${uniqueGuilds.length} guild(s)`);
+          }
+        } catch (error) {
+          console.error('❌ [Stock Market] Error updating prices:', error);
+        }
+      }, 15 * 60 * 1000); // 15 minutes
+      
+      console.log('📈 Stock Market Price Updater initialized (updates every 15 minutes)');
+    } catch (error) {
+      console.error('❌ Failed to initialize Stock Market Price Updater:', error.message);
+    }
+  }
+
+  // Initialize Stock Market Price Updater
+  if (stockMarketManager) {
+    try {
+      // Update prices every 15 minutes for all guilds
+      setInterval(async () => {
+        try {
+          // Get all guild IDs that have stocks
+          const { data: stocks } = await stockMarketManager.supabase
+            .from('stock_market_stocks')
+            .select('guild_id')
+            .eq('status', 'active');
+
+          if (stocks && stocks.length > 0) {
+            const uniqueGuilds = [...new Set(stocks.map(s => s.guild_id))];
+            for (const guildId of uniqueGuilds) {
+              await stockMarketManager.updateStockPrices(guildId);
+            }
+            console.log(`📈 [Stock Market] Updated prices for ${uniqueGuilds.length} guild(s)`);
+          }
+        } catch (error) {
+          console.error('❌ [Stock Market] Error updating prices:', error);
+        }
+      }, 15 * 60 * 1000); // 15 minutes
+      
+      console.log('📈 Stock Market Price Updater initialized (updates every 15 minutes)');
+    } catch (error) {
+      console.error('❌ Failed to initialize Stock Market Price Updater:', error.message);
+    }
   }
 
   // Initialize Vote Rewards Scheduler
@@ -1702,6 +1775,176 @@ client.on('interactionCreate', async (interaction) => {
         );
         if (!allowed) break;
         await handleCasinoCommand(interaction);
+        break;
+      }
+
+      // ============ STOCK MARKET COMMANDS ============
+      case 'stocks': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStocksCommand(interaction);
+        break;
+      }
+
+      case 'stock': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockCommand(interaction);
+        break;
+      }
+
+      case 'stockbuy': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockBuyCommand(interaction);
+        break;
+      }
+
+      case 'stocksell': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockSellCommand(interaction);
+        break;
+      }
+
+      case 'portfolio': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handlePortfolioCommand(interaction);
+        break;
+      }
+
+      case 'stockhistory': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockHistoryCommand(interaction);
+        break;
+      }
+
+      case 'stockleaderboard': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockLeaderboardCommand(interaction);
+        break;
+      }
+
+      // ============ STOCK MARKET COMMANDS ============
+      case 'stocks': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStocksCommand(interaction);
+        break;
+      }
+
+      case 'stock': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockCommand(interaction);
+        break;
+      }
+
+      case 'stockbuy': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockBuyCommand(interaction);
+        break;
+      }
+
+      case 'stocksell': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockSellCommand(interaction);
+        break;
+      }
+
+      case 'portfolio': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handlePortfolioCommand(interaction);
+        break;
+      }
+
+      case 'stockhistory': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockHistoryCommand(interaction);
+        break;
+      }
+
+      case 'stockleaderboard': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'economy',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleStockLeaderboardCommand(interaction);
         break;
       }
 
@@ -5549,6 +5792,81 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('casino')
       .setDescription('🎰 Open het casino menu'),
+
+    // ============ STOCK MARKET COMMANDS ============
+    new SlashCommandBuilder()
+      .setName('stocks')
+      .setDescription('📈 View all available stocks'),
+
+    new SlashCommandBuilder()
+      .setName('stock')
+      .setDescription('📊 View details of a specific stock')
+      .addStringOption((option) =>
+        option
+          .setName('symbol')
+          .setDescription('Stock symbol (e.g., COMCRAFT)')
+          .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stockbuy')
+      .setDescription('💰 Buy stocks')
+      .addStringOption((option) =>
+        option
+          .setName('symbol')
+          .setDescription('Stock symbol to buy')
+          .setRequired(true)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName('shares')
+          .setDescription('Number of shares to buy')
+          .setRequired(true)
+          .setMinValue(1)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stocksell')
+      .setDescription('💸 Sell stocks')
+      .addStringOption((option) =>
+        option
+          .setName('symbol')
+          .setDescription('Stock symbol to sell')
+          .setRequired(true)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName('shares')
+          .setDescription('Number of shares to sell')
+          .setRequired(true)
+          .setMinValue(1)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('portfolio')
+      .setDescription('💼 View your stock portfolio')
+      .addUserOption((option) =>
+        option
+          .setName('user')
+          .setDescription('User to check portfolio for')
+          .setRequired(false)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stockhistory')
+      .setDescription('📜 View your stock transaction history')
+      .addIntegerOption((option) =>
+        option
+          .setName('limit')
+          .setDescription('Number of transactions to show')
+          .setRequired(false)
+          .setMinValue(1)
+          .setMaxValue(50)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stockleaderboard')
+      .setDescription('🏆 View stock market leaderboard (richest portfolios)'),
   ];
 
   // Music commands removed - now handled by separate music-bot
