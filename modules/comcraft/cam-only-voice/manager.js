@@ -5,6 +5,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 class CamOnlyVoiceManager {
   constructor(client) {
@@ -325,11 +326,37 @@ class CamOnlyVoiceManager {
       logChannelId = config.log_channel_id;
     }
     
-    if (!logChannelId) return;
+    if (!logChannelId) {
+      console.log('⚠️ [Cam-Only Voice] No log channel configured for action:', action);
+      return;
+    }
 
     try {
-      const logChannel = await this.client.channels.fetch(logChannelId);
-      if (!logChannel) return;
+      // Try to get channel from cache first, then fetch if needed
+      const guild = member.guild;
+      let logChannel = guild.channels.cache.get(logChannelId);
+      
+      if (!logChannel) {
+        logChannel = await this.client.channels.fetch(logChannelId);
+      }
+      
+      if (!logChannel) {
+        console.error('❌ [Cam-Only Voice] Log channel not found:', logChannelId);
+        return;
+      }
+
+      // Check if channel supports sending messages (text channels)
+      if (!logChannel.isTextBased()) {
+        console.error('❌ [Cam-Only Voice] Log channel must be a text channel, got type:', logChannel.type);
+        return;
+      }
+
+      // Check bot permissions
+      const botMember = await guild.members.fetch(this.client.user.id);
+      if (!logChannel.permissionsFor(botMember).has(['SendMessages', 'EmbedLinks'])) {
+        console.error('❌ [Cam-Only Voice] Bot lacks permissions to send messages in log channel:', logChannelId);
+        return;
+      }
 
       const actionText = action === 'warning' 
         ? `⚠️ Warning ${warningCount}/${config.max_warnings || 2}`
@@ -347,8 +374,15 @@ class CamOnlyVoiceManager {
         .setTimestamp();
 
       await logChannel.send({ embeds: [embed] });
+      console.log(`✅ [Cam-Only Voice] Logged ${action} to channel ${logChannel.name} (${logChannelId})`);
     } catch (error) {
       console.error('❌ [Cam-Only Voice] Error logging action:', error);
+      console.error('  - Channel ID:', logChannelId);
+      console.error('  - Action:', action);
+      console.error('  - Error message:', error.message);
+      if (error.stack) {
+        console.error('  - Stack:', error.stack);
+      }
     }
   }
 
