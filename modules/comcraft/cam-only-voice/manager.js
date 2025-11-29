@@ -79,6 +79,7 @@ class CamOnlyVoiceManager {
       exempt_users: [],
       log_channel_id: null,
       channel_log_channels: {}
+      channel_log_channels: {}
     };
   }
 
