@@ -320,6 +320,169 @@ A: Visit /comcraft/account/referrals in the dashboard to see all your stats.
 - Reroll option
 - Dashboard: /dashboard/[guildId]/giveaways
 
+## 11. USER STATISTICS & ANALYTICS (Premium+)
+- Comprehensive user activity tracking
+- Message statistics (total messages, daily/weekly/monthly)
+- Voice channel activity tracking
+- Daily activity charts
+- Server ranks (message rank, voice rank)
+- Top channels & applications
+- Beautiful stats cards with customizable themes
+- Level and XP display on stats cards
+- Configurable lookback periods
+- Dashboard: /dashboard/[guildId]/stats
+- Commands:
+  * /stats [@user] - View detailed user statistics with visual card
+
+## 12. STOCK MARKET SYSTEM (Premium+)
+**ADVANCED ECONOMY FEATURE - Full stock trading simulation!**
+
+### Overview:
+A complete stock market system where users can buy, sell, and trade stocks. Perfect for engaging communities with economic gameplay.
+
+### Features:
+- **Stock Trading**: Buy and sell stocks with real-time price updates
+- **Portfolio Management**: Track holdings, profit/loss, average buy price
+- **Limit Orders**: Set buy/sell orders at target prices
+- **Stop-Loss & Stop-Profit**: Automatic order execution for risk management
+- **Price Alerts**: Get notified when stocks reach target prices (via DM)
+- **Market Events**: Admin-controlled events (IPO, Crash, Boom, Stock Split, Dividends)
+- **Price Charts**: Visual price history graphs
+- **Market Leaderboard**: Richest portfolios ranked
+- **Automatic Price Updates**: Prices fluctuate every 15 minutes (configurable)
+- **Volatility System**: Each stock has configurable volatility
+- **Trading Fees**: Configurable transaction fees
+- **Dividends**: Automatic dividend payouts to shareholders
+- **Market Activity Log**: Track all transactions
+- **Bulk Operations**: Import/export stocks via JSON
+
+### Commands:
+- `/stocks` - View all available stocks
+- `/stock <symbol>` - View detailed stock information
+- `/stockbuy <symbol> <shares>` - Buy stocks
+- `/stocksell <symbol> <shares>` - Sell stocks
+- `/portfolio [@user]` - View stock portfolio
+- `/stockhistory` - View transaction history
+- `/stockleaderboard` - View richest portfolios
+- `/stockorder` - Create limit order or stop-loss
+  * Types: Limit Buy, Limit Sell, Stop Loss, Stop Profit
+  * Set target price and expiration
+- `/stockorders` - View your pending orders
+- `/stockcancelorder <order_id>` - Cancel a pending order
+- `/stockalert <symbol> <type> <target_price>` - Create price alert
+  * Types: Price Above, Price Below
+  * Get DM notification when price reaches target
+- `/stockalerts` - View your active price alerts
+- `/stockevents` - View active market events
+
+### Dashboard:
+- **Main Page**: /dashboard/[guildId]/economy/stock-market
+- **Tabs**:
+  * Stocks: View, edit, delete stocks
+  * Create Stock: Add new stocks to market
+  * Price Charts: Visual price history graphs
+  * Market Activity Log: Recent transactions
+  * Bulk Operations: Export/import stocks
+  * Events: Create market events (IPO, Crash, Boom, etc.)
+  * Orders: View orders overview and statistics
+  * Config: Market settings (fees, update intervals, limits)
+
+### Setting Up Stock Market:
+1. Go to: /dashboard/[guildId]/economy/stock-market
+2. Click "Create Stock" tab
+3. Configure stock:
+   - Symbol (e.g., COMCRAFT, GAMING)
+   - Name (full company name)
+   - Description
+   - Emoji for display
+   - Base price (starting price)
+   - Volatility (1-100%, affects price fluctuations)
+   - Total shares available
+   - Dividend rate (optional, annual %)
+4. Save stock
+5. Market automatically updates prices every 15 minutes
+6. Users can start trading immediately!
+
+### Market Events (Admin):
+- **IPO**: Initial Public Offering - new stock launch
+- **Crash**: Market crash - prices drop (configurable %)
+- **Boom**: Market boom - prices rise (configurable %)
+- **Stock Split**: Split shares (e.g., 2-for-1)
+- **Dividend**: Announce dividend payout
+- **News**: General market news event
+
+### Advanced Features:
+- **Limit Orders**: Buy/sell when price reaches target
+- **Stop-Loss**: Auto-sell to limit losses
+- **Stop-Profit**: Auto-sell to lock in profits
+- **Price Alerts**: DM notifications when targets hit
+- **Dividend System**: Automatic payouts based on holdings
+- **Price History**: Track price changes over time
+- **Portfolio Analytics**: Profit/loss tracking per stock
+
+### Pro Tips:
+- Start with 3-5 stocks to keep market active
+- Balance volatility (5-15% for stable, 20-50% for volatile)
+- Use market events to create excitement
+- Set reasonable trading fees (0-5%)
+- Monitor market activity log for engagement
+
+## 13. CAM-ONLY VOICE CHANNELS (Premium+)
+- Enforce camera requirement in specific voice channels
+- Configurable grace period (5-60 seconds)
+- Warning system before disconnecting
+- Exempt roles and users
+- Automatic disconnection if camera not enabled
+- Log channel for tracking actions
+- Dashboard: /dashboard/[guildId]/cam-only-voice
+
+### Setting Up Cam-Only Voice:
+1. Go to: /dashboard/[guildId]/cam-only-voice
+2. Enable the feature
+3. Select voice channels that require camera
+4. Configure grace period (time before disconnect)
+5. Set warning preferences (enabled/disabled, max warnings)
+6. Add exempt roles/users (optional)
+7. Set log channel (optional)
+8. Save settings
+
+### How It Works:
+- Users joining cam-only channels without camera get grace period
+- After grace period expires, warnings are sent (if enabled)
+- After max warnings, user is disconnected
+- Users can rejoin once camera is enabled
+- Periodic checks ensure compliance
+
+## 14. RANK-BASED XP MULTIPLIERS (Premium+)
+- Set custom XP multipliers for specific Discord roles
+- Higher multipliers = faster leveling for those roles
+- Combine with subscription tier multipliers
+- Easy role selection in dashboard
+- Dashboard: /dashboard/[guildId]/leveling (Rank Multipliers tab)
+
+### Setting Up Rank Multipliers:
+1. Go to: /dashboard/[guildId]/leveling
+2. Click "Rank Multipliers" tab
+3. Click "Add Multiplier"
+4. Select role from dropdown (shows all server roles)
+5. Set multiplier (e.g., 1.5x = 50% more XP, 2.0x = double XP)
+6. Save
+7. Users with that role automatically get bonus XP!
+
+### Example:
+- VIP Role: 1.5x multiplier = 50% more XP per message
+- Premium Role: 2.0x multiplier = Double XP
+- Staff Role: 1.2x multiplier = 20% bonus
+
+## 15. ANALYTICS DASHBOARD
+- Comprehensive server analytics
+- Member growth charts
+- Message activity trends
+- Command usage statistics
+- Feature usage tracking
+- Time-based analytics (daily, weekly, monthly)
+- Dashboard: /dashboard/[guildId]/analytics
+
 # SETUP GUIDES
 
 ## Getting Started
@@ -502,7 +665,8 @@ https://cdn.discordapp.com/emojis/1423086845637562528.webp
 - \`/serverinfo\` - View server information
 
 **Leveling:**
-- \`/rank [@user]\` - Check level & XP
+- \`/stats [@user]\` - View detailed user statistics with visual card
+- \`/rank [@user]\` - Check level & XP (deprecated, use /stats)
 - \`/leaderboard\` - View server leaderboard
 - \`/setxp @user <amount>\` - Set user XP (Admin)
 
@@ -526,6 +690,21 @@ https://cdn.discordapp.com/emojis/1423086845637562528.webp
 **Casino (Premium+):**
 - \`/casino\` - Open casino menu
 
+**Stock Market (Premium+):**
+- \`/stocks\` - View all stocks
+- \`/stock <symbol>\` - Stock details
+- \`/stockbuy <symbol> <shares>\` - Buy stocks
+- \`/stocksell <symbol> <shares>\` - Sell stocks
+- \`/portfolio [@user]\` - View portfolio
+- \`/stockhistory\` - Transaction history
+- \`/stockleaderboard\` - Richest portfolios
+- \`/stockorder\` - Create limit/stop order
+- \`/stockorders\` - View pending orders
+- \`/stockcancelorder <id>\` - Cancel order
+- \`/stockalert <symbol> <type> <price>\` - Create price alert
+- \`/stockalerts\` - View active alerts
+- \`/stockevents\` - View market events
+
 **Community:**
 - \`/ticket create\` - Create support ticket
 - \`/giveaway start\` - Start a giveaway (Admin)
@@ -535,10 +714,14 @@ https://cdn.discordapp.com/emojis/1423086845637562528.webp
 
 ## Why Upgrade to Premium?
 - **Full Economy System** - Casino games, coin trading
+- **Stock Market** - Complete trading system with limit orders, alerts, dividends
 - **Combat & PVP Duels** - Challenge players, buy gear, level up combat skills
+- **User Statistics** - Beautiful stats cards with activity tracking
 - **Twitch Subscriber Notifications** - Celebrate new subs automatically
 - **Auto-reactions** - Fun emoji reactions on trigger words
 - **Game news** - Keep community informed about game updates
+- **Cam-Only Voice Channels** - Enforce camera requirements
+- **Rank XP Multipliers** - Custom XP bonuses for roles
 - **Unlimited giveaways** - Engage your community
 - **100 custom commands** - Automate your server
 - **Advanced analytics** - Detailed insights
