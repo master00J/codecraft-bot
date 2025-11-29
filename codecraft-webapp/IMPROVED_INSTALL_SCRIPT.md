@@ -77,3 +77,11 @@ EOF
 chmod +x start.sh
 echo "✅ Bot installed successfully with start.sh script!"
 
+# Note: Server will start automatically when user clicks "Start" in Pterodactyl panel
+# The start.sh script will handle pulling code and installing dependencies on first start
+
+echo "🚀 Starting server automatically..."
+cd /home/container
+bash start.sh &
+echo "✅ Server started in background!"
+

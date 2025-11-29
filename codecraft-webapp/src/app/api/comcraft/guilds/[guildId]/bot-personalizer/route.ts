@@ -523,10 +523,31 @@ export async function POST(
               message: `Pterodactyl server starting for custom bot`
             });
         } catch (startError: any) {
-          // If 405 or 404 errors, server might not be ready yet - that's okay
+          // Application API doesn't support POST for power actions, and Client API requires a per-server token
+          // User will need to manually start the server via Pterodactyl panel
+          // This is expected behavior - the server is created and ready to start
           if (startError?.status === 405 || startError?.status === 404 || startError?.message?.includes('405') || startError?.message?.includes('404')) {
-            console.warn(`⚠️  Could not start server automatically (may not be ready yet):`, startError.message);
-            console.log(`ℹ️  Server will need to be started manually via Pterodactyl panel`);
+            console.warn(`⚠️  Cannot start server automatically via API (Application API limitation):`, startError.message);
+            console.log(`ℹ️  Server is ready - please start it manually via Pterodactyl panel:`);
+            console.log(`   Panel URL: ${process.env.PTERODACTYL_PANEL_URL || 'N/A'}/server/${pterodactylServer?.identifier}`);
+            console.log(`   The Install Script has prepared everything - just click "Start"!`);
+            
+            // This is not an error - it's expected behavior
+            // Log it as info, not error
+            await supabase
+              .from('bot_container_events')
+              .insert({
+                guild_id: params.guildId,
+                bot_application_id: botUser.id,
+                event_type: 'server_ready',
+                event_data: {
+                  server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier,
+                  server_identifier: pterodactylServer?.identifier,
+                  note: 'Server created successfully - manual start required due to API limitations'
+                },
+                message: `Server created and ready. Please start manually via Pterodactyl panel.`
+              });
+            return; // Exit early - this is expected
           } else {
             console.error('❌ Error starting Pterodactyl server:', startError);
             
