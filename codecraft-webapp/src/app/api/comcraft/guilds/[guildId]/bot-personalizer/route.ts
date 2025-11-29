@@ -382,6 +382,10 @@ export async function POST(
           ...(process.env.AI_PRIMARY_PROVIDER && { AI_PRIMARY_PROVIDER: process.env.AI_PRIMARY_PROVIDER }),
           ...(process.env.CLAUDE_MODEL && { CLAUDE_MODEL: process.env.CLAUDE_MODEL }),
           ...(process.env.GEMINI_MODEL && { GEMINI_MODEL: process.env.GEMINI_MODEL }),
+          // Twitch environment variables (required by egg)
+          TWITCH_CLIENT_ID: process.env.TWITCH_CLIENT_ID || '',
+          TWITCH_CLIENT_SECRET: process.env.TWITCH_CLIENT_SECRET || '',
+          TWITCH_EVENTSUB_SECRET: process.env.TWITCH_EVENTSUB_SECRET || '',
         }
       });
 
@@ -417,6 +421,11 @@ export async function POST(
           ...(process.env.GEMINI_API_KEY && { 'GEMINI_API_KEY': process.env.GEMINI_API_KEY }),
           ...(process.env.ANTHROPIC_API_KEY && { 'ANTHROPIC_API_KEY': process.env.ANTHROPIC_API_KEY }),
           ...(process.env.DISCORD_CLIENT_ID && { 'DISCORD_CLIENT_ID': process.env.DISCORD_CLIENT_ID }),
+          
+          // Twitch environment variables (required by egg)
+          'TWITCH_CLIENT_ID': process.env.TWITCH_CLIENT_ID || '',
+          'TWITCH_CLIENT_SECRET': process.env.TWITCH_CLIENT_SECRET || '',
+          'TWITCH_EVENTSUB_SECRET': process.env.TWITCH_EVENTSUB_SECRET || '',
         };
         
         await client.setEnvironmentVariables(pterodactylServer.uuid, envVars);
