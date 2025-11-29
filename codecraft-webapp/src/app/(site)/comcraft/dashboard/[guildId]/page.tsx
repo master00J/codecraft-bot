@@ -1618,6 +1618,16 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                     </Card>
                   </Link>
 
+                  <Link href={`/comcraft/dashboard/${guildId}/quests`}>
+                    <Card className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-orange-500/50 h-full hover:scale-105 duration-200">
+                      <div className="bg-gradient-to-br from-orange-500/10 to-amber-500/10 p-5">
+                        <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">🎯</div>
+                        <h3 className="font-semibold text-base mb-1">Quests</h3>
+                        <p className="text-xs text-muted-foreground">Quests & missions</p>
+                      </div>
+                    </Card>
+                  </Link>
+
                   <Link href={`/comcraft/dashboard/${guildId}/moderation`}>
                     <Card className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-red-500/50 h-full hover:scale-105 duration-200">
                       <div className="bg-gradient-to-br from-red-500/10 to-rose-500/10 p-5">

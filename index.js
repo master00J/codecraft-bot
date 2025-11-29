@@ -316,6 +316,30 @@ try {
   console.warn('Stock Market Manager not available:', error.message);
 }
 
+// Initialize Quest Manager
+let questManager = null;
+let questCommands = null;
+try {
+  const QuestManager = require('./modules/comcraft/quests/manager');
+  const QuestCommands = require('./modules/comcraft/quests/commands');
+  if (QuestManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    questManager = new QuestManager(client);
+    questManager.setClient(client); // Set client for notifications
+    questManager.setManagers(economyManager, xpManager); // Set managers for rewards
+    global.questManager = questManager;
+    
+    // Initialize quest commands
+    if (QuestCommands && economyManager && xpManager) {
+      questCommands = new QuestCommands(questManager, economyManager, xpManager);
+      global.questCommands = questCommands;
+    }
+    
+    console.log('✅ Quest Manager initialized');
+  }
+} catch (error) {
+  console.warn('Quest Manager not available:', error.message);
+}
+
 const {
   runGuildAiPrompt,
   handleAskAiCommand,
@@ -387,6 +411,11 @@ client.once('ready', async () => {
   console.log(`📊 Serving ${client.guilds.cache.size} servers`);
 
   client.user.setActivity('codecraft-solutions.com | /help', { type: 3 });
+
+  // Set client for quest manager if available
+  if (questManager) {
+    questManager.setClient(client);
+  }
 
   // Emergency Audio Diagnostics
   console.log('\n🔍 === EMERGENCY AUDIO DIAGNOSTICS ===');
@@ -1451,6 +1480,67 @@ client.on('interactionCreate', async (interaction) => {
       case 'setxp':
         await handleSetXPCommand(interaction);
         break;
+
+      // ============ QUEST COMMANDS ============
+      case 'quests': {
+        if (!global.questCommands) {
+          return interaction.reply({
+            content: '❌ Quest system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'quests',
+          'Premium'
+        );
+        if (!allowed) break;
+        await global.questCommands.handleQuestsCommand(interaction);
+        break;
+      }
+
+      case 'quest': {
+        if (!global.questCommands) {
+          return interaction.reply({
+            content: '❌ Quest system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'quests',
+          'Premium'
+        );
+        if (!allowed) break;
+        
+        const subcommand = interaction.options.getSubcommand();
+        if (subcommand === 'progress') {
+          await global.questCommands.handleQuestProgressCommand(interaction);
+        } else if (subcommand === 'complete') {
+          await global.questCommands.handleQuestCompleteCommand(interaction);
+        }
+        break;
+      }
+
+      case 'questchain': {
+        if (!global.questCommands) {
+          return interaction.reply({
+            content: '❌ Quest system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'quests',
+          'Premium'
+        );
+        if (!allowed) break;
+        await global.questCommands.handleQuestChainCommand(interaction);
+        break;
+      }
 
       // ============ MODERATION COMMANDS ============
       case 'warn':
@@ -5824,6 +5914,72 @@ async function registerCommands(clientInstance) {
       .addUserOption((option) => option.setName('user').setDescription('User to check stats for').setRequired(false)),
 
     new SlashCommandBuilder().setName('leaderboard').setDescription('View the server leaderboard'),
+
+    // Quests
+    new SlashCommandBuilder()
+      .setName('quests')
+      .setDescription('View available quests')
+      .addStringOption((option) =>
+        option
+          .setName('category')
+          .setDescription('Filter by category')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Daily', value: 'daily' },
+            { name: 'Weekly', value: 'weekly' },
+            { name: 'Special', value: 'special' },
+            { name: 'Event', value: 'event' },
+            { name: 'General', value: 'general' }
+          )
+      )
+      .addUserOption((option) =>
+        option
+          .setName('user')
+          .setDescription('User to check quests for')
+          .setRequired(false)
+      ),
+    
+    new SlashCommandBuilder()
+      .setName('quest')
+      .setDescription('Quest management commands')
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('progress')
+          .setDescription('View detailed progress for a specific quest')
+          .addStringOption((option) =>
+            option
+              .setName('quest_name')
+              .setDescription('Name of the quest')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('complete')
+          .setDescription('[Admin] Manually complete a quest for a user')
+          .addStringOption((option) =>
+            option
+              .setName('quest_name')
+              .setDescription('Name of the quest')
+              .setRequired(true)
+          )
+          .addUserOption((option) =>
+            option
+              .setName('user')
+              .setDescription('User to complete quest for')
+              .setRequired(false)
+          )
+      ),
+    
+    new SlashCommandBuilder()
+      .setName('questchain')
+      .setDescription('View quest chain progress')
+      .addStringOption((option) =>
+        option
+          .setName('chain_name')
+          .setDescription('Name of the quest chain')
+          .setRequired(false)
+      ),
 
     new SlashCommandBuilder()
       .setName('setxp')

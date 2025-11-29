@@ -31,7 +31,8 @@ import {
   Newspaper,
   Clock,
   Vote,
-  Video
+  Video,
+  Target
 } from 'lucide-react';
 
 interface NavItem {
@@ -97,6 +98,7 @@ export default function GuildDashboardLayout({
     { name: 'Scheduled Messages', href: `/comcraft/dashboard/${guildId}/scheduled-messages`, icon: Clock },
     { name: 'Vote Kick', href: `/comcraft/dashboard/${guildId}/vote-kick`, icon: Vote },
     { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video },
+    { name: 'Quests', href: `/comcraft/dashboard/${guildId}/quests`, icon: Target },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings },
   ];

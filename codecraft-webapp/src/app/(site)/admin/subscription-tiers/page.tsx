@@ -216,6 +216,13 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     defaultEnabled: false,
     requiredTier: 'Premium',
   },
+  {
+    id: 'quests',
+    label: 'Quests & Missions',
+    description: 'Create custom quests and missions for server members to complete for rewards.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
 ];
 
 const LIMIT_DEFINITIONS: LimitDefinition[] = [

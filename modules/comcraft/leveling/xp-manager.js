@@ -245,6 +245,26 @@ class XPManager {
 
       console.log(`   ✅ XP updated successfully! ${leveledUp ? '🎉 LEVEL UP!' : ''}`);
 
+      // Track quest progress (xp_gain)
+      if (global.questManager) {
+        try {
+          if (await global.questManager.isTracking(guild.id, 'xp_gain')) {
+            await global.questManager.updateProgress(guild.id, user.id, 'xp_gain', {
+              amount: xpGain
+            });
+          }
+
+          // Track quest progress (level_reach) if user leveled up
+          if (leveledUp && await global.questManager.isTracking(guild.id, 'level_reach')) {
+            await global.questManager.updateProgress(guild.id, user.id, 'level_reach', {
+              level: newLevel
+            });
+          }
+        } catch (error) {
+          console.error('[XP] Error updating quest progress:', error.message);
+        }
+      }
+
       return {
         xpGained: xpGain,
         leveledUp,

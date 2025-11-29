@@ -46,6 +46,20 @@ function createMessageCreateHandler({
       }
     }
 
+    // Track message for quest progress (message_count quest type)
+    if (global.questManager && message.guild && message.author && !message.author.bot) {
+      try {
+        if (await global.questManager.isTracking(message.guild.id, 'message_count')) {
+          await global.questManager.updateProgress(message.guild.id, message.author.id, 'message_count', {
+            channelId: message.channel.id,
+            increment: 1
+          });
+        }
+      } catch (error) {
+        console.error('[MessageCreate] Error updating quest progress:', error.message);
+      }
+    }
+
     // Auto-moderation check
     const violations = await autoMod.checkMessage(message);
     if (violations) {

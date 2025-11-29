@@ -178,6 +178,19 @@ class EconomyManager {
     // Log transaction
     await this.logTransaction(guildId, null, userId, amount, transactionType, description, metadata);
 
+    // Track quest progress (coin_earn) - only for legitimate earnings (not admin_add, admin_remove)
+    if (global.questManager && !['admin_add', 'admin_remove'].includes(transactionType)) {
+      try {
+        if (await global.questManager.isTracking(guildId, 'coin_earn')) {
+          await global.questManager.updateProgress(guildId, userId, 'coin_earn', {
+            amount: amount
+          });
+        }
+      } catch (error) {
+        console.error('[Economy] Error updating quest progress for coin_earn:', error.message);
+      }
+    }
+
     return { success: true, newBalance: newBalance.toString() };
   }
 
@@ -213,6 +226,19 @@ class EconomyManager {
 
     // Log transaction
     await this.logTransaction(guildId, userId, null, amount, transactionType, description, metadata);
+
+    // Track quest progress (coin_spend)
+    if (global.questManager && !['admin_remove'].includes(transactionType)) {
+      try {
+        if (await global.questManager.isTracking(guildId, 'coin_spend')) {
+          await global.questManager.updateProgress(guildId, userId, 'coin_spend', {
+            amount: amount
+          });
+        }
+      } catch (error) {
+        console.error('[Economy] Error updating quest progress for coin_spend:', error.message);
+      }
+    }
 
     return { success: true, newBalance: newBalance.toString() };
   }

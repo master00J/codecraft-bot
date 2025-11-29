@@ -509,6 +509,7 @@ class ConfigManager {
         ai_tokens_monthly: 50000,
         economy: false,
         casino: false,
+        quests: false,
       },
       basic: {
         leveling: true,
@@ -528,6 +529,7 @@ class ConfigManager {
         ai_tokens_monthly: 250000,
         economy: false,
         casino: false,
+        quests: false,
       },
       premium: {
         leveling: true,
@@ -548,6 +550,7 @@ class ConfigManager {
         ai_tokens_monthly: 1000000,
         economy: true,
         casino: true,
+        quests: true,
       },
       enterprise: {
         everything: true,
@@ -567,6 +570,7 @@ class ConfigManager {
         ai_tokens_monthly: -1,
         economy: true,
         casino: true,
+        quests: true,
       }
     };
 
