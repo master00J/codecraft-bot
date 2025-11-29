@@ -100,10 +100,20 @@ export default function PollsConfig() {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/discord/channels`);
       if (response.ok) {
         const data = await response.json();
-        setChannels(data.channels?.filter((ch: any) => ch.type === 0) || []); // Only text channels
+        // Bot API returns { success, channels: { all, text, voice, categories } }
+        // We only want text channels (already filtered by bot)
+        if (data.success && data.channels) {
+          setChannels(data.channels.text || []);
+        } else if (Array.isArray(data.channels)) {
+          // Fallback: if channels is already an array
+          setChannels(data.channels.filter((ch: any) => ch.type === 0 || ch.type === 5));
+        } else {
+          setChannels([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching channels:', error);
+      setChannels([]);
     }
   };
 
