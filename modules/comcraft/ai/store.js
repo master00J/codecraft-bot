@@ -77,6 +77,7 @@ class AiStore {
       default_provider: 'gemini',
       chat_enabled: false,
       chat_channel_id: null,
+      allowed_channel_ids: [],
       chat_reply_in_thread: true,
       memory_enabled: true,
       memory_max_entries: 200,

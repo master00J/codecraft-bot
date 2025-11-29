@@ -14,7 +14,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowLeft, Loader2, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 
 interface PersonaFormState {
   assistantName: string;
@@ -28,6 +28,7 @@ interface SettingsFormState {
   defaultProvider: 'gemini' | 'claude';
   chatEnabled: boolean;
   chatChannelId: string | null;
+  allowedChannelIds: string[]; // Array of channel IDs where AI is allowed
   chatReplyInThread: boolean;
   memoryEnabled: boolean;
   memoryMaxEntries: number;
@@ -43,6 +44,7 @@ function mapSettingsToForm(raw: any): SettingsFormState {
     defaultProvider: provider,
     chatEnabled: Boolean(raw?.chat_enabled),
     chatChannelId: raw?.chat_channel_id || null,
+    allowedChannelIds: Array.isArray(raw?.allowed_channel_ids) ? raw.allowed_channel_ids : [],
     chatReplyInThread: raw?.chat_reply_in_thread !== false,
     memoryEnabled: raw?.memory_enabled !== false,
     memoryMaxEntries: Number(raw?.memory_max_entries ?? 200),
@@ -119,6 +121,7 @@ export default function GuildAiPage() {
     defaultProvider: 'gemini',
     chatEnabled: false,
     chatChannelId: null,
+    allowedChannelIds: [],
     chatReplyInThread: true,
     memoryEnabled: true,
     memoryMaxEntries: 200,
@@ -261,6 +264,7 @@ export default function GuildAiPage() {
             default_provider: settingsForm.defaultProvider,
             chat_enabled: settingsForm.chatEnabled,
             chat_channel_id: settingsForm.chatChannelId,
+            allowed_channel_ids: settingsForm.allowedChannelIds,
             chat_reply_in_thread: settingsForm.chatReplyInThread,
             memory_enabled: settingsForm.memoryEnabled,
             memory_max_entries: settingsForm.memoryMaxEntries,
@@ -300,6 +304,7 @@ export default function GuildAiPage() {
             default_provider: settingsForm.defaultProvider,
             chat_enabled: settingsForm.chatEnabled,
             chat_channel_id: settingsForm.chatChannelId,
+            allowed_channel_ids: settingsForm.allowedChannelIds,
             chat_reply_in_thread: settingsForm.chatReplyInThread,
             memory_enabled: settingsForm.memoryEnabled,
             memory_max_entries: settingsForm.memoryMaxEntries,
@@ -803,6 +808,60 @@ export default function GuildAiPage() {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">{t('settings.aiChatChannelHelp')}</p>
+                    <p className="text-xs text-muted-foreground mt-1">⚠️ Legacy option - Use "Allowed Channels" below for multiple channels</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Allowed Channels (optional)</Label>
+                    <p className="text-xs text-muted-foreground">Select channels where AI Assistant is allowed to respond. Leave empty to allow all channels (when chat is enabled).</p>
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        if (value && !settingsForm.allowedChannelIds.includes(value)) {
+                          setSettingsForm((current) => ({
+                            ...current,
+                            allowedChannelIds: [...current.allowedChannelIds, value],
+                          }));
+                        }
+                      }}
+                      disabled={isAiFeatureDisabled || !settingsForm.chatEnabled}
+                    >
+                      <SelectTrigger className="max-w-xs">
+                        <SelectValue placeholder="Select a channel to allow" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {channels
+                          .filter((ch) => !settingsForm.allowedChannelIds.includes(ch.id))
+                          .map((channel) => (
+                            <SelectItem key={channel.id} value={channel.id}>
+                              {channel.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {settingsForm.allowedChannelIds.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {settingsForm.allowedChannelIds.map((channelId) => {
+                          const channel = channels.find((ch) => ch.id === channelId);
+                          return (
+                            <Badge key={channelId} variant="secondary" className="flex items-center gap-1">
+                              {channel?.name || channelId}
+                              <button
+                                onClick={() => {
+                                  setSettingsForm((current) => ({
+                                    ...current,
+                                    allowedChannelIds: current.allowedChannelIds.filter((id) => id !== channelId),
+                                  }));
+                                }}
+                                className="ml-1 hover:text-destructive"
+                                disabled={isAiFeatureDisabled}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center justify-between border rounded-lg p-3">
                     <div>

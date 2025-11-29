@@ -264,8 +264,20 @@ function createAiHandlers({
 
       const baseChannelId = message.channel.isThread?.() ? message.channel.parentId : message.channel.id;
 
-      if (!mentionTriggered && settings?.chat_channel_id && settings.chat_channel_id !== baseChannelId) {
-        return false;
+      // Check if channel is allowed
+      if (!mentionTriggered) {
+        // First check legacy chat_channel_id (backward compatibility)
+        if (settings?.chat_channel_id && settings.chat_channel_id !== baseChannelId) {
+          return false;
+        }
+        
+        // Then check allowed_channel_ids array (new feature)
+        if (settings?.allowed_channel_ids && Array.isArray(settings.allowed_channel_ids) && settings.allowed_channel_ids.length > 0) {
+          // If allowed_channel_ids is set and not empty, only allow those channels
+          if (!settings.allowed_channel_ids.includes(baseChannelId)) {
+            return false;
+          }
+        }
       }
 
       let prompt = message.content?.trim() || '';
