@@ -492,34 +492,26 @@ export async function POST(
           }
         });
 
-      // Start the server (async, don't wait)
-      // Ensure server is ready before starting
-      client.waitForServerReady(pterodactylServer.uuid, 30000)
-        .then(() => {
-          return client.sendPowerAction(pterodactylServer.uuid, 'start');
-        })
-        .then(() => {
-          console.log(`✅ Pterodactyl sub-server started: ${pterodactylServer?.identifier}`);
+      // Start the server automatically after a short delay
+      // Note: We can't reliably check server status via API, so we just wait and try to start
+      console.log(`⏳ Waiting 15 seconds for server installation to complete before starting...`);
+      setTimeout(async () => {
+        try {
+          console.log(`🚀 Attempting to start Pterodactyl server: ${pterodactylServer?.identifier}`);
+          await client.sendPowerAction(pterodactylServer.uuid, 'start');
+          console.log(`✅ Pterodactyl server start command sent: ${pterodactylServer?.identifier}`);
           
           // Update status to 'starting' (only if column exists)
-          supabase
+          await supabase
             .from('custom_bot_tokens')
             .update({
               server_status: 'starting',
               updated_at: new Date().toISOString()
             })
-            .eq('guild_id', params.guildId)
-            .then(({ error: statusError }) => {
-              if (statusError) {
-                // Ignore if column doesn't exist
-                if (statusError.code !== 'PGRST204') {
-                  console.error('❌ Error updating server status to starting:', statusError);
-                }
-              }
-            });
+            .eq('guild_id', params.guildId);
 
           // Log start event
-          supabase
+          await supabase
             .from('bot_container_events')
             .insert({
               guild_id: params.guildId,
@@ -530,44 +522,39 @@ export async function POST(
               },
               message: `Pterodactyl server starting for custom bot`
             });
-        })
-        .catch((startError) => {
-          // If 409 error (still installing), log but don't fail
-          if (startError?.message?.includes('409') || startError?.message?.includes('installation')) {
-            console.warn(`⚠️  Server still installing, will start automatically when ready`);
+        } catch (startError: any) {
+          // If 405 or 404 errors, server might not be ready yet - that's okay
+          if (startError?.status === 405 || startError?.status === 404 || startError?.message?.includes('405') || startError?.message?.includes('404')) {
+            console.warn(`⚠️  Could not start server automatically (may not be ready yet):`, startError.message);
+            console.log(`ℹ️  Server will need to be started manually via Pterodactyl panel`);
           } else {
             console.error('❌ Error starting Pterodactyl server:', startError);
-          }
-          
-          // Update status to 'error' (only if column exists)
-          supabase
-            .from('custom_bot_tokens')
-            .update({
-              server_status: 'error',
-              updated_at: new Date().toISOString()
-            })
-            .eq('guild_id', params.guildId)
-            .then(({ error: statusError }) => {
-              // Ignore if column doesn't exist
-              if (statusError && statusError.code !== 'PGRST204') {
-                console.error('❌ Error updating server status to error:', statusError);
-              }
-            });
+            
+            // Update status to 'error' (only if column exists)
+            await supabase
+              .from('custom_bot_tokens')
+              .update({
+                server_status: 'error',
+                updated_at: new Date().toISOString()
+              })
+              .eq('guild_id', params.guildId);
 
-          // Log error event
-          supabase
-            .from('bot_container_events')
-            .insert({
-              guild_id: params.guildId,
-              bot_application_id: botUser.id,
-              event_type: 'server_error',
-              event_data: {
-                server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier,
-                error: startError.message
-              },
-              message: `Failed to start Pterodactyl server: ${startError.message}`
-            });
-        });
+            // Log error event
+            await supabase
+              .from('bot_container_events')
+              .insert({
+                guild_id: params.guildId,
+                bot_application_id: botUser.id,
+                event_type: 'server_error',
+                event_data: {
+                  server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier,
+                  error: startError.message
+                },
+                message: `Failed to start Pterodactyl server: ${startError.message}`
+              });
+          }
+        }
+      }, 15000); // Wait 15 seconds before attempting to start
 
     } catch (provisioningErr: any) {
       console.error('❌ Error provisioning Pterodactyl server:', provisioningErr);
