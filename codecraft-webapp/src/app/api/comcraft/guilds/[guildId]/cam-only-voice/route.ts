@@ -88,6 +88,7 @@ export async function PATCH(
       exempt_roles: body.exempt_roles || [],
       exempt_users: body.exempt_users || [],
       log_channel_id: body.log_channel_id || null,
+      channel_log_channels: body.channel_log_channels || {},
       updated_at: new Date().toISOString()
     };
 
