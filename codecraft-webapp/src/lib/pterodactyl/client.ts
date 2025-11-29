@@ -539,6 +539,24 @@ Please check:
     action: 'start' | 'stop' | 'restart' | 'kill'
   ): Promise<void> {
     try {
+      // Try Application API first (for admin access)
+      try {
+        const response = await this.request(
+          `/servers/${serverUuid}/power`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ signal: action })
+          },
+          'application'
+        )
+        console.log(`🔌 Power action sent via Application API: ${action} for ${serverUuid}`)
+        return
+      } catch (appError: any) {
+        // If Application API fails, try Client API as fallback
+        console.log(`⚠️  Application API power action failed, trying Client API...`)
+      }
+      
+      // Fallback to Client API
       const response = await this.request(
         `/servers/${serverUuid}/power`,
         {
@@ -548,7 +566,7 @@ Please check:
         'client'
       )
 
-      console.log(`🔌 Power action sent: ${action} for ${serverUuid}`)
+      console.log(`🔌 Power action sent via Client API: ${action} for ${serverUuid}`)
     } catch (error: any) {
       // Handle 404 - server doesn't exist (already deleted)
       if (error?.isNotFound || error?.status === 404 || error.message?.includes('404') || error.message?.includes('NotFound')) {
