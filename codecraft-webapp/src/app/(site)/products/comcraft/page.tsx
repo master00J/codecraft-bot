@@ -37,6 +37,12 @@ import {
   Smile,
   Coins,
   Settings,
+  TrendingUp,
+  Video,
+  Award,
+  Clock,
+  Image as ImageIcon,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -308,6 +314,10 @@ export default function ComcraftProductPage() {
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
                   <span>Automatic role rewards</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Rank-based XP multipliers</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
@@ -652,6 +662,190 @@ export default function ComcraftProductPage() {
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
                   <span>All Comcraft features included</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-rose-500">
+              <div className="bg-rose-100 dark:bg-rose-900/30 p-3 rounded-lg w-fit mb-4">
+                <TrendingUp className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Stock Market System</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Advanced stock trading simulation with real-time price updates, limit orders, dividends, and market events. Engage your community with a complete economy experience.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Buy & sell stocks with real-time prices</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Limit orders & stop-loss protection</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Market events (IPOs, crashes, dividends)</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Price alerts & portfolio tracking</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Price charts & market leaderboards</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-blue-500">
+              <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg w-fit mb-4">
+                <BarChart3 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">User Statistics & Analytics</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Comprehensive user activity tracking with beautiful stats cards. Track messages, voice activity, ranks, and more with customizable themes and visualizations.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Message & voice activity tracking</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Beautiful customizable stats cards</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Server ranks & top channels</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Daily activity charts & insights</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-purple-500">
+              <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg w-fit mb-4">
+                <Video className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Cam-Only Voice Channels</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Enforce camera requirements in specific voice channels with configurable grace periods, warnings, and automatic disconnection. Perfect for meetings and video calls.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Require camera in selected channels</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Configurable grace period & warnings</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Timeout system for repeated violations</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Exempt roles & per-channel logging</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-indigo-500">
+              <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg w-fit mb-4">
+                <Award className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Rank-Based XP Multipliers</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Reward specific Discord roles with custom XP multipliers. VIP members, staff, and premium roles can earn XP faster than regular members.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Custom multipliers per role</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Combines with tier bonuses</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Easy role selection in dashboard</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-orange-500">
+              <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg w-fit mb-4">
+                <Clock className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Scheduled Messages</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Schedule announcements, reminders, and messages to be sent automatically at specific times or intervals. Perfect for regular updates and community management.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Schedule messages at specific times</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Recurring messages & intervals</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Rich embed support & variables</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-pink-500">
+              <div className="bg-pink-100 dark:bg-pink-900/30 p-3 rounded-lg w-fit mb-4">
+                <ImageIcon className="h-8 w-8 text-pink-600 dark:text-pink-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Embed Builder</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Create stunning Discord embeds with our visual editor. Design custom messages, announcements, and notifications with colors, images, fields, and more.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Visual embed editor</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Custom colors, images & thumbnails</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Fields, footers & timestamps</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-green-500">
+              <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg w-fit mb-4">
+                <MessageSquarePlus className="h-8 w-8 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Feedback & Suggestions System</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Let members submit feedback and suggestions directly through Discord. Manage, review, and respond to community input from the dashboard.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Easy submission via commands</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Dashboard management & review</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Status tracking & responses</span>
                 </li>
               </ul>
             </Card>
