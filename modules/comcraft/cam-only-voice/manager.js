@@ -5,7 +5,6 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { EmbedBuilder } = require('discord.js');
-const { EmbedBuilder } = require('discord.js');
 
 class CamOnlyVoiceManager {
   constructor(client) {
