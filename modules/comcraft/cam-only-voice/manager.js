@@ -273,18 +273,25 @@ class CamOnlyVoiceManager {
               const expiresAt = new Date(timeoutData.expires_at);
               const now = new Date();
               const remainingMs = expiresAt.getTime() - now.getTime();
-              const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
-              const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
-              const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+              
+              // Calculate time remaining correctly (use floor, not ceil, to avoid rounding up)
+              const remainingMinutes = Math.floor(remainingMs / (60 * 1000));
+              const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+              const remainingDays = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
 
               let timeLeft;
               if (remainingDays >= 1) {
                 timeLeft = `${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
               } else if (remainingHours >= 1) {
                 timeLeft = `${remainingHours} hour${remainingHours > 1 ? 's' : ''}`;
-              } else {
+              } else if (remainingMinutes >= 1) {
                 timeLeft = `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+              } else {
+                timeLeft = 'less than a minute';
               }
+
+              // Get channelId from the timeout or from newState (save before disconnect)
+              const targetChannelId = newState.channelId || channelId;
 
               // Disconnect user
               await member.voice.disconnect('You are timed out from this cam-only voice channel');
@@ -293,7 +300,7 @@ class CamOnlyVoiceManager {
                 .setColor(0xFF0000)
                 .setTitle('🚫 Timeout Active')
                 .setDescription(
-                  `You cannot join <#${newState.channelId}> because you are currently timed out.\n\n` +
+                  `You cannot join <#${targetChannelId}> because you are currently timed out.\n\n` +
                   `**Time remaining:** ${timeLeft}\n\n` +
                   `You were timed out for not having your camera enabled. Please wait until the timeout expires.`
                 )
@@ -352,18 +359,25 @@ class CamOnlyVoiceManager {
               const expiresAt = new Date(timeoutData.expires_at);
               const now = new Date();
               const remainingMs = expiresAt.getTime() - now.getTime();
-              const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
-              const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
-              const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+              
+              // Calculate time remaining correctly (use floor, not ceil, to avoid rounding up)
+              const remainingMinutes = Math.floor(remainingMs / (60 * 1000));
+              const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+              const remainingDays = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
 
               let timeLeft;
               if (remainingDays >= 1) {
                 timeLeft = `${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
               } else if (remainingHours >= 1) {
                 timeLeft = `${remainingHours} hour${remainingHours > 1 ? 's' : ''}`;
-              } else {
+              } else if (remainingMinutes >= 1) {
                 timeLeft = `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+              } else {
+                timeLeft = 'less than a minute';
               }
+
+              // Save channelId before disconnect (channelId comes from the timeout query)
+              const targetChannelId = newState.channelId || timeoutData.channel_id;
 
               // Disconnect user (move them back to their previous channel or disconnect)
               await member.voice.disconnect('You are timed out from this cam-only voice channel');
@@ -372,7 +386,7 @@ class CamOnlyVoiceManager {
                 .setColor(0xFF0000)
                 .setTitle('🚫 Timeout Active')
                 .setDescription(
-                  `You cannot join <#${newState.channelId}> because you are currently timed out.\n\n` +
+                  `You cannot join <#${targetChannelId}> because you are currently timed out.\n\n` +
                   `**Time remaining:** ${timeLeft}\n\n` +
                   `You were timed out for not having your camera enabled. Please wait until the timeout expires.`
                 )
@@ -505,17 +519,21 @@ class CamOnlyVoiceManager {
         if (timeoutExpiresAt) {
           const now = new Date();
           const remainingMs = timeoutExpiresAt.getTime() - now.getTime();
-          const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
-          const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
-          const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+          
+          // Calculate time remaining correctly (use floor, not ceil, to avoid rounding up)
+          const remainingMinutes = Math.floor(remainingMs / (60 * 1000));
+          const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+          const remainingDays = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
 
           let timeLeft;
           if (remainingDays >= 1) {
             timeLeft = `${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
           } else if (remainingHours >= 1) {
             timeLeft = `${remainingHours} hour${remainingHours > 1 ? 's' : ''}`;
-          } else {
+          } else if (remainingMinutes >= 1) {
             timeLeft = `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+          } else {
+            timeLeft = 'less than a minute';
           }
 
           timeoutMessage = `\n\n⏰ **Timeout:** You are timed out for ${channelTimeout.duration} ${channelTimeout.unit} (${timeLeft} remaining). You cannot rejoin this channel until the timeout expires.`;
