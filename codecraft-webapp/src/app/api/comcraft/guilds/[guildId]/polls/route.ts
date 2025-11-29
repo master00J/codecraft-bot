@@ -2,12 +2,53 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
-import { getGuildAccess } from '@/lib/comcraft/guild-access';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function getGuildAccess(guildId: string, discordId: string) {
+  const { data: guild, error: guildError } = await supabaseAdmin
+    .from('guild_configs')
+    .select('owner_discord_id')
+    .eq('guild_id', guildId)
+    .maybeSingle();
+
+  if (guildError || !guild) {
+    console.error('Guild lookup error:', guildError);
+    return { allowed: false, reason: 'Guild not found' };
+  }
+
+  if (guild.owner_discord_id === discordId) {
+    return { allowed: true };
+  }
+
+  const { data: authorized } = await supabaseAdmin
+    .from('guild_authorized_users')
+    .select('role')
+    .eq('guild_id', guildId)
+    .eq('discord_id', discordId)
+    .maybeSingle();
+
+  if (authorized) {
+    return { allowed: true };
+  }
+
+  // Check if user is platform admin
+  const { data: user } = await supabaseAdmin
+    .from('users')
+    .select('is_admin')
+    .eq('discord_id', discordId)
+    .maybeSingle();
+
+  if (user?.is_admin) {
+    return { allowed: true };
+  }
+
+  console.log('Access denied for user', discordId, 'to guild', guildId);
+  return { allowed: false, reason: 'Access denied' };
+}
 
 // GET - Fetch all polls for a guild
 export async function GET(
