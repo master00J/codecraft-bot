@@ -447,12 +447,23 @@ Please check:
     }
   }
 
-  // Get server resource usage (via client API)
+  // Get server resource usage (via Application API)
   async getServerResources(serverUuid: string): Promise<ServerResourceUsage> {
-    const response = await this.request<any>(
-      `/servers/${serverUuid}/resources`
-    )
-    return response.attributes
+    try {
+      const response = await this.request<any>(
+        `/servers/${serverUuid}/resources`,
+        {},
+        'application' // Use Application API
+      )
+      // Handle both response formats: { attributes } or { data: { attributes } }
+      return 'data' in response ? response.data.attributes : response.attributes
+    } catch (error: any) {
+      // Fallback: try without specifying API mode (might default correctly)
+      const response = await this.request<any>(
+        `/servers/${serverUuid}/resources`
+      )
+      return 'data' in response ? response.data.attributes : response.attributes
+    }
   }
 
   // Send console command to server (Client API)
