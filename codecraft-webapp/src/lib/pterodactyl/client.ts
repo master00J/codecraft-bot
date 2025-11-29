@@ -235,12 +235,13 @@ Please verify:
       // Create server using Application API
       // Note: Pterodactyl Application API expects 'user' and 'egg' (not 'user_id' and 'egg_id')
       // Environment variables must be provided here because they are required by the egg
+      // IMPORTANT: Use 'bash start.sh' as startup command to ensure dependencies are installed
       const serverData: any = {
         name: options.name,
         user: userId, // Application API expects 'user', not 'user_id'
         egg: eggId,   // Application API expects 'egg', not 'egg_id'
         docker_image: PTERODACTYL_CONFIG.DOCKER_IMAGE,
-        startup: PTERODACTYL_CONFIG.STARTUP_COMMAND,
+        startup: process.env.BOT_STARTUP_COMMAND || 'bash start.sh', // Use bash start.sh to install dependencies
         environment: {
           NODE_ENV: 'production',
           // Include environment variables from options (required by egg)
