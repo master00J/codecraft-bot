@@ -594,7 +594,6 @@ export default function BotPersonalizer() {
                 <div className="space-y-2">
                   <Label htmlFor="presenceType">Status Type</Label>
                   <Select
-                    id="presenceType"
                     value={botConfig?.bot_presence_type || 'watching'}
                     onValueChange={async (value) => {
                       setPresenceSaving(true);

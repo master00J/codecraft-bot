@@ -26,7 +26,8 @@ interface CamOnlyVoiceConfig {
   max_warnings: number;
   exempt_roles: string[];
   exempt_users: string[];
-  log_channel_id: string | null;
+  log_channel_id: string | null; // Legacy: global log channel (kept for backward compatibility)
+  channel_log_channels?: Record<string, string>; // Per-voice-channel log channels: {voice_channel_id: log_channel_id}
 }
 
 export default function CamOnlyVoicePage() {
@@ -44,6 +45,7 @@ export default function CamOnlyVoicePage() {
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedExemptRoles, setSelectedExemptRoles] = useState<string[]>([]);
   const [selectedExemptUsers, setSelectedExemptUsers] = useState<string[]>([]);
+  const [channelLogChannels, setChannelLogChannels] = useState<Record<string, string>>({}); // voice_channel_id -> log_channel_id
 
   useEffect(() => {
     fetchData();
@@ -75,6 +77,7 @@ export default function CamOnlyVoicePage() {
         setSelectedChannels(configData.config.channel_ids || []);
         setSelectedExemptRoles(configData.config.exempt_roles || []);
         setSelectedExemptUsers(configData.config.exempt_users || []);
+        setChannelLogChannels(configData.config.channel_log_channels || {});
       }
 
       // Filter voice channels (handle errors gracefully)
@@ -164,7 +167,8 @@ export default function CamOnlyVoicePage() {
           ...config,
           channel_ids: selectedChannels,
           exempt_roles: selectedExemptRoles,
-          exempt_users: selectedExemptUsers
+          exempt_users: selectedExemptUsers,
+          channel_log_channels: channelLogChannels
         })
       });
 
@@ -303,19 +307,59 @@ export default function CamOnlyVoicePage() {
                   Select voice channels that require camera. Leave empty to apply to all voice channels.
                 </p>
                 {selectedChannels.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="space-y-3 mt-2">
                     {selectedChannels.map((channelId) => {
                       const channel = channels.find((ch) => ch.id === channelId);
+                      const currentLogChannel = channelLogChannels[channelId] || 'none';
                       return (
-                        <Badge key={channelId} variant="secondary" className="flex items-center gap-1">
-                          {channel?.name || channelId}
-                          <button
-                            onClick={() => setSelectedChannels(selectedChannels.filter((id) => id !== channelId))}
-                            className="ml-1 hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
+                        <div key={channelId} className="p-3 border rounded-lg space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              {channel?.name || channelId}
+                            </Badge>
+                            <button
+                              onClick={() => {
+                                setSelectedChannels(selectedChannels.filter((id) => id !== channelId));
+                                const newLogChannels = { ...channelLogChannels };
+                                delete newLogChannels[channelId];
+                                setChannelLogChannels(newLogChannels);
+                              }}
+                              className="ml-2 hover:text-destructive"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Log Channel (optional)</Label>
+                            <Select
+                              value={currentLogChannel}
+                              onValueChange={(value) => {
+                                setChannelLogChannels({
+                                  ...channelLogChannels,
+                                  [channelId]: value === 'none' ? '' : value
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="max-w-xs">
+                                <SelectValue placeholder="Select a log channel" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {logChannels.map((logChannel) => (
+                                  <SelectItem key={logChannel.id} value={logChannel.id}>
+                                    <span className="flex items-center gap-2">
+                                      {logChannel.channelType === 'voice' && '🔊'}
+                                      {logChannel.channelType === 'text' && '💬'}
+                                      {logChannel.name}
+                                      {logChannel.channelType === 'voice' && <span className="text-xs text-muted-foreground">(Voice)</span>}
+                                      {logChannel.channelType === 'text' && <span className="text-xs text-muted-foreground">(Text)</span>}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -375,11 +419,11 @@ export default function CamOnlyVoicePage() {
                 </div>
               )}
 
-              {/* Log Channel */}
+              {/* Global Log Channel (Legacy - kept for backward compatibility) */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Video className="h-4 w-4" />
-                  Log Channel
+                  Global Log Channel (Legacy)
                 </Label>
                 <Select
                   value={config.log_channel_id || 'none'}
@@ -404,7 +448,7 @@ export default function CamOnlyVoicePage() {
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  Channel to log cam-only voice actions (warnings and disconnections). Can be a text or voice channel.
+                  Default log channel for all voice channels (if no per-channel log channel is set). Can be a text or voice channel.
                 </p>
               </div>
 
