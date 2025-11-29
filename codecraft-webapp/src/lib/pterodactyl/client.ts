@@ -552,26 +552,41 @@ Please check:
         console.log(`🔌 Power action sent via Application API: ${action} for ${serverUuid}`)
         return
       } catch (appError: any) {
-        // If Application API fails, try Client API as fallback
-        console.log(`⚠️  Application API power action failed, trying Client API...`)
+        // If Application API fails (405 = wrong method, or other error), try Client API as fallback
+        if (appError?.status === 405) {
+          console.log(`⚠️  Application API doesn't support POST for power actions (405), trying Client API...`)
+        } else {
+          console.log(`⚠️  Application API power action failed, trying Client API...`)
+        }
       }
       
       // Fallback to Client API
-      const response = await this.request(
-        `/servers/${serverUuid}/power`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ signal: action })
-        },
-        'client'
-      )
-
-      console.log(`🔌 Power action sent via Client API: ${action} for ${serverUuid}`)
+      try {
+        const response = await this.request(
+          `/servers/${serverUuid}/power`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ signal: action })
+          },
+          'client'
+        )
+        console.log(`🔌 Power action sent via Client API: ${action} for ${serverUuid}`)
+        return
+      } catch (clientError: any) {
+        // If Client API also fails, handle errors gracefully
+        throw clientError
+      }
     } catch (error: any) {
       // Handle 404 - server doesn't exist (already deleted)
       if (error?.isNotFound || error?.status === 404 || error.message?.includes('404') || error.message?.includes('NotFound')) {
         console.log(`ℹ️  Server ${serverUuid} doesn't exist (may already be deleted)`)
         return // Success - server is already gone
+      }
+      
+      // Handle 405 - method not allowed (server might not support this action)
+      if (error?.status === 405) {
+        console.log(`ℹ️  Power action ${action} not supported via API for ${serverUuid} (405)`)
+        return // Don't throw - this is acceptable
       }
       
       // Handle empty response or JSON parse errors
