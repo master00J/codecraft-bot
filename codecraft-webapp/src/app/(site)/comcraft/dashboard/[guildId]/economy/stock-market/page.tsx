@@ -76,14 +76,32 @@ export default function StockMarketPage() {
 
   const fetchData = async () => {
     try {
-      const response = await fetch(`/api/comcraft/guilds/${guildId}/economy/stock-market`);
-      if (response.ok) {
-        const data = await response.json();
+      const [marketRes, eventsRes, ordersRes] = await Promise.all([
+        fetch(`/api/comcraft/guilds/${guildId}/economy/stock-market`),
+        fetch(`/api/comcraft/guilds/${guildId}/economy/stock-market?action=events`),
+        fetch(`/api/comcraft/guilds/${guildId}/economy/stock-market?action=orders_stats`)
+      ]);
+
+      if (marketRes.ok) {
+        const data = await marketRes.json();
         setStocks(data.stocks || []);
         setConfig(data.config || {});
         if (data.stocks && data.stocks.length > 0 && !selectedStockForChart) {
           setSelectedStockForChart(data.stocks[0].id);
         }
+      }
+
+      if (eventsRes.ok) {
+        const eventsData = await eventsRes.json();
+        setActiveEvents(eventsData.events || []);
+      }
+
+      if (ordersRes.ok) {
+        const ordersData = await ordersRes.json();
+        setPendingOrdersCount(ordersData.pending || 0);
+        setExecutedOrdersCount(ordersData.executed || 0);
+        setTotalOrdersCount(ordersData.total || 0);
+        setRecentOrders(ordersData.recent || []);
       }
     } catch (error) {
       console.error('Error fetching stock market data:', error);
@@ -532,6 +550,97 @@ export default function StockMarketPage() {
     }
   };
 
+  const createMarketEvent = async () => {
+    if (!newEvent.title) {
+      toast({
+        title: 'Missing title',
+        description: 'Please provide an event title.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/economy/stock-market`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_event',
+          ...newEvent
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Event created',
+          description: 'Market event has been created successfully.',
+        });
+        fetchData();
+        setNewEvent({
+          event_type: 'news',
+          title: '',
+          description: '',
+          stock_id: null,
+          price_multiplier: 1.0,
+          price_change_percentage: 0,
+          duration_minutes: null
+        });
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: 'Create failed',
+          description: errorData.error || 'Failed to create event.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Create failed',
+        description: 'Failed to create event.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deactivateEvent = async (eventId: string) => {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/economy/stock-market`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deactivate_event',
+          event_id: eventId
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Event deactivated',
+          description: 'Market event has been deactivated.',
+        });
+        fetchData();
+      } else {
+        toast({
+          title: 'Deactivate failed',
+          description: 'Failed to deactivate event.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Deactivate failed',
+        description: 'Failed to deactivate event.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -579,12 +688,14 @@ export default function StockMarketPage() {
         </Card>
 
         <Tabs defaultValue="stocks" className="space-y-6">
-          <TabsList className="w-full grid grid-cols-6 bg-muted/50 p-2 rounded-lg">
+          <TabsList className="w-full grid grid-cols-8 bg-muted/50 p-2 rounded-lg">
             <TabsTrigger value="stocks">Stocks</TabsTrigger>
             <TabsTrigger value="create">Create</TabsTrigger>
-            <TabsTrigger value="charts">Price Charts</TabsTrigger>
-            <TabsTrigger value="activity">Activity Log</TabsTrigger>
-            <TabsTrigger value="bulk">Bulk Operations</TabsTrigger>
+            <TabsTrigger value="charts">Charts</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="bulk">Bulk</TabsTrigger>
+            <TabsTrigger value="events">Events</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="config">Config</TabsTrigger>
           </TabsList>
 
@@ -1069,6 +1180,274 @@ export default function StockMarketPage() {
                   )}
                 </div>
               )}
+            </Card>
+          </TabsContent>
+
+          {/* Market Events Tab */}
+          <TabsContent value="events" className="space-y-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold">📰 Market Events</h2>
+                <Button onClick={fetchData} variant="outline" size="sm">
+                  🔄 Refresh
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <Card className="p-4 border-2 border-primary/50">
+                  <h3 className="font-bold mb-4">Create Market Event</h3>
+                  <div className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Event Type</Label>
+                        <Select defaultValue="news" onValueChange={(v) => setNewEvent({...newEvent, event_type: v})}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ipo">🚀 IPO (Initial Public Offering)</SelectItem>
+                            <SelectItem value="crash">💥 Market Crash</SelectItem>
+                            <SelectItem value="boom">📈 Market Boom</SelectItem>
+                            <SelectItem value="split">✂️ Stock Split</SelectItem>
+                            <SelectItem value="dividend">💰 Dividend Announcement</SelectItem>
+                            <SelectItem value="news">📰 News Event</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Stock (Optional)</Label>
+                        <Select onValueChange={(v) => setNewEvent({...newEvent, stock_id: v === 'all' ? null : v})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="All stocks" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Stocks</SelectItem>
+                            {stocks.map((stock) => (
+                              <SelectItem key={stock.id} value={stock.id}>
+                                {stock.emoji || '📊'} {stock.symbol} - {stock.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Title *</Label>
+                        <Input
+                          value={newEvent.title}
+                          onChange={(e) => setNewEvent({...newEvent, title: e.target.value})}
+                          placeholder="Market Crash: All Stocks Drop 50%"
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Description</Label>
+                        <Input
+                          value={newEvent.description}
+                          onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
+                          placeholder="A major market crash has occurred..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Price Multiplier</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max="10"
+                          value={newEvent.price_multiplier}
+                          onChange={(e) => setNewEvent({...newEvent, price_multiplier: parseFloat(e.target.value) || 1.0})}
+                          placeholder="1.0"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Multiply price by this (e.g., 0.5 = 50% drop, 2.0 = 100% increase)
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Price Change %</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="-100"
+                          max="100"
+                          value={newEvent.price_change_percentage}
+                          onChange={(e) => setNewEvent({...newEvent, price_change_percentage: parseFloat(e.target.value) || 0})}
+                          placeholder="0"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Direct percentage change (alternative to multiplier)
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Duration (minutes)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={newEvent.duration_minutes}
+                          onChange={(e) => setNewEvent({...newEvent, duration_minutes: parseInt(e.target.value) || null})}
+                          placeholder="Leave empty for permanent"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          How long the event lasts (empty = permanent)
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button onClick={createMarketEvent} disabled={saving} className="w-full">
+                      {saving ? 'Creating...' : '📰 Create Market Event'}
+                    </Button>
+                  </div>
+                </Card>
+
+                <div>
+                  <h3 className="font-bold mb-4">Active Events</h3>
+                  {activeEvents.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No active market events.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {activeEvents.map((event: any) => {
+                        const stock = event.stock;
+                        const eventEmojis: Record<string, string> = {
+                          'ipo': '🚀',
+                          'crash': '💥',
+                          'boom': '📈',
+                          'split': '✂️',
+                          'dividend': '💰',
+                          'news': '📰'
+                        };
+
+                        return (
+                          <Card key={event.id} className="p-4 border">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-2xl">{eventEmojis[event.event_type] || '📊'}</span>
+                                  <h4 className="font-bold">{event.title}</h4>
+                                  {stock && (
+                                    <Badge variant="outline">
+                                      {stock.emoji || '📊'} {stock.symbol}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {event.description && (
+                                  <p className="text-sm text-muted-foreground mb-2">{event.description}</p>
+                                )}
+                                <div className="flex gap-4 text-sm">
+                                  {event.price_multiplier !== 1.0 && (
+                                    <span>
+                                      <span className="text-muted-foreground">Multiplier:</span>{' '}
+                                      <span className="font-bold">{event.price_multiplier}x</span>
+                                    </span>
+                                  )}
+                                  {event.price_change_percentage !== 0 && (
+                                    <span>
+                                      <span className="text-muted-foreground">Change:</span>{' '}
+                                      <span className="font-bold">
+                                        {event.price_change_percentage > 0 ? '+' : ''}{event.price_change_percentage}%
+                                      </span>
+                                    </span>
+                                  )}
+                                  {event.ends_at && (
+                                    <span>
+                                      <span className="text-muted-foreground">Ends:</span>{' '}
+                                      <span className="font-bold">
+                                        {new Date(event.ends_at).toLocaleString('en-US')}
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => deactivateEvent(event.id)}
+                                disabled={saving}
+                              >
+                                Deactivate
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Orders Management Tab */}
+          <TabsContent value="orders" className="space-y-6">
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-6">📋 Orders Overview</h2>
+              
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-3 gap-4 text-sm">
+                  <Card className="p-4">
+                    <p className="text-muted-foreground mb-1">Pending Orders</p>
+                    <p className="text-2xl font-bold">{pendingOrdersCount}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <p className="text-muted-foreground mb-1">Executed Today</p>
+                    <p className="text-2xl font-bold">{executedOrdersCount}</p>
+                  </Card>
+                  <Card className="p-4">
+                    <p className="text-muted-foreground mb-1">Total Orders</p>
+                    <p className="text-2xl font-bold">{totalOrdersCount}</p>
+                  </Card>
+                </div>
+
+                <div>
+                  <h3 className="font-bold mb-4">Recent Orders</h3>
+                  {recentOrders.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No orders found.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                      {recentOrders.map((order: any) => {
+                        const stock = order.stock;
+                        const orderTypeNames: Record<string, string> = {
+                          'limit_buy': '📈 Limit Buy',
+                          'limit_sell': '📉 Limit Sell',
+                          'stop_loss': '🛑 Stop Loss',
+                          'stop_profit': '🎯 Stop Profit'
+                        };
+
+                        return (
+                          <Card key={order.id} className="p-3 border">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl">{orderTypeNames[order.order_type] || order.order_type}</span>
+                                <div>
+                                  <div className="font-bold">{stock?.symbol || 'N/A'}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {order.shares} shares @ {parseFloat(order.target_price).toFixed(2)} coins
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <Badge variant={order.status === 'pending' ? 'default' : 'secondary'}>
+                                  {order.status}
+                                </Badge>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {new Date(order.created_at).toLocaleDateString('en-US')}
+                                </p>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </Card>
           </TabsContent>
 

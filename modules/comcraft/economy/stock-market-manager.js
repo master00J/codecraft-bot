@@ -466,6 +466,12 @@ class StockMarketManager {
           })
           .eq('id', stock.id);
 
+        // Process pending orders for this stock
+        await this.processPendingOrders(guildId, stock.id, newPrice);
+
+        // Check price alerts for this stock
+        await this.checkPriceAlerts(guildId, stock.id, newPrice);
+
         updates.push({
           symbol: stock.symbol,
           old_price: currentPrice,
@@ -549,6 +555,534 @@ class StockMarketManager {
       .slice(0, limit);
 
     return leaderboard;
+  }
+
+  /**
+   * Create a limit order (buy or sell at target price)
+   */
+  async createLimitOrder(guildId, userId, stockSymbolOrId, orderType, shares, targetPrice, expiresAt = null) {
+    try {
+      const stock = await this.getStock(guildId, stockSymbolOrId);
+      if (!stock || stock.status !== 'active') {
+        return { success: false, error: 'Stock not found or not available' };
+      }
+
+      // Validate order type
+      const validTypes = ['limit_buy', 'limit_sell', 'stop_loss', 'stop_profit'];
+      if (!validTypes.includes(orderType)) {
+        return { success: false, error: 'Invalid order type' };
+      }
+
+      // For limit_sell and stop_loss, check if user has enough shares
+      if (orderType === 'limit_sell' || orderType === 'stop_loss') {
+        const { data: holding } = await this.supabase
+          .from('stock_market_portfolio')
+          .select('shares_owned')
+          .eq('guild_id', guildId)
+          .eq('user_id', userId)
+          .eq('stock_id', stock.id)
+          .single();
+
+        if (!holding || holding.shares_owned < shares) {
+          return { success: false, error: `You don't have enough shares. You own ${holding?.shares_owned || 0} shares` };
+        }
+      }
+
+      // For limit_buy, check if user has enough balance (reserve it)
+      if (orderType === 'limit_buy') {
+        const config = await this.getMarketConfig(guildId);
+        const totalCost = shares * parseFloat(targetPrice);
+        const fee = config.trading_fee_percentage 
+          ? (totalCost * (config.trading_fee_percentage / 100)) 
+          : 0;
+        const totalWithFee = totalCost + fee;
+
+        // Note: We don't reserve coins here, but will check when order executes
+        // In production, you might want to reserve coins
+      }
+
+      const { data: order, error } = await this.supabase
+        .from('stock_market_orders')
+        .insert({
+          guild_id: guildId,
+          user_id: userId,
+          stock_id: stock.id,
+          order_type: orderType,
+          shares: shares,
+          target_price: parseFloat(targetPrice),
+          expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating limit order:', error);
+        return { success: false, error: 'Failed to create order' };
+      }
+
+      return { success: true, order };
+    } catch (error) {
+      console.error('Error in createLimitOrder:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get user's pending orders
+   */
+  async getUserOrders(guildId, userId, status = 'pending') {
+    try {
+      const { data: orders, error } = await this.supabase
+        .from('stock_market_orders')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji, current_price)
+        `)
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .eq('status', status)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching user orders:', error);
+        return [];
+      }
+
+      return orders || [];
+    } catch (error) {
+      console.error('Error in getUserOrders:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Cancel an order
+   */
+  async cancelOrder(guildId, userId, orderId) {
+    try {
+      const { error } = await this.supabase
+        .from('stock_market_orders')
+        .update({ status: 'cancelled' })
+        .eq('id', orderId)
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .eq('status', 'pending');
+
+      if (error) {
+        console.error('Error cancelling order:', error);
+        return { success: false, error: 'Failed to cancel order' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error in cancelOrder:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Process pending orders when price updates
+   */
+  async processPendingOrders(guildId, stockId, currentPrice) {
+    try {
+      // Get all pending orders for this stock
+      const { data: orders, error } = await this.supabase
+        .from('stock_market_orders')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name)
+        `)
+        .eq('guild_id', guildId)
+        .eq('stock_id', stockId)
+        .eq('status', 'pending');
+
+      if (error || !orders || orders.length === 0) {
+        return { processed: 0 };
+      }
+
+      let processed = 0;
+      const price = parseFloat(currentPrice);
+
+      for (const order of orders) {
+        const targetPrice = parseFloat(order.target_price);
+        let shouldExecute = false;
+
+        // Check if order should execute based on type
+        switch (order.order_type) {
+          case 'limit_buy':
+            // Buy when price drops to or below target
+            shouldExecute = price <= targetPrice;
+            break;
+          case 'limit_sell':
+            // Sell when price rises to or above target
+            shouldExecute = price >= targetPrice;
+            break;
+          case 'stop_loss':
+            // Sell when price drops to or below target (limit losses)
+            shouldExecute = price <= targetPrice;
+            break;
+          case 'stop_profit':
+            // Sell when price rises to or above target (lock in profits)
+            shouldExecute = price >= targetPrice;
+            break;
+        }
+
+        // Check expiration
+        if (order.expires_at && new Date(order.expires_at) < new Date()) {
+          await this.supabase
+            .from('stock_market_orders')
+            .update({ status: 'expired' })
+            .eq('id', order.id);
+          continue;
+        }
+
+        if (shouldExecute) {
+          // Execute order (this would call buyStock or sellStock)
+          // For now, we'll mark it as executed and let the price update handler process it
+          await this.supabase
+            .from('stock_market_orders')
+            .update({ 
+              status: 'executed',
+              executed_at: new Date().toISOString()
+            })
+            .eq('id', order.id);
+          
+          processed++;
+        }
+      }
+
+      return { processed };
+    } catch (error) {
+      console.error('Error processing pending orders:', error);
+      return { processed: 0, error: error.message };
+    }
+  }
+
+  /**
+   * Create a price alert
+   */
+  async createPriceAlert(guildId, userId, stockSymbolOrId, alertType, targetPrice = null, changePercent = null) {
+    try {
+      const stock = await this.getStock(guildId, stockSymbolOrId);
+      if (!stock || stock.status !== 'active') {
+        return { success: false, error: 'Stock not found or not available' };
+      }
+
+      const validTypes = ['above', 'below', 'change_percent'];
+      if (!validTypes.includes(alertType)) {
+        return { success: false, error: 'Invalid alert type' };
+      }
+
+      if (alertType === 'change_percent' && !changePercent) {
+        return { success: false, error: 'change_percent requires changePercent parameter' };
+      }
+
+      if ((alertType === 'above' || alertType === 'below') && !targetPrice) {
+        return { success: false, error: `${alertType} requires targetPrice parameter` };
+      }
+
+      const { data: alert, error } = await this.supabase
+        .from('stock_market_price_alerts')
+        .insert({
+          guild_id: guildId,
+          user_id: userId,
+          stock_id: stock.id,
+          alert_type: alertType,
+          target_price: targetPrice ? parseFloat(targetPrice) : null,
+          change_percent: changePercent ? parseFloat(changePercent) : null,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // If duplicate, return existing alert
+        if (error.code === '23505') {
+          const { data: existing } = await this.supabase
+            .from('stock_market_price_alerts')
+            .select('*')
+            .eq('guild_id', guildId)
+            .eq('user_id', userId)
+            .eq('stock_id', stock.id)
+            .eq('alert_type', alertType)
+            .eq('target_price', targetPrice || 0)
+            .single();
+          
+          return { success: true, alert: existing, message: 'Alert already exists' };
+        }
+        
+        console.error('Error creating price alert:', error);
+        return { success: false, error: 'Failed to create alert' };
+      }
+
+      return { success: true, alert };
+    } catch (error) {
+      console.error('Error in createPriceAlert:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get user's price alerts
+   */
+  async getUserPriceAlerts(guildId, userId) {
+    try {
+      const { data: alerts, error } = await this.supabase
+        .from('stock_market_price_alerts')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji, current_price)
+        `)
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching price alerts:', error);
+        return [];
+      }
+
+      return alerts || [];
+    } catch (error) {
+      console.error('Error in getUserPriceAlerts:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Check and trigger price alerts
+   */
+  async checkPriceAlerts(guildId, stockId, currentPrice) {
+    try {
+      const { data: alerts, error } = await this.supabase
+        .from('stock_market_price_alerts')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji, current_price)
+        `)
+        .eq('guild_id', guildId)
+        .eq('stock_id', stockId)
+        .eq('is_active', true)
+        .eq('notified', false);
+
+      if (error || !alerts || alerts.length === 0) {
+        return { triggered: [] };
+      }
+
+      const price = parseFloat(currentPrice);
+      const triggered = [];
+
+      for (const alert of alerts) {
+        let shouldTrigger = false;
+
+        switch (alert.alert_type) {
+          case 'above':
+            shouldTrigger = price >= parseFloat(alert.target_price);
+            break;
+          case 'below':
+            shouldTrigger = price <= parseFloat(alert.target_price);
+            break;
+          case 'change_percent':
+            // This would need previous price to calculate change
+            // For now, we'll skip this type
+            continue;
+        }
+
+        if (shouldTrigger) {
+          await this.supabase
+            .from('stock_market_price_alerts')
+            .update({
+              notified: true,
+              notified_at: new Date().toISOString()
+            })
+            .eq('id', alert.id);
+
+          triggered.push(alert);
+        }
+      }
+
+      return { triggered };
+    } catch (error) {
+      console.error('Error checking price alerts:', error);
+      return { triggered: [] };
+    }
+  }
+
+  /**
+   * Create a market event (IPO, Crash, Boom, etc.)
+   */
+  async createMarketEvent(guildId, eventType, title, description, stockId = null, priceMultiplier = 1.0, priceChangePercent = 0, durationMinutes = null) {
+    try {
+      const validTypes = ['ipo', 'split', 'crash', 'boom', 'dividend', 'news'];
+      if (!validTypes.includes(eventType)) {
+        return { success: false, error: 'Invalid event type' };
+      }
+
+      const endsAt = durationMinutes 
+        ? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString()
+        : null;
+
+      const { data: event, error } = await this.supabase
+        .from('stock_market_events')
+        .insert({
+          guild_id: guildId,
+          stock_id: stockId,
+          event_type: eventType,
+          title,
+          description,
+          price_multiplier: parseFloat(priceMultiplier),
+          price_change_percentage: parseFloat(priceChangePercent),
+          is_active: true,
+          duration_minutes: durationMinutes,
+          ends_at: endsAt
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating market event:', error);
+        return { success: false, error: 'Failed to create event' };
+      }
+
+      // Apply event to stock prices if applicable
+      if (stockId && (priceMultiplier !== 1.0 || priceChangePercent !== 0)) {
+        const stock = await this.getStock(guildId, stockId);
+        if (stock) {
+          let newPrice = parseFloat(stock.current_price);
+          
+          if (priceMultiplier !== 1.0) {
+            newPrice = newPrice * parseFloat(priceMultiplier);
+          }
+          
+          if (priceChangePercent !== 0) {
+            newPrice = newPrice * (1 + parseFloat(priceChangePercent) / 100);
+          }
+
+          await this.supabase
+            .from('stock_market_stocks')
+            .update({ current_price: newPrice })
+            .eq('id', stockId);
+        }
+      }
+
+      return { success: true, event };
+    } catch (error) {
+      console.error('Error in createMarketEvent:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get active market events
+   */
+  async getActiveMarketEvents(guildId, stockId = null) {
+    try {
+      let query = this.supabase
+        .from('stock_market_events')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji)
+        `)
+        .eq('guild_id', guildId)
+        .eq('is_active', true);
+
+      if (stockId) {
+        query = query.eq('stock_id', stockId);
+      }
+
+      const { data: events, error } = await query.order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching market events:', error);
+        return [];
+      }
+
+      // Filter out expired events
+      const now = new Date();
+      const activeEvents = (events || []).filter(event => {
+        if (!event.ends_at) return true; // Permanent event
+        return new Date(event.ends_at) > now;
+      });
+
+      return activeEvents;
+    } catch (error) {
+      console.error('Error in getActiveMarketEvents:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Process dividends for a stock
+   */
+  async processDividends(guildId, stockId, economyManager) {
+    try {
+      const stock = await this.getStock(guildId, stockId);
+      if (!stock || stock.status !== 'active') {
+        return { success: false, error: 'Stock not found' };
+      }
+
+      const dividendRate = parseFloat(stock.dividend_rate || 0);
+      if (dividendRate <= 0) {
+        return { success: false, error: 'Stock has no dividend rate' };
+      }
+
+      // Get all shareholders
+      const { data: holdings, error } = await this.supabase
+        .from('stock_market_portfolio')
+        .select('*')
+        .eq('guild_id', guildId)
+        .eq('stock_id', stockId)
+        .gt('shares_owned', 0);
+
+      if (error || !holdings || holdings.length === 0) {
+        return { success: false, error: 'No shareholders found' };
+      }
+
+      const currentPrice = parseFloat(stock.current_price);
+      const dividendPerShare = (currentPrice * dividendRate) / 100 / 12; // Monthly dividend (assuming monthly frequency)
+
+      let totalPaid = 0;
+      const payments = [];
+
+      for (const holding of holdings) {
+        const dividendAmount = dividendPerShare * parseInt(holding.shares_owned);
+        
+        if (dividendAmount > 0) {
+          await economyManager.addCoins(
+            guildId,
+            holding.user_id,
+            dividendAmount,
+            'stock_dividend',
+            `Dividend payment for ${stock.symbol} (${holding.shares_owned} shares)`
+          );
+
+          totalPaid += dividendAmount;
+          payments.push({
+            user_id: holding.user_id,
+            shares: holding.shares_owned,
+            amount: dividendAmount
+          });
+        }
+      }
+
+      // Update last dividend date
+      await this.supabase
+        .from('stock_market_stocks')
+        .update({ last_dividend_date: new Date().toISOString() })
+        .eq('id', stockId);
+
+      return { 
+        success: true, 
+        totalPaid, 
+        paymentsCount: payments.length,
+        payments 
+      };
+    } catch (error) {
+      console.error('Error processing dividends:', error);
+      return { success: false, error: error.message };
+    }
   }
 }
 

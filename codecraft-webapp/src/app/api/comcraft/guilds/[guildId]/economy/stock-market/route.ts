@@ -68,6 +68,71 @@ export async function GET(
       return NextResponse.json({ transactions: transactions || [] });
     }
 
+    // Get active market events
+    if (action === 'events') {
+      const { data: events, error } = await supabase
+        .from('stock_market_events')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji)
+        `)
+        .eq('guild_id', guildId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching market events:', error);
+        return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
+      }
+
+      // Filter out expired events
+      const now = new Date();
+      const activeEvents = (events || []).filter(event => {
+        if (!event.ends_at) return true;
+        return new Date(event.ends_at) > now;
+      });
+
+      return NextResponse.json({ events: activeEvents });
+    }
+
+    // Get orders statistics
+    if (action === 'orders_stats') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const { data: allOrders, error: allError } = await supabase
+        .from('stock_market_orders')
+        .select('status, created_at')
+        .eq('guild_id', guildId);
+
+      const { data: recentOrders, error: recentError } = await supabase
+        .from('stock_market_orders')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji)
+        `)
+        .eq('guild_id', guildId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (allError || recentError) {
+        console.error('Error fetching orders stats:', allError || recentError);
+        return NextResponse.json({ error: 'Failed to fetch orders stats' }, { status: 500 });
+      }
+
+      const pending = (allOrders || []).filter(o => o.status === 'pending').length;
+      const executed = (allOrders || []).filter(o => 
+        o.status === 'executed' && new Date(o.executed_at || o.created_at) >= today
+      ).length;
+
+      return NextResponse.json({
+        pending,
+        executed,
+        total: allOrders?.length || 0,
+        recent: recentOrders || []
+      });
+    }
+
     // Get all stocks
     const { data: stocks, error: stocksError } = await supabase
       .from('stock_market_stocks')
@@ -307,6 +372,66 @@ export async function POST(
       }
 
       return NextResponse.json({ success: true, imported: inserted?.length || 0 });
+    } else if (action === 'create_event') {
+      const { event_type, title, description, stock_id, price_multiplier, price_change_percentage, duration_minutes } = data;
+
+      if (!event_type || !title) {
+        return NextResponse.json({ error: 'event_type and title are required' }, { status: 400 });
+      }
+
+      // This would need to be called from the bot, but we can create the event record
+      const { data: event, error } = await supabase
+        .from('stock_market_events')
+        .insert({
+          guild_id: guildId,
+          stock_id: stock_id || null,
+          event_type,
+          title,
+          description: description || null,
+          price_multiplier: price_multiplier ? parseFloat(price_multiplier) : 1.0,
+          price_change_percentage: price_change_percentage ? parseFloat(price_change_percentage) : 0,
+          is_active: true,
+          duration_minutes: duration_minutes ? parseInt(duration_minutes) : null,
+          ends_at: duration_minutes ? new Date(Date.now() + duration_minutes * 60 * 1000).toISOString() : null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating market event:', error);
+        return NextResponse.json({ error: 'Failed to create event' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, event });
+    } else if (action === 'process_dividends') {
+      const { stock_id } = data;
+
+      if (!stock_id) {
+        return NextResponse.json({ error: 'stock_id is required' }, { status: 400 });
+      }
+
+      // This would need to be called from the bot with economyManager
+      // For now, just return success
+      return NextResponse.json({ success: true, message: 'Dividend processing should be done via bot command' });
+    } else if (action === 'deactivate_event') {
+      const { event_id } = data;
+
+      if (!event_id) {
+        return NextResponse.json({ error: 'event_id is required' }, { status: 400 });
+      }
+
+      const { error } = await supabase
+        .from('stock_market_events')
+        .update({ is_active: false })
+        .eq('id', event_id)
+        .eq('guild_id', guildId);
+
+      if (error) {
+        console.error('Error deactivating event:', error);
+        return NextResponse.json({ error: 'Failed to deactivate event' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

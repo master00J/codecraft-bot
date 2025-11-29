@@ -696,37 +696,54 @@ client.once('ready', async () => {
           if (stocks && stocks.length > 0) {
             const uniqueGuilds = [...new Set(stocks.map(s => s.guild_id))];
             for (const guildId of uniqueGuilds) {
-              await stockMarketManager.updateStockPrices(guildId);
-            }
-            console.log(`📈 [Stock Market] Updated prices for ${uniqueGuilds.length} guild(s)`);
-          }
-        } catch (error) {
-          console.error('❌ [Stock Market] Error updating prices:', error);
-        }
-      }, 15 * 60 * 1000); // 15 minutes
-      
-      console.log('📈 Stock Market Price Updater initialized (updates every 15 minutes)');
-    } catch (error) {
-      console.error('❌ Failed to initialize Stock Market Price Updater:', error.message);
-    }
-  }
-
-  // Initialize Stock Market Price Updater
-  if (stockMarketManager) {
-    try {
-      // Update prices every 15 minutes for all guilds
-      setInterval(async () => {
-        try {
-          // Get all guild IDs that have stocks
-          const { data: stocks } = await stockMarketManager.supabase
-            .from('stock_market_stocks')
-            .select('guild_id')
-            .eq('status', 'active');
-
-          if (stocks && stocks.length > 0) {
-            const uniqueGuilds = [...new Set(stocks.map(s => s.guild_id))];
-            for (const guildId of uniqueGuilds) {
-              await stockMarketManager.updateStockPrices(guildId);
+              const result = await stockMarketManager.updateStockPrices(guildId);
+              
+              // Send notifications for triggered price alerts
+              if (result.success && result.updates) {
+                for (const update of result.updates) {
+                  // Get triggered alerts for this stock
+                  const stock = await stockMarketManager.getStock(guildId, update.symbol);
+                  if (stock) {
+                    const alertsResult = await stockMarketManager.checkPriceAlerts(guildId, stock.id, update.new_price);
+                    if (alertsResult.triggered && alertsResult.triggered.length > 0) {
+                      // Send DM notifications to users
+                      for (const alert of alertsResult.triggered) {
+                        try {
+                          const user = await client.users.fetch(alert.user_id);
+                          if (user) {
+                            const alertEmbed = new EmbedBuilder()
+                              .setColor('#FFD700')
+                              .setTitle('🔔 Price Alert Triggered!')
+                              .setDescription(`**${stock.symbol}** has reached your target price!`)
+                              .addFields(
+                                {
+                                  name: '💰 Current Price',
+                                  value: `${update.new_price.toFixed(2)} coins`,
+                                  inline: true,
+                                },
+                                {
+                                  name: '🎯 Target Price',
+                                  value: `${parseFloat(alert.target_price).toFixed(2)} coins`,
+                                  inline: true,
+                                },
+                                {
+                                  name: '📊 Change',
+                                  value: `${update.change_percent >= 0 ? '+' : ''}${update.change_percent.toFixed(2)}%`,
+                                  inline: true,
+                                }
+                              )
+                              .setTimestamp();
+                            
+                            await user.send({ embeds: [alertEmbed] });
+                          }
+                        } catch (error) {
+                          console.error(`Failed to send price alert to user ${alert.user_id}:`, error);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
             console.log(`📈 [Stock Market] Updated prices for ${uniqueGuilds.length} guild(s)`);
           }
@@ -5136,6 +5153,299 @@ async function handleStockLeaderboardCommand(interaction) {
   return interaction.editReply({ embeds: [embed] });
 }
 
+async function handleStockOrderCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const orderType = interaction.options.getString('type');
+  const symbol = interaction.options.getString('symbol').toUpperCase();
+  const shares = interaction.options.getInteger('shares');
+  const targetPrice = interaction.options.getNumber('target_price');
+  const expiresStr = interaction.options.getString('expires');
+
+  let expiresAt = null;
+  if (expiresStr) {
+    const hours = expiresStr.match(/(\d+)h/i)?.[1];
+    const days = expiresStr.match(/(\d+)d/i)?.[1];
+    if (hours) {
+      expiresAt = new Date(Date.now() + parseInt(hours) * 60 * 60 * 1000);
+    } else if (days) {
+      expiresAt = new Date(Date.now() + parseInt(days) * 24 * 60 * 60 * 1000);
+    }
+  }
+
+  const result = await stockMarketManager.createLimitOrder(
+    guildId,
+    userId,
+    symbol,
+    orderType,
+    shares,
+    targetPrice,
+    expiresAt
+  );
+
+  if (!result.success) {
+    return interaction.editReply({ content: `❌ ${result.error}` });
+  }
+
+  const orderTypeNames = {
+    'limit_buy': 'Limit Buy',
+    'limit_sell': 'Limit Sell',
+    'stop_loss': 'Stop Loss',
+    'stop_profit': 'Stop Profit'
+  };
+
+  const embed = new EmbedBuilder()
+    .setColor('#00FF00')
+    .setTitle('✅ Order Created')
+    .setDescription(`**${orderTypeNames[orderType]}** order for **${symbol}**`)
+    .addFields(
+      {
+        name: '📦 Shares',
+        value: shares.toString(),
+        inline: true,
+      },
+      {
+        name: '💰 Target Price',
+        value: `${targetPrice.toFixed(2)} coins`,
+        inline: true,
+      },
+      {
+        name: '⏰ Expires',
+        value: expiresAt ? new Date(expiresAt).toLocaleString('en-US') : 'Never',
+        inline: true,
+      }
+    )
+    .setFooter({ text: `Order ID: ${result.order.id.slice(0, 8)}...` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockOrdersCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const orders = await stockMarketManager.getUserOrders(guildId, userId, 'pending');
+
+  if (orders.length === 0) {
+    return interaction.editReply({ 
+      content: '📋 You have no pending orders. Use /stockorder to create one!' 
+    });
+  }
+
+  const ordersList = orders.map((order, index) => {
+    const stock = order.stock;
+    const orderTypeNames = {
+      'limit_buy': '📈 Limit Buy',
+      'limit_sell': '📉 Limit Sell',
+      'stop_loss': '🛑 Stop Loss',
+      'stop_profit': '🎯 Stop Profit'
+    };
+
+    let line = `${index + 1}. ${orderTypeNames[order.order_type] || order.order_type} - **${stock?.symbol || 'N/A'}**\n`;
+    line += `   ${order.shares} shares @ ${parseFloat(order.target_price).toFixed(2)} coins\n`;
+    line += `   Current: ${parseFloat(stock?.current_price || 0).toFixed(2)} coins\n`;
+    if (order.expires_at) {
+      line += `   Expires: ${new Date(order.expires_at).toLocaleString('en-US')}\n`;
+    }
+    line += `   ID: \`${order.id.slice(0, 8)}...\`\n`;
+    return line;
+  }).join('\n');
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('📋 Your Pending Orders')
+    .setDescription(ordersList.length > 2000 ? ordersList.substring(0, 1950) + '...' : ordersList)
+    .setFooter({ text: `${orders.length} pending order(s)` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockCancelOrderCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const orderId = interaction.options.getString('order_id');
+
+  const result = await stockMarketManager.cancelOrder(guildId, userId, orderId);
+
+  if (!result.success) {
+    return interaction.editReply({ content: `❌ ${result.error || 'Failed to cancel order'}` });
+  }
+
+  return interaction.editReply({ 
+    content: '✅ Order cancelled successfully.' 
+  });
+}
+
+async function handleStockAlertCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const symbol = interaction.options.getString('symbol').toUpperCase();
+  const alertType = interaction.options.getString('type');
+  const targetPrice = interaction.options.getNumber('target_price');
+
+  const result = await stockMarketManager.createPriceAlert(
+    guildId,
+    userId,
+    symbol,
+    alertType,
+    targetPrice,
+    null
+  );
+
+  if (!result.success) {
+    return interaction.editReply({ content: `❌ ${result.error}` });
+  }
+
+  const alertTypeNames = {
+    'above': 'Price Above',
+    'below': 'Price Below'
+  };
+
+  const embed = new EmbedBuilder()
+    .setColor('#00FF00')
+    .setTitle('✅ Price Alert Created')
+    .setDescription(`You will be notified when **${symbol}** reaches **${targetPrice.toFixed(2)} coins**`)
+    .addFields(
+      {
+        name: '🔔 Alert Type',
+        value: alertTypeNames[alertType] || alertType,
+        inline: true,
+      },
+      {
+        name: '💰 Target Price',
+        value: `${targetPrice.toFixed(2)} coins`,
+        inline: true,
+      }
+    )
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockAlertsCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const alerts = await stockMarketManager.getUserPriceAlerts(guildId, userId);
+
+  if (alerts.length === 0) {
+    return interaction.editReply({ 
+      content: '🔔 You have no active price alerts. Use /stockalert to create one!' 
+    });
+  }
+
+  const alertsList = alerts.map((alert, index) => {
+    const stock = alert.stock;
+    const alertTypeNames = {
+      'above': '📈 Above',
+      'below': '📉 Below'
+    };
+
+    let line = `${index + 1}. **${stock?.symbol || 'N/A'}** - ${stock?.name || 'Unknown'}\n`;
+    line += `   ${alertTypeNames[alert.alert_type] || alert.alert_type}: ${parseFloat(alert.target_price || 0).toFixed(2)} coins\n`;
+    line += `   Current: ${parseFloat(stock?.current_price || 0).toFixed(2)} coins\n`;
+    if (alert.notified) {
+      line += `   ✅ Already notified\n`;
+    }
+    return line;
+  }).join('\n');
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('🔔 Your Price Alerts')
+    .setDescription(alertsList.length > 2000 ? alertsList.substring(0, 1950) + '...' : alertsList)
+    .setFooter({ text: `${alerts.length} active alert(s)` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockEventsCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  if (!stockMarketManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const events = await stockMarketManager.getActiveMarketEvents(guildId);
+
+  if (events.length === 0) {
+    return interaction.editReply({ 
+      content: '📰 No active market events at the moment.' 
+    });
+  }
+
+  const eventsList = events.map((event, index) => {
+    const stock = event.stock;
+    const eventEmojis = {
+      'ipo': '🚀',
+      'crash': '💥',
+      'boom': '📈',
+      'split': '✂️',
+      'dividend': '💰',
+      'news': '📰'
+    };
+
+    let line = `${index + 1}. ${eventEmojis[event.event_type] || '📊'} **${event.title}**\n`;
+    if (stock) {
+      line += `   Stock: ${stock.emoji || '📊'} ${stock.symbol}\n`;
+    }
+    if (event.description) {
+      line += `   ${event.description}\n`;
+    }
+    if (event.price_multiplier !== 1.0) {
+      line += `   Price Impact: ${((event.price_multiplier - 1) * 100).toFixed(1)}%\n`;
+    }
+    if (event.price_change_percentage !== 0) {
+      line += `   Price Change: ${event.price_change_percentage > 0 ? '+' : ''}${event.price_change_percentage}%\n`;
+    }
+    if (event.ends_at) {
+      line += `   Ends: ${new Date(event.ends_at).toLocaleString('en-US')}\n`;
+    }
+    return line;
+  }).join('\n');
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('📰 Active Market Events')
+    .setDescription(eventsList.length > 2000 ? eventsList.substring(0, 1950) + '...' : eventsList)
+    .setFooter({ text: `${events.length} active event(s)` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
 async function handleCasinoBetModal(interaction) {
   // DEFER IMMEDIATELY - Discord gives only 3 seconds!
   try {
@@ -6242,6 +6552,97 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('stockleaderboard')
       .setDescription('🏆 View stock market leaderboard (richest portfolios)'),
+
+    new SlashCommandBuilder()
+      .setName('stockorder')
+      .setDescription('📋 Create a limit order or stop-loss order')
+      .addStringOption((option) =>
+        option
+          .setName('type')
+          .setDescription('Order type')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Limit Buy', value: 'limit_buy' },
+            { name: 'Limit Sell', value: 'limit_sell' },
+            { name: 'Stop Loss', value: 'stop_loss' },
+            { name: 'Stop Profit', value: 'stop_profit' }
+          )
+      )
+      .addStringOption((option) =>
+        option
+          .setName('symbol')
+          .setDescription('Stock symbol')
+          .setRequired(true)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName('shares')
+          .setDescription('Number of shares')
+          .setRequired(true)
+          .setMinValue(1)
+      )
+      .addNumberOption((option) =>
+        option
+          .setName('target_price')
+          .setDescription('Target price to execute order')
+          .setRequired(true)
+          .setMinValue(0.01)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('expires')
+          .setDescription('Expiration (e.g., 24h, 7d, 30d)')
+          .setRequired(false)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stockorders')
+      .setDescription('📋 View your pending orders'),
+
+    new SlashCommandBuilder()
+      .setName('stockcancelorder')
+      .setDescription('❌ Cancel a pending order')
+      .addStringOption((option) =>
+        option
+          .setName('order_id')
+          .setDescription('Order ID to cancel')
+          .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stockalert')
+      .setDescription('🔔 Create a price alert')
+      .addStringOption((option) =>
+        option
+          .setName('symbol')
+          .setDescription('Stock symbol')
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('type')
+          .setDescription('Alert type')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Price Above', value: 'above' },
+            { name: 'Price Below', value: 'below' }
+          )
+      )
+      .addNumberOption((option) =>
+        option
+          .setName('target_price')
+          .setDescription('Target price to trigger alert')
+          .setRequired(true)
+          .setMinValue(0.01)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('stockalerts')
+      .setDescription('🔔 View your active price alerts'),
+
+    new SlashCommandBuilder()
+      .setName('stockevents')
+      .setDescription('📰 View active market events'),
   ];
 
   // Music commands removed - now handled by separate music-bot
