@@ -1,7 +1,7 @@
 # Egg Startup Command Fix
 
 ## Probleem
-De startup command draait `node index.js` voordat dependencies zijn geïnstalleerd, waardoor `discord.js` niet gevonden kan worden.
+De startup command draait `node index.js` voordat dependencies zijn geïnstalleerd, waardoor `discord.js` niet gevonden kan worden. Ook moeten files automatisch van GitHub gepulled worden bij elke start.
 
 ## Oplossing
 Update de Startup Command in je Pterodactyl Egg configuratie:
@@ -17,14 +17,19 @@ Verander van:
 git pull origin main 2>/dev/null || true && npm install --production && node index.js
 ```
 
-Naar:
+Naar (gebruik start.sh script - beste optie):
 ```bash
-cd /home/container && if [ -f package.json ] && [ ! -d node_modules ]; then npm install --production; fi && node index.js
+bash start.sh
 ```
 
-OF (nog beter, gebruik het startup script):
+Dit script:
+- Pullt automatisch de laatste code van GitHub
+- Installeert dependencies als ze ontbreken
+- Start de bot
+
+OF (alternatief zonder start.sh):
 ```bash
-if [ -f start.sh ]; then bash start.sh; else cd /home/container && if [ -f package.json ] && [ ! -d node_modules ]; then npm install --production; fi && node index.js; fi
+cd /home/container && if [ -d .git ]; then git pull origin main 2>/dev/null || true; fi && if [ -f package.json ] && ([ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ]); then npm install --production; fi && node index.js
 ```
 
 ### Stap 3: Sla op
