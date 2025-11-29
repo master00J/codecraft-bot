@@ -340,6 +340,28 @@ try {
   console.warn('Quest Manager not available:', error.message);
 }
 
+// Initialize Poll Manager
+let pollManager = null;
+try {
+  const PollManager = require('./modules/comcraft/polls/manager');
+  if (PollManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    pollManager = new PollManager(client);
+    global.pollManager = pollManager;
+    pollManager.startScheduler();
+    // Check for polls without messages every 30 seconds
+    setInterval(async () => {
+      try {
+        await pollManager.processUnpostedPolls();
+      } catch (error) {
+        console.error('Error processing unposted polls:', error);
+      }
+    }, 30 * 1000);
+    console.log('✅ Poll Manager initialized');
+  }
+} catch (error) {
+  console.warn('Poll Manager not available:', error.message);
+}
+
 const {
   runGuildAiPrompt,
   handleAskAiCommand,
@@ -1366,18 +1388,40 @@ client.on('interactionCreate', async (interaction) => {
     // Casino buttons are handled BEFORE license check (at the top of interactionCreate)
     // to prevent timeout issues
 
-    // Event RSVP button handlers
-    if (interaction.customId.startsWith('event_rsvp_')) {
-      if (global.eventManager) {
-        const eventHandlers = createEventHandlers({ 
-          client, 
-          featureGate, 
-          eventManager: global.eventManager 
-        });
-        const handled = await eventHandlers.handleRSVPInteraction(interaction);
-        if (handled) return;
+      // Poll button handlers
+      if (interaction.customId.startsWith('poll_vote_') || 
+          interaction.customId.startsWith('poll_results_') || 
+          interaction.customId.startsWith('poll_info_')) {
+        if (!global.pollManager) {
+          return interaction.reply({
+            content: '❌ Poll system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'polls',
+          'Premium'
+        );
+        if (!allowed) return;
+        
+        await handlePollButtonInteraction(interaction);
+        return;
       }
-    }
+
+      // Event RSVP button handlers
+      if (interaction.customId.startsWith('event_rsvp_')) {
+        if (global.eventManager) {
+          const eventHandlers = createEventHandlers({ 
+            client, 
+            featureGate, 
+            eventManager: global.eventManager 
+          });
+          const handled = await eventHandlers.handleRSVPInteraction(interaction);
+          if (handled) return;
+        }
+      }
 
     // Handle verification buttons (remove unverified role)
     if (interaction.customId === 'verify' || interaction.customId.startsWith('verify_')) {
@@ -1553,6 +1597,27 @@ client.on('interactionCreate', async (interaction) => {
         );
         if (!allowed) break;
         await global.questCommands.handleQuestChainCommand(interaction);
+        break;
+      }
+
+      // ============ POLL COMMANDS ============
+      case 'poll': {
+        if (!global.pollManager) {
+          return interaction.reply({
+            content: '❌ Poll system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'polls',
+          'Premium'
+        );
+        if (!allowed) break;
+        
+        const { handlePollCommand } = require('./modules/comcraft/polls/commands');
+        await handlePollCommand(interaction, global.pollManager);
         break;
       }
 
@@ -3863,6 +3928,148 @@ async function handleBotChallengeMainBot(interaction, duelManager, economyManage
 }
 
 /**
+ * Handle poll button interactions (vote, results, info)
+ */
+async function handlePollButtonInteraction(interaction) {
+  try {
+    if (!global.pollManager) {
+      return interaction.reply({
+        content: '❌ Poll system is not available.',
+        ephemeral: true
+      });
+    }
+
+    const customId = interaction.customId;
+
+    if (customId.startsWith('poll_vote_')) {
+      // Format: poll_vote_{pollId}_{optionId}
+      const parts = customId.split('_');
+      const pollId = parts[2];
+      const optionId = parts[3];
+
+      try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const poll = await global.pollManager.getPoll(pollId);
+        if (!poll) {
+          return interaction.editReply({ content: '❌ Poll not found!' });
+        }
+
+        if (poll.guild_id !== interaction.guildId) {
+          return interaction.editReply({ content: '❌ That poll belongs to a different server!' });
+        }
+
+        if (poll.status !== 'active') {
+          return interaction.editReply({ content: '❌ This poll is not active!' });
+        }
+
+        // Vote
+        const result = await global.pollManager.vote(pollId, interaction.user.id, [optionId]);
+        
+        // Update message
+        await global.pollManager.updatePollMessage(pollId);
+
+        await interaction.editReply({
+          content: result.changed 
+            ? '✅ Vote updated successfully!'
+            : '✅ Vote recorded!'
+        });
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error.message}`
+        }).catch(() => {});
+      }
+    } else if (customId.startsWith('poll_results_')) {
+      const pollId = customId.replace('poll_results_', '');
+      
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const poll = await global.pollManager.getPollWithResults(pollId);
+        if (!poll) {
+          return interaction.editReply({ content: '❌ Poll not found!' });
+        }
+
+        if (poll.guild_id !== interaction.guildId) {
+          return interaction.editReply({ content: '❌ That poll belongs to a different server!' });
+        }
+
+        const embed = await global.pollManager.buildPollEmbed(poll, true);
+        if (!embed) {
+          return interaction.editReply({ content: '❌ Failed to build results embed!' });
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error.message}`
+        }).catch(() => {});
+      }
+    } else if (customId.startsWith('poll_info_')) {
+      const pollId = customId.replace('poll_info_', '');
+      
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const poll = await global.pollManager.getPollWithResults(pollId);
+        if (!poll) {
+          return interaction.editReply({ content: '❌ Poll not found!' });
+        }
+
+        if (poll.guild_id !== interaction.guildId) {
+          return interaction.editReply({ content: '❌ That poll belongs to a different server!' });
+        }
+
+        const { EmbedBuilder } = require('discord.js');
+        const embed = new EmbedBuilder()
+          .setTitle('📊 Poll Information')
+          .addFields(
+            { name: 'Title', value: poll.title, inline: false },
+            { name: 'Status', value: poll.status, inline: true },
+            { name: 'Type', value: poll.poll_type === 'multiple' ? 'Multiple Choice' : 'Single Choice', inline: true },
+            { name: 'Voting', value: poll.voting_type === 'anonymous' ? 'Anonymous' : 'Public', inline: true },
+            { name: 'Total Votes', value: poll.total_votes?.toString() || '0', inline: true },
+            { name: 'Poll ID', value: `\`${poll.id}\``, inline: false }
+          )
+          .setColor(0x5865F2);
+
+        if (poll.description) {
+          embed.setDescription(poll.description);
+        }
+
+        if (poll.expires_at && poll.status === 'active') {
+          embed.addFields({
+            name: 'Expires',
+            value: `<t:${Math.floor(new Date(poll.expires_at).getTime() / 1000)}:R>`,
+            inline: true
+          });
+        }
+
+        if (poll.message_id) {
+          embed.addFields({
+            name: 'Poll Message',
+            value: `[Jump to Poll](https://discord.com/channels/${poll.guild_id}/${poll.channel_id}/${poll.message_id})`,
+            inline: false
+          });
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error.message}`
+        }).catch(() => {});
+      }
+    }
+  } catch (error) {
+    console.error('Error handling poll button:', error);
+    await interaction.reply({
+      content: '❌ An error occurred while processing your request.',
+      ephemeral: true
+    }).catch(() => {});
+  }
+}
+
+/**
  * Handle verification button - removes unverified role when user verifies
  */
 async function handleVerificationButton(interaction) {
@@ -5994,6 +6201,17 @@ async function registerCommands(clientInstance) {
           .setDescription('Name of the quest chain')
           .setRequired(false)
       ),
+
+    // Poll commands
+    ...(function() {
+      try {
+        const { createPollCommands } = require('./modules/comcraft/polls/commands');
+        return createPollCommands();
+      } catch (error) {
+        console.warn('Failed to load poll commands:', error);
+        return [];
+      }
+    })(),
 
     new SlashCommandBuilder()
       .setName('setxp')

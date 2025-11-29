@@ -355,6 +355,7 @@ class ConfigManager {
           streaming_twitch: true,
           streaming_youtube: true,
           rank_xp_multipliers: false,
+          polls: false,
         },
         premium: {
           leveling: true,
@@ -386,6 +387,7 @@ class ConfigManager {
           streaming_twitch: true,
           streaming_youtube: true,
           rank_xp_multipliers: true,
+          polls: true,
         },
         enterprise: {
           everything: true,
@@ -414,6 +416,7 @@ class ConfigManager {
           streaming_twitch: true,
           streaming_youtube: true,
           rank_xp_multipliers: true,
+          polls: true,
         }
       };
 
@@ -530,6 +533,7 @@ class ConfigManager {
         economy: false,
         casino: false,
         quests: false,
+        polls: false,
       },
       premium: {
         leveling: true,
@@ -551,6 +555,7 @@ class ConfigManager {
         economy: true,
         casino: true,
         quests: true,
+        polls: true,
       },
       enterprise: {
         everything: true,
@@ -571,6 +576,7 @@ class ConfigManager {
         economy: true,
         casino: true,
         quests: true,
+        polls: true,
       }
     };
 

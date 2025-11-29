@@ -223,6 +223,13 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     defaultEnabled: false,
     requiredTier: 'Premium',
   },
+  {
+    id: 'polls',
+    label: 'Polls & Voting',
+    description: 'Create polls with multiple options, real-time results, anonymous voting, and scheduled reminders.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
 ];
 
 const LIMIT_DEFINITIONS: LimitDefinition[] = [
