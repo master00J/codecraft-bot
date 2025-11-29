@@ -79,7 +79,6 @@ class CamOnlyVoiceManager {
       exempt_users: [],
       log_channel_id: null,
       channel_log_channels: {}
-      channel_log_channels: {}
     };
   }
 
@@ -313,10 +312,23 @@ class CamOnlyVoiceManager {
    * Log action to log channel
    */
   async logAction(member, voiceState, config, action, warningCount = null) {
-    if (!config.log_channel_id) return;
+    // First check for per-channel log channel, then fallback to global log channel
+    let logChannelId = null;
+    
+    if (config.channel_log_channels && typeof config.channel_log_channels === 'object') {
+      // Check if this voice channel has a specific log channel
+      logChannelId = config.channel_log_channels[voiceState.channelId] || null;
+    }
+    
+    // Fallback to global log channel if no per-channel log channel is set
+    if (!logChannelId) {
+      logChannelId = config.log_channel_id;
+    }
+    
+    if (!logChannelId) return;
 
     try {
-      const logChannel = await this.client.channels.fetch(config.log_channel_id);
+      const logChannel = await this.client.channels.fetch(logChannelId);
       if (!logChannel) return;
 
       const actionText = action === 'warning' 
