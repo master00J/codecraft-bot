@@ -719,7 +719,6 @@ Please check:
       throw error
     }
   }
-}
 
   // Get available eggs for a specific server
   async getServerEggs(serverUuid: string): Promise<any[]> {
