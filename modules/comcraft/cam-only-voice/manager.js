@@ -260,10 +260,10 @@ class CamOnlyVoiceManager {
         const channelTimeout = config.channel_timeouts?.[newState.channelId];
         if (channelTimeout && channelTimeout.enabled) {
           try {
-            // Get timeout expiration
+            // Get timeout expiration and channel_id
             const { data: timeoutData } = await this.supabase
               .from('cam_only_voice_timeouts')
-              .select('expires_at')
+              .select('expires_at, channel_id')
               .eq('guild_id', member.guild.id)
               .eq('user_id', member.id)
               .eq('channel_id', newState.channelId)
@@ -290,8 +290,8 @@ class CamOnlyVoiceManager {
                 timeLeft = 'less than a minute';
               }
 
-              // Get channelId from the timeout or from newState (save before disconnect)
-              const targetChannelId = newState.channelId || channelId;
+              // Get channelId from the timeout data or from newState (save before disconnect)
+              const targetChannelId = timeoutData.channel_id || newState.channelId;
 
               // Disconnect user
               await member.voice.disconnect('You are timed out from this cam-only voice channel');
@@ -376,8 +376,8 @@ class CamOnlyVoiceManager {
                 timeLeft = 'less than a minute';
               }
 
-              // Save channelId before disconnect (channelId comes from the timeout query)
-              const targetChannelId = newState.channelId || timeoutData.channel_id;
+              // Get channelId from the timeout data or from newState (save before disconnect)
+              const targetChannelId = timeoutData.channel_id || newState.channelId;
 
               // Disconnect user (move them back to their previous channel or disconnect)
               await member.voice.disconnect('You are timed out from this cam-only voice channel');
