@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function BotPersonalizer() {
   const params = useParams();
@@ -24,6 +25,7 @@ export default function BotPersonalizer() {
   const [botToken, setBotToken] = useState('');
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(1);
+  const [presenceSaving, setPresenceSaving] = useState(false);
 
   useEffect(() => {
     if (guildId) {
@@ -575,10 +577,117 @@ export default function BotPersonalizer() {
                 <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
                   <strong>💭 Bot Status:</strong>
                   <div className="mt-2">
-                    Status (e.g., "Playing: comcraft.gg") is automatically set by ComCraft.
-                    <br />You can customize this via the bot configuration in the dashboard.
+                    Customize your bot's Discord status below!
                   </div>
                 </div>
+              </div>
+            </Card>
+
+            {/* Bot Status/Presence Configuration */}
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-4">💭 Bot Status Configuration</h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Customize what your bot displays as its status in Discord (e.g., "Playing...", "Watching...", etc.)
+              </p>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="presenceType">Status Type</Label>
+                  <Select
+                    id="presenceType"
+                    value={botConfig?.bot_presence_type || 'watching'}
+                    onValueChange={async (value) => {
+                      setPresenceSaving(true);
+                      try {
+                        const response = await fetch(`/api/comcraft/guilds/${guildId}/bot-personalizer/presence`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ presenceType: value })
+                        });
+                        const result = await response.json();
+                        if (result.success) {
+                          fetchBotConfig();
+                        } else {
+                          alert(`❌ Error: ${result.error}\n${result.message || ''}`);
+                        }
+                      } catch (error) {
+                        alert('❌ Error updating presence');
+                      } finally {
+                        setPresenceSaving(false);
+                      }
+                    }}
+                    disabled={presenceSaving}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="playing">🎮 Playing</SelectItem>
+                      <SelectItem value="watching">👀 Watching</SelectItem>
+                      <SelectItem value="listening">🎵 Listening</SelectItem>
+                      <SelectItem value="streaming">📺 Streaming</SelectItem>
+                      <SelectItem value="competing">🏆 Competing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500">
+                    The type of activity your bot displays
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="presenceText">Status Text</Label>
+                  <Input
+                    id="presenceText"
+                    value={botConfig?.bot_presence_text || 'codecraft-solutions.com | /help'}
+                    onChange={async (e) => {
+                      const value = e.target.value;
+                      // Debounce: wait 1 second after user stops typing
+                      if (presenceSaving) return;
+                      clearTimeout((window as any).presenceUpdateTimeout);
+                      (window as any).presenceUpdateTimeout = setTimeout(async () => {
+                        setPresenceSaving(true);
+                        try {
+                          const response = await fetch(`/api/comcraft/guilds/${guildId}/bot-personalizer/presence`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ presenceText: value })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            fetchBotConfig();
+                          } else {
+                            alert(`❌ Error: ${result.error}\n${result.message || ''}`);
+                          }
+                        } catch (error) {
+                          alert('❌ Error updating presence');
+                        } finally {
+                          setPresenceSaving(false);
+                        }
+                      }, 1000);
+                    }}
+                    placeholder="codecraft-solutions.com | /help"
+                    maxLength={128}
+                    disabled={presenceSaving}
+                  />
+                  <p className="text-xs text-gray-500">
+                    The text that appears after the status type (max 128 characters)
+                    <br />
+                    Example: If type is "Playing" and text is "Minecraft", it shows as "Playing Minecraft"
+                  </p>
+                </div>
+
+                {presenceSaving && (
+                  <div className="text-sm text-gray-500 flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    Updating status...
+                  </div>
+                )}
+
+                <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200">
+                  <AlertDescription className="text-sm">
+                    <strong>ℹ️ Note:</strong> Changes may take a few seconds to appear in Discord. The bot needs to restart to apply the new status.
+                  </AlertDescription>
+                </Alert>
               </div>
             </Card>
 

@@ -291,6 +291,71 @@ class CustomBotManager {
             console.log(`   ⚠️ Bot is not in any servers yet`);
           }
           
+          // Load and apply custom bot presence from database
+          if (this.supabase) {
+            try {
+              const { data: botConfig } = await this.supabase
+                .from('custom_bot_tokens')
+                .select('bot_presence_type, bot_presence_text')
+                .eq('guild_id', guildId)
+                .single();
+
+              if (botConfig && botConfig.bot_presence_text) {
+                // Map presence types to Discord ActivityTypes
+                const activityTypeMap = {
+                  'playing': 0,    // ActivityType.Playing
+                  'streaming': 1,  // ActivityType.Streaming
+                  'listening': 2,  // ActivityType.Listening
+                  'watching': 3,   // ActivityType.Watching
+                  'competing': 5   // ActivityType.Competing
+                };
+                
+                const activityType = activityTypeMap[botConfig.bot_presence_type || 'watching'] || 3;
+                client.user.setActivity(botConfig.bot_presence_text, { type: activityType });
+                console.log(`📊 Custom bot presence applied: ${botConfig.bot_presence_type} - ${botConfig.bot_presence_text}`);
+              }
+            } catch (error) {
+              console.error('❌ Error loading custom bot presence:', error);
+            }
+          }
+
+          // Set up periodic presence update check (every 30 seconds)
+          // This allows presence to be updated without bot restart
+          setInterval(async () => {
+            if (this.supabase && client.user) {
+              try {
+                const { data: botConfig } = await this.supabase
+                  .from('custom_bot_tokens')
+                  .select('bot_presence_type, bot_presence_text')
+                  .eq('guild_id', guildId)
+                  .single();
+
+                if (botConfig && botConfig.bot_presence_text) {
+                  const activityTypeMap = {
+                    'playing': 0,
+                    'streaming': 1,
+                    'listening': 2,
+                    'watching': 3,
+                    'competing': 5
+                  };
+                  
+                  const activityType = activityTypeMap[botConfig.bot_presence_type || 'watching'] || 3;
+                  const currentActivity = client.user.presence?.activities?.[0];
+                  
+                  // Only update if different from current
+                  if (!currentActivity || 
+                      currentActivity.name !== botConfig.bot_presence_text || 
+                      currentActivity.type !== activityType) {
+                    client.user.setActivity(botConfig.bot_presence_text, { type: activityType });
+                    console.log(`🔄 Updated custom bot presence: ${botConfig.bot_presence_type} - ${botConfig.bot_presence_text}`);
+                  }
+                }
+              } catch (error) {
+                // Silently ignore - bot might be offline or config might not exist yet
+              }
+            }
+          }, 30000); // Check every 30 seconds
+          
           // Update bot status and is_active in database
           await this.updateBotStatus(guildId, true, client.guilds.cache.size);
           

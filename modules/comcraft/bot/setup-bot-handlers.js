@@ -455,7 +455,42 @@ async function setupBotHandlers(client, options = {}) {
     console.log(`✅ Bot ${botTag} is online`);
     console.log(`📊 Serving ${client.guilds.cache.size} server(s)`);
 
-    client.user.setActivity('codecraft-solutions.com | /help', { type: 3 });
+    // Set bot activity/presence
+    // For custom bots, load from database if guildId is provided
+    if (isCustomBot && guildId && configManager?.supabase) {
+      try {
+        const { data: botConfig } = await configManager.supabase
+          .from('custom_bot_tokens')
+          .select('bot_presence_type, bot_presence_text')
+          .eq('guild_id', guildId)
+          .single();
+
+        if (botConfig && botConfig.bot_presence_text) {
+          // Map presence types to Discord ActivityTypes
+          const activityTypeMap = {
+            'playing': 0,    // ActivityType.Playing
+            'streaming': 1,  // ActivityType.Streaming
+            'listening': 2,  // ActivityType.Listening
+            'watching': 3,   // ActivityType.Watching
+            'competing': 5   // ActivityType.Competing
+          };
+          
+          const activityType = activityTypeMap[botConfig.bot_presence_type || 'watching'] || 3;
+          client.user.setActivity(botConfig.bot_presence_text, { type: activityType });
+          console.log(`📊 Custom bot presence set: ${botConfig.bot_presence_type} - ${botConfig.bot_presence_text}`);
+        } else {
+          // Default fallback for custom bots
+          client.user.setActivity('codecraft-solutions.com | /help', { type: 3 });
+        }
+      } catch (error) {
+        console.error('❌ Error loading custom bot presence:', error);
+        // Fallback to default
+        client.user.setActivity('codecraft-solutions.com | /help', { type: 3 });
+      }
+    } else {
+      // Default for main bot
+      client.user.setActivity('codecraft-solutions.com | /help', { type: 3 });
+    }
 
     // Sync guilds to database (only for main bot or if guildId is specified)
     if (!isCustomBot) {
