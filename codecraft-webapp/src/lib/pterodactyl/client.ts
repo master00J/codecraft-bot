@@ -651,10 +651,73 @@ Please check:
             continue
           }
         }
-        throw error
-      }
+      throw error
     }
   }
+
+  // Create a Client API token for a specific user via Application API
+  // This allows us to start servers via Client API
+  async createClientApiToken(userId: number): Promise<string> {
+    try {
+      console.log(`🔑 Creating Client API token for user ${userId}...`)
+      
+      const response = await this.request<{ attributes: { identifier: string } }>(
+        `/users/${userId}/api-keys`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            description: `Auto-generated token for server management - ${new Date().toISOString()}`,
+            allowed_ips: [] // Allow from any IP
+          })
+        },
+        'application'
+      )
+      
+      // The token is only returned once, in the response
+      const token = 'data' in response 
+        ? (response.data as any).attributes?.token || (response.data as any).attributes?.identifier
+        : (response as any).attributes?.token || (response as any).attributes?.identifier
+      
+      if (!token) {
+        throw new Error('Client API token was not returned in response')
+      }
+      
+      console.log(`✅ Client API token created for user ${userId}`)
+      return token
+    } catch (error: any) {
+      console.error(`❌ Failed to create Client API token for user ${userId}:`, error.message)
+      throw error
+    }
+  }
+
+  // Start server using Client API token
+  async startServerWithClientToken(serverUuid: string, clientToken: string): Promise<void> {
+    try {
+      console.log(`🚀 Starting server ${serverUuid} via Client API...`)
+      
+      const panelUrl = this.config.panelUrl.replace(/\/$/, '')
+      const response = await fetch(`${panelUrl}/api/client/servers/${serverUuid}/power`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.pterodactyl.v1+json'
+        },
+        body: JSON.stringify({ signal: 'start' })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }))
+        throw new Error(`Failed to start server: ${errorData.errors?.[0]?.detail || errorData.message || response.statusText}`)
+      }
+      
+      console.log(`✅ Server ${serverUuid} started successfully via Client API`)
+    } catch (error: any) {
+      console.error(`❌ Failed to start server via Client API:`, error.message)
+      throw error
+    }
+  }
+}
 
   // Get available eggs for a specific server
   async getServerEggs(serverUuid: string): Promise<any[]> {
