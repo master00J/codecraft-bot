@@ -443,8 +443,7 @@ export async function POST(
           );
           console.log(`✅ Bot files deployed directly - index.js is ready`);
           
-          // Create a simple startup script that loads .env and starts the bot
-          // This ensures environment variables are loaded even if startup command is just "node index.js"
+          // Create a startup script that ensures dependencies are installed before starting
           const startupScript = `#!/bin/bash
 cd /home/container
 
@@ -453,23 +452,70 @@ if [ -f .env ]; then
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Install dependencies if node_modules doesn't exist
-if [ ! -d node_modules ] && [ -f package.json ]; then
-    echo "📦 Installing dependencies..."
-    npm install --production 2>&1 || echo "⚠️  Some packages may have failed to install"
+# Always check and install dependencies if package.json exists
+if [ -f package.json ]; then
+    if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ]; then
+        echo "📦 Installing dependencies (this may take a few minutes)..."
+        npm install --production --loglevel=error || {
+            echo "⚠️  npm install failed, trying with --legacy-peer-deps..."
+            npm install --production --legacy-peer-deps --loglevel=error || {
+                echo "❌ Failed to install dependencies"
+                exit 1
+            }
+        }
+        echo "✅ Dependencies installed"
+    else
+        echo "✅ Dependencies already installed"
+    fi
+else
+    echo "⚠️  package.json not found - dependencies cannot be installed"
 fi
 
 # Start bot
 echo "🚀 Starting bot..."
-node index.js
+exec node index.js
 `;
           
           await client.uploadFile(pterodactylServer.uuid, 'start.sh', startupScript);
-          console.log(`✅ Startup script created (optional - bot can also start with just 'node index.js')`);
+          console.log(`✅ Startup script created`);
           
-          // Note: Startup command cannot be set via API on SparkedHost
-          // The default startup command should be "node index.js" which will work since we uploaded index.js directly
-          console.log(`ℹ️  Bot is ready to start with default startup command: node index.js`);
+          // Make the script executable via Pterodactyl file API (using private method via any cast)
+          try {
+            // @ts-ignore - accessing private request method
+            await client.request(
+              `/servers/${pterodactylServer.uuid}/files/chmod`,
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  root: '/home/container',
+                  files: ['start.sh'],
+                  mode: '755'
+                })
+              },
+              'client'
+            );
+            console.log(`✅ Startup script made executable`);
+          } catch (chmodError: any) {
+            console.warn(`⚠️  Could not make start.sh executable via API:`, chmodError.message);
+            // Try via command instead (server needs to be online)
+            try {
+              await client.sendCommand(pterodactylServer.uuid, 'chmod +x start.sh');
+              console.log(`✅ Startup script made executable via command`);
+            } catch (cmdError: any) {
+              console.warn(`⚠️  Could not make start.sh executable:`, cmdError.message);
+              console.log(`ℹ️  Script will be created - Pterodactyl can execute it with 'bash start.sh'`);
+            }
+          }
+          
+          // Set startup command to use the script (ensures dependencies are installed)
+          try {
+            await client.setStartupCommand(pterodactylServer.uuid, 'bash start.sh');
+            console.log(`✅ Startup command set to: bash start.sh`);
+          } catch (startupError: any) {
+            console.warn(`⚠️  Could not set startup command automatically:`, startupError.message);
+            console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: bash start.sh`);
+            console.log(`   This ensures dependencies are installed before the bot starts`);
+          }
         } catch (deployError: any) {
           console.error(`❌ Failed to deploy bot files directly:`, deployError.message);
           console.log(`ℹ️  Fallback: You may need to manually configure deployment`);
