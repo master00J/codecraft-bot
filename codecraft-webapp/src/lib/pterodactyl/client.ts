@@ -326,11 +326,16 @@ Please check:
       // Handle both response formats: { attributes } or { data: { attributes } }
       return 'data' in response ? response.data.attributes : response.attributes
     } catch (error: any) {
-      // Fallback: try without specifying API mode (might default correctly)
-      const response = await this.request<any>(
-        `/servers/${serverUuid}`
-      )
-      return 'data' in response ? response.data.attributes : response.attributes
+      // If Application API gives 403, don't try fallback - it won't work either
+      if (error?.status === 403) {
+        throw error // Re-throw so caller knows it's an API access issue
+      }
+      // For 404, also don't try fallback
+      if (error?.status === 404 || error?.isNotFound) {
+        throw error // Re-throw so caller knows server doesn't exist (yet)
+      }
+      // For other errors, don't try fallback - just re-throw
+      throw error
     }
   }
 
@@ -338,12 +343,15 @@ Please check:
   async waitForServerReady(serverUuid: string, maxWaitTime: number = 120000): Promise<void> {
     const startTime = Date.now()
     const checkInterval = 5000 // Check every 5 seconds
+    let consecutiveApiErrors = 0
+    const maxApiErrors = 3 // Stop checking after 3 consecutive API errors
     
     console.log(`⏳ Waiting for server ${serverUuid} installation to complete...`)
     
     while (Date.now() - startTime < maxWaitTime) {
       try {
         const server = await this.getServer(serverUuid)
+        consecutiveApiErrors = 0 // Reset counter on success
         
         // Check if server is installed (not in installing state)
         if (server.status !== 'installing' && server.status !== 'install_failed') {
@@ -354,26 +362,44 @@ Please check:
         console.log(`⏳ Server still installing... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`)
         await new Promise(resolve => setTimeout(resolve, checkInterval))
       } catch (error: any) {
+        consecutiveApiErrors++
+        
+        // If we get a 403, API access issue - stop checking
+        if (error?.status === 403) {
+          console.log(`⚠️  Cannot check server status via API (403 Forbidden)`)
+          console.log(`ℹ️  This is normal with Application API - server creation may take a few minutes`)
+          console.log(`ℹ️  Proceeding without status check - server will be ready soon`)
+          return // Don't block - we can't check status via API
+        }
+        
         // If we get a 404, server might not exist yet or API access issue
         if (error?.isNotFound || error?.status === 404) {
+          if (consecutiveApiErrors >= maxApiErrors) {
+            console.log(`⚠️  Server status check failed multiple times (404)`)
+            console.log(`ℹ️  This might mean the server is still being created`)
+            console.log(`ℹ️  Proceeding anyway - server creation typically takes 1-3 minutes`)
+            return // Stop checking after multiple 404s
+          }
           console.log(`⏳ Server not found yet (might still be creating)... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`)
           await new Promise(resolve => setTimeout(resolve, checkInterval))
           continue
         }
-        // If we get a 403, API access issue - but we can still proceed
-        if (error?.status === 403) {
-          console.log(`⚠️  Cannot check server status via API (403) - assuming installation will complete`)
-          console.log(`ℹ️  Proceeding without status check...`)
-          return // Don't block - server might still be installing but we can't check
-        }
+        
         // If we get a 409 error, server is still installing
         if (error.message?.includes('409') || error.message?.includes('installation')) {
+          consecutiveApiErrors = 0 // Reset on 409 - this is expected
           console.log(`⏳ Server still installing... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`)
           await new Promise(resolve => setTimeout(resolve, checkInterval))
           continue
         }
+        
         // For other errors, log but don't throw - we'll try a few more times
-        console.warn(`⚠️  Error checking server status:`, error.message)
+        if (consecutiveApiErrors >= maxApiErrors) {
+          console.warn(`⚠️  Multiple errors checking server status - stopping checks`)
+          console.log(`ℹ️  Proceeding anyway - server should be ready soon`)
+          return
+        }
+        console.warn(`⚠️  Error checking server status (${consecutiveApiErrors}/${maxApiErrors}):`, error.message)
         await new Promise(resolve => setTimeout(resolve, checkInterval))
         continue
       }
