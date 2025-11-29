@@ -415,6 +415,122 @@ class QuestManager {
   }
 
   /**
+   * Check if a quest chain is completed and give chain rewards
+   */
+  async checkChainCompletion(guildId, userId, chainId, completedQuest) {
+    try {
+      // Get chain info
+      const { data: chain, error: chainError } = await this.supabase
+        .from('quest_chains')
+        .select('*')
+        .eq('id', chainId)
+        .eq('guild_id', guildId)
+        .single();
+
+      if (chainError || !chain || !chain.enabled) {
+        return;
+      }
+
+      // Get all quests in chain
+      const { data: chainQuests } = await this.supabase
+        .from('quests')
+        .select('id, chain_position')
+        .eq('chain_id', chainId)
+        .eq('guild_id', guildId)
+        .order('chain_position', { ascending: true });
+
+      if (!chainQuests || chainQuests.length === 0) {
+        return;
+      }
+
+      // Check if user has completed all quests in chain
+      const { data: progressRecords } = await this.supabase
+        .from('quest_progress')
+        .select('quest_id, completed')
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .in('quest_id', chainQuests.map(q => q.id));
+
+      if (!progressRecords) {
+        return;
+      }
+
+      const completedQuests = progressRecords.filter(p => p.completed);
+      
+      // Check if all quests in chain are completed
+      if (completedQuests.length === chainQuests.length) {
+        // Check if chain was already completed by this user
+        const { data: chainProgress } = await this.supabase
+          .from('quest_chain_progress')
+          .select('id, chain_rewards_given')
+          .eq('chain_id', chainId)
+          .eq('guild_id', guildId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (chainProgress && chainProgress.chain_rewards_given) {
+          return; // Already completed and rewarded
+        }
+
+        // Mark chain as completed
+        await this.supabase
+          .from('quest_chain_progress')
+          .upsert({
+            chain_id: chainId,
+            guild_id: guildId,
+            user_id: userId,
+            completed_quest_ids: chainQuests.map(q => q.id),
+            completed_at: new Date().toISOString(),
+            chain_rewards_given: true
+          }, {
+            onConflict: 'chain_id,user_id'
+          });
+
+        // Give chain completion rewards
+        const chainRewards = chain.chain_rewards || {};
+        if (chainRewards.coins || chainRewards.xp) {
+          await this.giveRewards(guildId, userId, chainRewards);
+        }
+
+        // Send chain completion notification
+        if (this.client) {
+          try {
+            const guild = this.client.guilds.cache.get(guildId);
+            if (guild) {
+              const user = await this.client.users.fetch(userId).catch(() => null);
+              if (user) {
+                const embed = new EmbedBuilder()
+                  .setColor('#FFD700')
+                  .setTitle('🏆 Quest Chain Completed!')
+                  .setDescription(`Congratulations! You've completed the entire quest chain: **${chain.name}**!`)
+                  .addFields({
+                    name: 'Chain Completion Rewards',
+                    value: [
+                      chainRewards.coins ? `💰 ${chainRewards.coins} coins` : '',
+                      chainRewards.xp ? `⭐ ${chainRewards.xp} XP` : ''
+                    ].filter(Boolean).join('\n') || 'Amazing job!',
+                    inline: false
+                  })
+                  .setTimestamp();
+
+                try {
+                  await user.send({ embeds: [embed] });
+                } catch (error) {
+                  // User has DMs disabled - that's okay
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error sending chain completion notification:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking chain completion:', error);
+    }
+  }
+
+  /**
    * Give quest rewards
    */
   async giveRewards(guildId, userId, rewards) {
