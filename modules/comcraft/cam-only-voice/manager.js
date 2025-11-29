@@ -15,6 +15,7 @@ class CamOnlyVoiceManager {
     );
     this.monitoredChannels = new Map(); // channelId -> config
     this.userWarnings = new Map(); // userId -> { channelId, warnings, lastWarning }
+    this.userJoinTimes = new Map(); // `${userId}-${channelId}` -> joinTimestamp
     this.checkInterval = null;
   }
 
@@ -164,31 +165,13 @@ class CamOnlyVoiceManager {
 
       // Check if user has video
       if (!this.hasVideoStream(newState)) {
-        // Start grace period
-        const joinTime = Date.now();
-        const gracePeriod = (config.grace_period_seconds || 10) * 1000;
-
-        // Wait for grace period, then check again
-        setTimeout(async () => {
-          try {
-            // Refresh voice state
-            const guild = newState.guild;
-            const member = await guild.members.fetch(newState.id);
-            const currentState = member.voice;
-
-            if (!currentState || !currentState.channelId) return; // User left
-
-            if (currentState.channelId === newState.channelId) {
-              // Still in the same channel
-              if (!this.hasVideoStream(currentState)) {
-                // Still no video - warn or kick
-                await this.handleNoVideo(member, currentState, config);
-              }
-            }
-          } catch (error) {
-            console.error('❌ [Cam-Only Voice] Error checking video after grace period:', error);
-          }
-        }, gracePeriod);
+        // Record join time for grace period tracking
+        const key = `${newState.id}-${newState.channelId}`;
+        this.userJoinTimes.set(key, Date.now());
+      } else {
+        // User has video - clear join time tracking
+        const key = `${newState.id}-${newState.channelId}`;
+        this.userJoinTimes.delete(key);
       }
     }
 
@@ -204,25 +187,13 @@ class CamOnlyVoiceManager {
       if (exempt) return;
 
       if (!this.hasVideoStream(newState)) {
-        // User switched to cam-only channel without video
-        const gracePeriod = (config.grace_period_seconds || 10) * 1000;
-        setTimeout(async () => {
-          try {
-            const guild = newState.guild;
-            const member = await guild.members.fetch(newState.id);
-            const currentState = member.voice;
-
-            if (!currentState || !currentState.channelId) return;
-
-            if (currentState.channelId === newState.channelId) {
-              if (!this.hasVideoStream(currentState)) {
-                await this.handleNoVideo(member, currentState, config);
-              }
-            }
-          } catch (error) {
-            console.error('❌ [Cam-Only Voice] Error checking video after channel switch:', error);
-          }
-        }, gracePeriod);
+        // Record join time for grace period tracking
+        const key = `${newState.id}-${newState.channelId}`;
+        this.userJoinTimes.set(key, Date.now());
+      } else {
+        // User has video - clear join time tracking
+        const key = `${newState.id}-${newState.channelId}`;
+        this.userJoinTimes.delete(key);
       }
     }
 
@@ -237,9 +208,25 @@ class CamOnlyVoiceManager {
       const exempt = await this.isExempt(member, config);
       if (exempt) return;
 
-      // Video was on, now off
+      const key = `${newState.id}-${newState.channelId}`;
+
+      // Video was on, now off - start grace period
       if (oldState.selfVideo && !newState.selfVideo) {
-        await this.handleNoVideo(member, newState, config);
+        this.userJoinTimes.set(key, Date.now()); // Start grace period from now
+      } else if (newState.selfVideo) {
+        // User turned video on - clear join time tracking and warnings
+        this.userJoinTimes.delete(key);
+        this.userWarnings.delete(key);
+      }
+    }
+
+    // User left channel - cleanup tracking
+    if (oldState.channelId && !newState.channelId) {
+      const oldConfig = this.monitoredChannels.get(oldState.channelId);
+      if (oldConfig) {
+        const key = `${oldState.id}-${oldState.channelId}`;
+        this.userJoinTimes.delete(key);
+        this.userWarnings.delete(key);
       }
     }
   }
@@ -371,12 +358,22 @@ class CamOnlyVoiceManager {
             const exempt = await this.isExempt(member, config);
             if (exempt) continue;
 
+            const key = `${memberId}-${channelId}`;
+            
             if (!this.hasVideoStream(voiceState)) {
-              await this.handleNoVideo(member, voiceState, config);
+              // Check if grace period has passed
+              const joinTime = this.userJoinTimes.get(key);
+              const gracePeriod = (config.grace_period_seconds || 10) * 1000;
+              
+              if (joinTime && (Date.now() - joinTime) >= gracePeriod) {
+                // Grace period has passed - handle no video
+                await this.handleNoVideo(member, voiceState, config);
+              }
+              // If grace period hasn't passed yet, do nothing (wait)
             } else {
-              // User has video - clear warnings
-              const key = `${memberId}-${channelId}`;
+              // User has video - clear warnings and join time tracking
               this.userWarnings.delete(key);
+              this.userJoinTimes.delete(key);
             }
           }
         }
