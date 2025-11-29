@@ -2,7 +2,7 @@
 
 /**
  * Comcraft Dashboard - Guild Selector
- * Toon alle servers waar gebruiker owner van is
+ * Display all servers where the user is owner
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';

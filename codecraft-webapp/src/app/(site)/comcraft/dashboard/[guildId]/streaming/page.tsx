@@ -560,7 +560,7 @@ export default function StreamingNotifications() {
                           <Badge variant="outline">Offline</Badge>
                         )}
                         {!stream.enabled && (
-                          <Badge variant="outline" className="bg-gray-500">Uitgeschakeld</Badge>
+                          <Badge variant="outline" className="bg-gray-500">Disabled</Badge>
                         )}
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">

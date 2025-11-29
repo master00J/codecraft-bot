@@ -186,12 +186,12 @@ const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const createMenu = async () => {
     if (!newMenu.menu_name || !newMenu.channel_id) {
-      alert('Menu naam en channel zijn verplicht!');
+      alert('Menu name and channel are required!');
       return;
     }
 
     if (newMenu.options.length === 0) {
-      alert('Voeg minimaal 1 role toe!');
+      alert('Add at least 1 role!');
       return;
     }
 
