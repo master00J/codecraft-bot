@@ -189,7 +189,14 @@ export default function QuestsConfig() {
           enabled: true,
           visible: true,
           max_completions: null,
-          completion_cooldown_hours: null
+          completion_cooldown_hours: null,
+          difficulty: 'normal',
+          rarity: 'common',
+          deadline_at: null,
+          time_limit_hours: null,
+          start_date: null,
+          end_date: null,
+          milestones: []
         });
         setEditingQuest(null);
         fetchQuests();
@@ -252,7 +259,14 @@ export default function QuestsConfig() {
       enabled: quest.enabled ?? true,
       visible: quest.visible ?? true,
       max_completions: quest.max_completions || null,
-      completion_cooldown_hours: quest.completion_cooldown_hours || null
+      completion_cooldown_hours: quest.completion_cooldown_hours || null,
+      difficulty: ((quest as any).difficulty || 'normal') as 'easy' | 'normal' | 'hard' | 'expert',
+      rarity: ((quest as any).rarity || 'common') as 'common' | 'rare' | 'epic' | 'legendary',
+      deadline_at: (quest as any).deadline_at || null,
+      time_limit_hours: (quest as any).time_limit_hours || null,
+      start_date: (quest as any).start_date || null,
+      end_date: (quest as any).end_date || null,
+      milestones: (quest as any).milestones || []
     });
     setActiveTab('create');
   };
