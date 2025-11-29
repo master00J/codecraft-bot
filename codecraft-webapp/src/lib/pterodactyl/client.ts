@@ -1038,7 +1038,7 @@ echo "✅ Bot files deployed successfully"
   }
 
   // Create a startup script that downloads files from GitHub and starts the bot
-  async createStartupScript(serverUuid: string, repoUrl: string = 'https://github.com/master00J/codecraft-solutions', branch: string = 'main', githubToken?: string): Promise<void> {
+  async createStartupScript(serverUuid: string, repoUrl: string = 'https://github.com/master00J/codecraft-bot', branch: string = 'main', githubToken?: string): Promise<void> {
     try {
       // Build git clone URL with token if provided
       let cloneUrl = repoUrl
@@ -1051,10 +1051,21 @@ echo "✅ Bot files deployed successfully"
 # Auto-deploy bot files from GitHub and start bot
 cd /home/container
 
+# Load environment variables from .env if it exists
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
+# Pull latest code from GitHub if repository exists
+if [ -d .git ]; then
+    echo "📥 Pulling latest code from GitHub..."
+    git pull origin ${branch} 2>&1 || echo "⚠️  Git pull failed (continuing with existing files)"
+fi
+
 # Clone repository if index.js doesn't exist
 if [ ! -f index.js ]; then
     echo "📦 Cloning bot files from GitHub..."
-    ${githubToken ? `GIT_ASKPASS=echo GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch ${branch} ${cloneUrl} /tmp/bot-files 2>/dev/null || true` : `git clone --depth 1 --branch ${branch} ${repoUrl} /tmp/bot-files 2>/dev/null || true`}
+    ${githubToken ? `GIT_ASKPASS=echo GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch ${branch} ${cloneUrl} /tmp/bot-files 2>/dev/null || true` : `git clone --depth 1 --branch ${branch} ${cloneUrl} /tmp/bot-files 2>/dev/null || true`}
     
     if [ -d /tmp/bot-files ]; then
         # Copy bot files (index.js for auto-start)
@@ -1063,15 +1074,9 @@ if [ ! -f index.js ]; then
         cp -r /tmp/bot-files/package*.json . 2>/dev/null || true
         cp -r /tmp/bot-files/*.json . 2>/dev/null || true
         
-        # Install dependencies if package.json exists
-        if [ -f package.json ]; then
-            echo "📦 Installing dependencies from package.json..."
-            npm install --production 2>/dev/null || true
-        fi
-        
-        # Install additional required packages if not in package.json
-        echo "📦 Installing additional required packages..."
-        npm install p-queue @google/generative-ai @anthropic-ai/sdk @google/genai canvas topgg-autoposter --save --production 2>/dev/null || true
+        # Initialize git repository for future pulls
+        git init 2>/dev/null || true
+        git remote add origin ${repoUrl.replace('.git', '')} 2>/dev/null || git remote set-url origin ${repoUrl.replace('.git', '')} 2>/dev/null || true
         
         # Cleanup
         rm -rf /tmp/bot-files
@@ -1079,14 +1084,23 @@ if [ ! -f index.js ]; then
     fi
 fi
 
-# Load environment variables from .env if it exists
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+# Always check and install dependencies if package.json exists
+if [ -f package.json ]; then
+    if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ]; then
+        echo "📦 Installing dependencies from package.json..."
+        npm install --production 2>&1 || {
+            echo "⚠️  npm install failed, trying with --legacy-peer-deps..."
+            npm install --production --legacy-peer-deps 2>&1 || echo "⚠️  Some packages may have failed to install"
+        }
+        echo "✅ Dependencies installed"
+    else
+        echo "✅ Dependencies already installed"
+    fi
 fi
 
-# Start bot (Pterodactyl will auto-start index.js, but we can also start it explicitly)
+# Start bot
 echo "🚀 Starting bot..."
-node index.js
+exec node index.js
 `
 
       await this.uploadFile(serverUuid, 'start.sh', scriptContent)
