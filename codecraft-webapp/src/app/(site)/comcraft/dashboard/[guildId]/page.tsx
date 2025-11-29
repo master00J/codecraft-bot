@@ -3505,6 +3505,13 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
               </div>
 
               <div className="p-8 space-y-6">
+                <div className="mb-6">
+                  <Button asChild variant="outline" className="w-full sm:w-auto">
+                    <Link href={`/comcraft/dashboard/${guildId}/economy/stock-market`}>
+                      📈 Manage Stock Market →
+                    </Link>
+                  </Button>
+                </div>
                 <EconomyConfigSection 
                   guildId={guildId} 
                   config={economyConfig}

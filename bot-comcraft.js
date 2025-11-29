@@ -4761,6 +4761,382 @@ async function handleCasinoButton(interaction, featureGate) {
   }
 }
 
+// ================================================================
+// STOCK MARKET COMMAND HANDLERS
+// ================================================================
+
+async function handleStocksCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const stocks = await stockMarketManager.getStocks(guildId);
+
+  if (stocks.length === 0) {
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('📈 Stock Market')
+      .setDescription('❌ No stocks available yet.\n\nAdministrators can add stocks in the dashboard.')
+      .setTimestamp();
+
+    return interaction.editReply({ embeds: [embed] });
+  }
+
+  const stocksList = stocks.map((stock, index) => {
+    const change = parseFloat(stock.current_price) - parseFloat(stock.base_price);
+    const changePercent = ((change / parseFloat(stock.base_price)) * 100).toFixed(2);
+    const emoji = change >= 0 ? '📈' : '📉';
+    const sign = change >= 0 ? '+' : '';
+
+    return `${emoji} **${stock.emoji || '📊'} ${stock.symbol}** - ${stock.name}\n` +
+           `   Price: **${parseFloat(stock.current_price).toFixed(2)}** coins\n` +
+           `   Change: ${sign}${changePercent}% (${sign}${change.toFixed(2)})\n` +
+           `   Volatility: ${stock.volatility}%\n`;
+  }).join('\n');
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('📈 Stock Market - All Stocks')
+    .setDescription(stocksList)
+    .setFooter({ text: 'Use /stock <symbol> to view details • Use /stockbuy to invest' })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  if (!stockMarketManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const symbol = interaction.options.getString('symbol').toUpperCase();
+
+  const stock = await stockMarketManager.getStock(guildId, symbol);
+
+  if (!stock || stock.status !== 'active') {
+    return interaction.editReply({ 
+      content: `❌ Stock "${symbol}" not found or not available. Use /stocks to see all available stocks.` 
+    });
+  }
+
+  const change = parseFloat(stock.current_price) - parseFloat(stock.base_price);
+  const changePercent = ((change / parseFloat(stock.base_price)) * 100).toFixed(2);
+  const sign = change >= 0 ? '+' : '';
+  const color = change >= 0 ? '#00FF00' : '#FF0000';
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`${stock.emoji || '📊'} ${stock.symbol} - ${stock.name}`)
+    .setDescription(stock.description || 'No description available')
+    .addFields(
+      {
+        name: '💰 Current Price',
+        value: `${parseFloat(stock.current_price).toFixed(2)} coins`,
+        inline: true,
+      },
+      {
+        name: '📊 Base Price',
+        value: `${parseFloat(stock.base_price).toFixed(2)} coins`,
+        inline: true,
+      },
+      {
+        name: '📈 Price Change',
+        value: `${sign}${changePercent}% (${sign}${change.toFixed(2)})`,
+        inline: true,
+      },
+      {
+        name: '⚡ Volatility',
+        value: `${stock.volatility}%`,
+        inline: true,
+      },
+      {
+        name: '📦 Available Shares',
+        value: `${stock.available_shares.toLocaleString()} / ${stock.total_shares.toLocaleString()}`,
+        inline: true,
+      },
+      {
+        name: '💎 Status',
+        value: stock.status.charAt(0).toUpperCase() + stock.status.slice(1),
+        inline: true,
+      }
+    )
+    .setFooter({ text: `IPO Date: ${new Date(stock.ipo_date).toLocaleDateString()}` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockBuyCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const symbol = interaction.options.getString('symbol').toUpperCase();
+  const shares = interaction.options.getInteger('shares');
+
+  const result = await stockMarketManager.buyStock(guildId, userId, symbol, shares, economyManager);
+
+  if (!result.success) {
+    return interaction.editReply({ content: `❌ ${result.error}` });
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor('#00FF00')
+    .setTitle('✅ Stock Purchase Successful')
+    .setDescription(`You bought **${shares} shares** of **${result.stock.symbol}**`)
+    .addFields(
+      {
+        name: '💰 Price per Share',
+        value: `${parseFloat(result.stock.current_price).toFixed(2)} coins`,
+        inline: true,
+      },
+      {
+        name: '💵 Total Cost',
+        value: `${economyManager.formatCoins(Math.floor(result.total_cost))} coins`,
+        inline: true,
+      },
+      {
+        name: '💸 Transaction Fee',
+        value: `${economyManager.formatCoins(Math.floor(result.fee))} coins`,
+        inline: true,
+      },
+      {
+        name: '📦 Total Shares Owned',
+        value: `${result.shares} shares`,
+        inline: true,
+      },
+      {
+        name: '💰 New Balance',
+        value: `${economyManager.formatCoins(result.new_balance)} coins`,
+        inline: true,
+      }
+    )
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockSellCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const symbol = interaction.options.getString('symbol').toUpperCase();
+  const shares = interaction.options.getInteger('shares');
+
+  const result = await stockMarketManager.sellStock(guildId, userId, symbol, shares, economyManager);
+
+  if (!result.success) {
+    return interaction.editReply({ content: `❌ ${result.error}` });
+  }
+
+  const color = result.profit_loss >= 0 ? '#00FF00' : '#FF0000';
+  const profitEmoji = result.profit_loss >= 0 ? '📈' : '📉';
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle('✅ Stock Sale Successful')
+    .setDescription(`You sold **${shares} shares** of **${result.stock.symbol}**`)
+    .addFields(
+      {
+        name: '💰 Price per Share',
+        value: `${parseFloat(result.stock.current_price).toFixed(2)} coins`,
+        inline: true,
+      },
+      {
+        name: '💵 Proceeds',
+        value: `${economyManager.formatCoins(Math.floor(result.proceeds))} coins`,
+        inline: true,
+      },
+      {
+        name: '💸 Transaction Fee',
+        value: `${economyManager.formatCoins(Math.floor(result.fee))} coins`,
+        inline: true,
+      },
+      {
+        name: `${profitEmoji} Profit/Loss`,
+        value: `${result.profit_loss >= 0 ? '+' : ''}${economyManager.formatCoins(Math.floor(result.profit_loss))} coins (${result.profit_loss_percent >= 0 ? '+' : ''}${result.profit_loss_percent.toFixed(2)}%)`,
+        inline: true,
+      },
+      {
+        name: '📦 Shares Remaining',
+        value: `${result.shares_remaining} shares`,
+        inline: true,
+      },
+      {
+        name: '💰 New Balance',
+        value: `${economyManager.formatCoins(result.new_balance)} coins`,
+        inline: true,
+      }
+    )
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handlePortfolioCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const targetUser = interaction.options.getUser('user') || interaction.user;
+  const userId = targetUser.id;
+
+  const portfolio = await stockMarketManager.getPortfolio(guildId, userId);
+  const portfolioValue = await stockMarketManager.getPortfolioValue(guildId, userId);
+
+  if (portfolio.length === 0) {
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('💼 Stock Portfolio')
+      .setDescription(`**${targetUser.username}** has no stock holdings yet.\n\nUse /stocks to view available stocks and /stockbuy to start investing!`)
+      .setThumbnail(targetUser.displayAvatarURL())
+      .setTimestamp();
+
+    return interaction.editReply({ embeds: [embed] });
+  }
+
+  const holdingsList = portfolio.map((holding, index) => {
+    const stock = holding.stock;
+    const profitEmoji = holding.profit_loss >= 0 ? '📈' : '📉';
+    const sign = holding.profit_loss >= 0 ? '+' : '';
+
+    return `${index + 1}. **${stock.emoji || '📊'} ${stock.symbol}** - ${stock.name}\n` +
+           `   Shares: ${holding.shares_owned} • Avg Price: ${parseFloat(holding.average_buy_price).toFixed(2)}\n` +
+           `   Current Value: **${economyManager.formatCoins(Math.floor(holding.current_value))}** coins\n` +
+           `   ${profitEmoji} P/L: ${sign}${economyManager.formatCoins(Math.floor(holding.profit_loss))} (${sign}${holding.profit_loss_percent.toFixed(2)}%)\n`;
+  }).join('\n');
+
+  const color = portfolioValue.total_profit_loss >= 0 ? '#00FF00' : '#FF0000';
+  const totalEmoji = portfolioValue.total_profit_loss >= 0 ? '📈' : '📉';
+  const totalSign = portfolioValue.total_profit_loss >= 0 ? '+' : '';
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`💼 Stock Portfolio - ${targetUser.username}`)
+    .setThumbnail(targetUser.displayAvatarURL())
+    .setDescription(holdingsList)
+    .addFields(
+      {
+        name: '💰 Total Portfolio Value',
+        value: `${economyManager.formatCoins(Math.floor(portfolioValue.total_value))} coins`,
+        inline: true,
+      },
+      {
+        name: '💵 Total Invested',
+        value: `${economyManager.formatCoins(Math.floor(portfolioValue.total_invested))} coins`,
+        inline: true,
+      },
+      {
+        name: `${totalEmoji} Total Profit/Loss`,
+        value: `${totalSign}${economyManager.formatCoins(Math.floor(portfolioValue.total_profit_loss))} coins\n(${totalSign}${portfolioValue.total_profit_loss_percent.toFixed(2)}%)`,
+        inline: true,
+      }
+    )
+    .setFooter({ text: `${portfolioValue.holdings_count} holding(s)` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockHistoryCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const limit = interaction.options.getInteger('limit') || 20;
+
+  const history = await stockMarketManager.getTransactionHistory(guildId, userId, limit);
+
+  if (history.length === 0) {
+    return interaction.editReply({ 
+      content: '📜 You have no stock transactions yet. Start trading with /stockbuy!' 
+    });
+  }
+
+  const historyList = history.slice(0, 20).map((tx, index) => {
+    const stock = tx.stock;
+    const type = tx.transaction_type === 'buy' ? '💰 Buy' : '💸 Sell';
+    const date = new Date(tx.created_at).toLocaleDateString();
+
+    let line = `${index + 1}. ${type} - **${stock?.symbol || 'N/A'}**\n`;
+    line += `   ${tx.shares} shares @ ${parseFloat(tx.price_per_share).toFixed(2)} coins\n`;
+    line += `   Total: ${economyManager.formatCoins(Math.floor(parseFloat(tx.total_cost)))} coins\n`;
+    
+    if (tx.transaction_type === 'sell' && tx.profit_loss !== null) {
+      const profitEmoji = parseFloat(tx.profit_loss) >= 0 ? '📈' : '📉';
+      const sign = parseFloat(tx.profit_loss) >= 0 ? '+' : '';
+      line += `   ${profitEmoji} P/L: ${sign}${economyManager.formatCoins(Math.floor(parseFloat(tx.profit_loss)))} (${sign}${parseFloat(tx.profit_loss_percentage).toFixed(2)}%)\n`;
+    }
+    
+    line += `   ${date}\n`;
+    return line;
+  }).join('\n');
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('📜 Stock Transaction History')
+    .setDescription(historyList.length > 2000 ? historyList.substring(0, 1950) + '...' : historyList)
+    .setFooter({ text: `Showing last ${Math.min(limit, history.length)} transactions` })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
+async function handleStockLeaderboardCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  if (!stockMarketManager || !economyManager) {
+    return interaction.editReply({ content: '❌ Stock market system is not available.' });
+  }
+
+  const guildId = interaction.guild.id;
+  const leaderboard = await stockMarketManager.getMarketLeaderboard(guildId, 10);
+
+  if (leaderboard.length === 0) {
+    return interaction.editReply({ 
+      content: '🏆 No portfolios found yet. Start trading to appear on the leaderboard!' 
+    });
+  }
+
+  const leaderboardText = leaderboard
+    .map((entry, index) => {
+      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+      return `${medal} <@${entry.user_id}> - **${economyManager.formatCoins(Math.floor(entry.total_value))} coins**\n`;
+    })
+    .join('');
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('🏆 Stock Market Leaderboard')
+    .setDescription(leaderboardText)
+    .setFooter({ text: 'Ranked by total portfolio value' })
+    .setTimestamp();
+
+  return interaction.editReply({ embeds: [embed] });
+}
+
 async function handleCasinoBetModal(interaction) {
   // DEFER IMMEDIATELY - Discord gives only 3 seconds!
   try {
