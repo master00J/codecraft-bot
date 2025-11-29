@@ -39,6 +39,7 @@ export default function CamOnlyVoicePage() {
   const [config, setConfig] = useState<CamOnlyVoiceConfig | null>(null);
   const [channels, setChannels] = useState<any[]>([]);
   const [textChannels, setTextChannels] = useState<any[]>([]);
+  const [logChannels, setLogChannels] = useState<any[]>([]); // Combined text + voice channels for log
   const [roles, setRoles] = useState<any[]>([]);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedExemptRoles, setSelectedExemptRoles] = useState<string[]>([]);
@@ -81,13 +82,27 @@ export default function CamOnlyVoicePage() {
         const voiceChannels = (channelsData.channels?.voice || []).filter((ch: any) => ch.type === 2);
         setChannels(voiceChannels);
         
-        // Filter text channels for log channel
+        // Filter text channels
         const textChs = (channelsData.channels?.text || []).filter((ch: any) => ch.type === 0);
         setTextChannels(textChs);
+        
+        // Combine text and voice channels for log channel selection
+        const combinedLogChannels = [
+          ...textChs.map((ch: any) => ({ ...ch, channelType: 'text' })),
+          ...voiceChannels.map((ch: any) => ({ ...ch, channelType: 'voice' }))
+        ].sort((a, b) => {
+          // Sort by type first (text before voice), then by name
+          if (a.channelType !== b.channelType) {
+            return a.channelType === 'text' ? -1 : 1;
+          }
+          return a.name.localeCompare(b.name);
+        });
+        setLogChannels(combinedLogChannels);
       } else {
         // If bot API is unavailable, set empty arrays
         setChannels([]);
         setTextChannels([]);
+        setLogChannels([]);
         console.warn('Bot API unavailable - channels not loaded');
       }
       
@@ -375,15 +390,21 @@ export default function CamOnlyVoicePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {textChannels.map((channel) => (
+                    {logChannels.map((channel) => (
                       <SelectItem key={channel.id} value={channel.id}>
-                        {channel.name}
+                        <span className="flex items-center gap-2">
+                          {channel.channelType === 'voice' && '🔊'}
+                          {channel.channelType === 'text' && '💬'}
+                          {channel.name}
+                          {channel.channelType === 'voice' && <span className="text-xs text-muted-foreground">(Voice)</span>}
+                          {channel.channelType === 'text' && <span className="text-xs text-muted-foreground">(Text)</span>}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  Channel to log cam-only voice actions (warnings and disconnections)
+                  Channel to log cam-only voice actions (warnings and disconnections). Can be a text or voice channel.
                 </p>
               </div>
 
