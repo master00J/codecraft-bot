@@ -110,6 +110,14 @@ export default function QuestsConfig() {
   const saveQuest = async () => {
     setSaving(true);
     try {
+      const rewards: Record<string, number> = {};
+      if (newQuest.coins > 0) {
+        rewards.coins = newQuest.coins;
+      }
+      if (newQuest.xp > 0) {
+        rewards.xp = newQuest.xp;
+      }
+
       const questData = {
         name: newQuest.name,
         description: newQuest.description || null,
@@ -119,10 +127,7 @@ export default function QuestsConfig() {
         requirements: {
           target: newQuest.target
         },
-        rewards: {
-          coins: newQuest.coins > 0 ? newQuest.coins : undefined,
-          xp: newQuest.xp > 0 ? newQuest.xp : undefined
-        },
+        rewards: rewards,
         reset_type: newQuest.reset_type,
         reset_time: newQuest.reset_type !== 'never' ? newQuest.reset_time : null,
         reset_day_of_week: newQuest.reset_type === 'weekly' ? newQuest.reset_day_of_week : null,
@@ -131,11 +136,6 @@ export default function QuestsConfig() {
         max_completions: newQuest.max_completions || null,
         completion_cooldown_hours: newQuest.completion_cooldown_hours || null
       };
-
-      // Remove undefined values
-      Object.keys(questData.rewards).forEach(key => 
-        questData.rewards[key] === undefined && delete questData.rewards[key]
-      );
 
       const url = editingQuest
         ? `/api/comcraft/guilds/${guildId}/quests`
