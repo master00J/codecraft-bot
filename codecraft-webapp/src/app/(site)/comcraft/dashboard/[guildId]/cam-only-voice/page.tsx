@@ -351,7 +351,7 @@ export default function CamOnlyVoicePage() {
                                       {logChannel.channelType === 'voice' && '🔊'}
                                       {logChannel.channelType === 'text' && '💬'}
                                       {logChannel.name}
-                                      {logChannel.channelType === 'voice' && <span className="text-xs text-muted-foreground">(Voice)</span>}
+                                      {logChannel.channelType === 'voice' && <span className="text-xs text-muted-foreground">(Voice - Note: Voice channels cannot receive messages)</span>}
                                       {logChannel.channelType === 'text' && <span className="text-xs text-muted-foreground">(Text)</span>}
                                     </span>
                                   </SelectItem>
@@ -437,18 +437,14 @@ export default function CamOnlyVoicePage() {
                     {logChannels.map((channel) => (
                       <SelectItem key={channel.id} value={channel.id}>
                         <span className="flex items-center gap-2">
-                          {channel.channelType === 'voice' && '🔊'}
-                          {channel.channelType === 'text' && '💬'}
-                          {channel.name}
-                          {channel.channelType === 'voice' && <span className="text-xs text-muted-foreground">(Voice)</span>}
-                          {channel.channelType === 'text' && <span className="text-xs text-muted-foreground">(Text)</span>}
+                          💬 {channel.name}
                         </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  Default log channel for all voice channels (if no per-channel log channel is set). Can be a text or voice channel.
+                  Default log channel for all voice channels (if no per-channel log channel is set). Note: Voice channels cannot receive messages, so only text channels will actually receive logs.
                 </p>
               </div>
 
