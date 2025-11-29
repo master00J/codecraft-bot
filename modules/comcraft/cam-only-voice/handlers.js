@@ -29,10 +29,10 @@ class CamOnlyVoiceHandlers {
         });
       }
 
-      // Validate log channel if provided
-      if (logChannel && logChannel.type !== ChannelType.GuildText) {
+      // Validate log channel if provided (can be text or voice channel)
+      if (logChannel && logChannel.type !== ChannelType.GuildText && logChannel.type !== ChannelType.GuildVoice) {
         return interaction.reply({
-          content: '❌ The log channel must be a text channel.',
+          content: '❌ The log channel must be a text or voice channel.',
           ephemeral: true
         });
       }
