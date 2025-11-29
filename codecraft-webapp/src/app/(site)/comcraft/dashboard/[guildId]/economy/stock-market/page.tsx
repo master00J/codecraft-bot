@@ -62,6 +62,24 @@ export default function StockMarketPage() {
   // Edit stock form
   const [editingStock, setEditingStock] = useState<any>(null);
 
+  // Market events state
+  const [activeEvents, setActiveEvents] = useState<any[]>([]);
+  const [newEvent, setNewEvent] = useState({
+    event_type: 'news',
+    title: '',
+    description: '',
+    stock_id: null as string | null,
+    price_multiplier: 1.0,
+    price_change_percentage: 0,
+    duration_minutes: null as number | null
+  });
+
+  // Orders state
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [executedOrdersCount, setExecutedOrdersCount] = useState(0);
+  const [totalOrdersCount, setTotalOrdersCount] = useState(0);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+
   useEffect(() => {
     if (guildId) {
       fetchData();
