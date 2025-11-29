@@ -485,7 +485,7 @@ export default function QuestsConfig() {
                   <Label htmlFor="difficulty">Difficulty</Label>
                   <Select
                     value={newQuest.difficulty || 'normal'}
-                    onValueChange={(value) => setNewQuest({ ...newQuest, difficulty: value })}
+                    onValueChange={(value) => setNewQuest({ ...newQuest, difficulty: value as 'easy' | 'normal' | 'hard' | 'expert' })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select difficulty" />
@@ -503,7 +503,7 @@ export default function QuestsConfig() {
                   <Label htmlFor="rarity">Rarity</Label>
                   <Select
                     value={newQuest.rarity || 'common'}
-                    onValueChange={(value) => setNewQuest({ ...newQuest, rarity: value })}
+                    onValueChange={(value) => setNewQuest({ ...newQuest, rarity: value as 'common' | 'rare' | 'epic' | 'legendary' })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select rarity" />
