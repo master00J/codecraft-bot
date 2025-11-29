@@ -357,23 +357,23 @@ A complete stock market system where users can buy, sell, and trade stocks. Perf
 - **Bulk Operations**: Import/export stocks via JSON
 
 ### Commands:
-- `/stocks` - View all available stocks
-- `/stock <symbol>` - View detailed stock information
-- `/stockbuy <symbol> <shares>` - Buy stocks
-- `/stocksell <symbol> <shares>` - Sell stocks
-- `/portfolio [@user]` - View stock portfolio
-- `/stockhistory` - View transaction history
-- `/stockleaderboard` - View richest portfolios
-- `/stockorder` - Create limit order or stop-loss
+- \`/stocks\` - View all available stocks
+- \`/stock <symbol>\` - View detailed stock information
+- \`/stockbuy <symbol> <shares>\` - Buy stocks
+- \`/stocksell <symbol> <shares>\` - Sell stocks
+- \`/portfolio [@user]\` - View stock portfolio
+- \`/stockhistory\` - View transaction history
+- \`/stockleaderboard\` - View richest portfolios
+- \`/stockorder\` - Create limit order or stop-loss
   * Types: Limit Buy, Limit Sell, Stop Loss, Stop Profit
   * Set target price and expiration
-- `/stockorders` - View your pending orders
-- `/stockcancelorder <order_id>` - Cancel a pending order
-- `/stockalert <symbol> <type> <target_price>` - Create price alert
+- \`/stockorders\` - View your pending orders
+- \`/stockcancelorder <order_id>\` - Cancel a pending order
+- \`/stockalert <symbol> <type> <target_price>\` - Create price alert
   * Types: Price Above, Price Below
   * Get DM notification when price reaches target
-- `/stockalerts` - View your active price alerts
-- `/stockevents` - View active market events
+- \`/stockalerts\` - View your active price alerts
+- \`/stockevents\` - View active market events
 
 ### Dashboard:
 - **Main Page**: /dashboard/[guildId]/economy/stock-market
