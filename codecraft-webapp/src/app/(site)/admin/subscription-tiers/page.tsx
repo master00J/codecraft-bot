@@ -160,6 +160,62 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     defaultEnabled: false,
     requiredTier: 'Premium',
   },
+  {
+    id: 'stock_market',
+    label: 'Stock Market',
+    description: 'Complete stock trading system with limit orders, alerts, dividends, and market events.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
+  {
+    id: 'user_statistics',
+    label: 'User Statistics',
+    description: 'Comprehensive user activity tracking with beautiful stats cards, voice tracking, and analytics.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
+  {
+    id: 'game_news',
+    label: 'Game News',
+    description: 'Automatic game updates for League of Legends, Valorant, Fortnite, Minecraft, and CS2.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
+  {
+    id: 'auto_reactions',
+    label: 'Auto Reactions',
+    description: 'Automatically react with emojis when trigger words are detected in messages.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
+  {
+    id: 'cam_only_voice',
+    label: 'Cam-Only Voice Channels',
+    description: 'Enforce camera requirements in specific voice channels with grace periods and warnings.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
+  {
+    id: 'streaming_twitch',
+    label: 'Twitch Streaming',
+    description: 'Twitch live stream notifications and subscriber notifications with EventSub integration.',
+    defaultEnabled: false,
+    requiredTier: 'Basic',
+  },
+  {
+    id: 'streaming_youtube',
+    label: 'YouTube Streaming',
+    description: 'YouTube live stream and video upload notifications.',
+    defaultEnabled: false,
+    requiredTier: 'Basic',
+  },
+  {
+    id: 'rank_xp_multipliers',
+    label: 'Rank XP Multipliers',
+    description: 'Set custom XP multipliers for specific Discord roles to reward VIP members or staff.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
 ];
 
 const LIMIT_DEFINITIONS: LimitDefinition[] = [

@@ -1432,9 +1432,17 @@ client.on('interactionCreate', async (interaction) => {
   try {
     switch (commandName) {
       // ============ LEVELING COMMANDS ============
-      case 'stats':
+      case 'stats': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'user_statistics',
+          'Premium'
+        );
+        if (!allowed) break;
         await handleStatsCommand(interaction);
         break;
+      }
 
       case 'leaderboard':
         await handleLeaderboardCommand(interaction);
@@ -1799,7 +1807,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1811,7 +1819,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1823,7 +1831,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1835,7 +1843,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1847,7 +1855,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1859,7 +1867,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1871,7 +1879,7 @@ client.on('interactionCreate', async (interaction) => {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
@@ -1880,87 +1888,75 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       // ============ STOCK MARKET COMMANDS ============
-      case 'stocks': {
+      case 'stockorder': {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
-        await handleStocksCommand(interaction);
+        await handleStockOrderCommand(interaction);
         break;
       }
 
-      case 'stock': {
+      case 'stockorders': {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
-        await handleStockCommand(interaction);
+        await handleStockOrdersCommand(interaction);
         break;
       }
 
-      case 'stockbuy': {
+      case 'stockcancelorder': {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
-        await handleStockBuyCommand(interaction);
+        await handleStockCancelOrderCommand(interaction);
         break;
       }
 
-      case 'stocksell': {
+      case 'stockalert': {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
-        await handleStockSellCommand(interaction);
+        await handleStockAlertCommand(interaction);
         break;
       }
 
-      case 'portfolio': {
+      case 'stockalerts': {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
-        await handlePortfolioCommand(interaction);
+        await handleStockAlertsCommand(interaction);
         break;
       }
 
-      case 'stockhistory': {
+      case 'stockevents': {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
           interaction.guild?.id,
-          'economy',
+          'stock_market',
           'Premium'
         );
         if (!allowed) break;
-        await handleStockHistoryCommand(interaction);
-        break;
-      }
-
-      case 'stockleaderboard': {
-        const allowed = await featureGate.checkFeatureOrReply(
-          interaction,
-          interaction.guild?.id,
-          'economy',
-          'Premium'
-        );
-        if (!allowed) break;
-        await handleStockLeaderboardCommand(interaction);
+        await handleStockEventsCommand(interaction);
         break;
       }
 
