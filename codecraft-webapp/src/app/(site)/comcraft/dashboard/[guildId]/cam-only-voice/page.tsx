@@ -18,6 +18,12 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Save, Video, Clock, Shield, X, AlertTriangle, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
+interface ChannelTimeoutConfig {
+  enabled: boolean;
+  duration: number;
+  unit: 'minutes' | 'hours' | 'days';
+}
+
 interface CamOnlyVoiceConfig {
   enabled: boolean;
   channel_ids: string[];
@@ -28,6 +34,7 @@ interface CamOnlyVoiceConfig {
   exempt_users: string[];
   log_channel_id: string | null; // Legacy: global log channel (kept for backward compatibility)
   channel_log_channels?: Record<string, string>; // Per-voice-channel log channels: {voice_channel_id: log_channel_id}
+  channel_timeouts?: Record<string, ChannelTimeoutConfig>; // Per-voice-channel timeouts: {voice_channel_id: {enabled: boolean, duration: number, unit: string}}
 }
 
 export default function CamOnlyVoicePage() {
@@ -46,6 +53,7 @@ export default function CamOnlyVoicePage() {
   const [selectedExemptRoles, setSelectedExemptRoles] = useState<string[]>([]);
   const [selectedExemptUsers, setSelectedExemptUsers] = useState<string[]>([]);
   const [channelLogChannels, setChannelLogChannels] = useState<Record<string, string>>({}); // voice_channel_id -> log_channel_id
+  const [channelTimeouts, setChannelTimeouts] = useState<Record<string, ChannelTimeoutConfig>>({}); // voice_channel_id -> timeout config
 
   useEffect(() => {
     fetchData();
@@ -78,6 +86,7 @@ export default function CamOnlyVoicePage() {
         setSelectedExemptRoles(configData.config.exempt_roles || []);
         setSelectedExemptUsers(configData.config.exempt_users || []);
         setChannelLogChannels(configData.config.channel_log_channels || {});
+        setChannelTimeouts(configData.config.channel_timeouts || {});
       }
 
       // Filter voice channels (handle errors gracefully)
@@ -168,7 +177,8 @@ export default function CamOnlyVoicePage() {
           channel_ids: selectedChannels,
           exempt_roles: selectedExemptRoles,
           exempt_users: selectedExemptUsers,
-          channel_log_channels: channelLogChannels
+          channel_log_channels: channelLogChannels,
+          channel_timeouts: channelTimeouts
         })
       });
 
@@ -311,8 +321,9 @@ export default function CamOnlyVoicePage() {
                     {selectedChannels.map((channelId) => {
                       const channel = channels.find((ch) => ch.id === channelId);
                       const currentLogChannel = channelLogChannels[channelId] || 'none';
+                      const currentTimeout = channelTimeouts[channelId] || { enabled: false, duration: 30, unit: 'minutes' as const };
                       return (
-                        <div key={channelId} className="p-3 border rounded-lg space-y-2">
+                        <div key={channelId} className="p-3 border rounded-lg space-y-3">
                           <div className="flex items-center justify-between">
                             <Badge variant="secondary" className="flex items-center gap-1">
                               {channel?.name || channelId}
@@ -323,12 +334,17 @@ export default function CamOnlyVoicePage() {
                                 const newLogChannels = { ...channelLogChannels };
                                 delete newLogChannels[channelId];
                                 setChannelLogChannels(newLogChannels);
+                                const newTimeouts = { ...channelTimeouts };
+                                delete newTimeouts[channelId];
+                                setChannelTimeouts(newTimeouts);
                               }}
                               className="ml-2 hover:text-destructive"
                             >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
+                          
+                          {/* Log Channel */}
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Log Channel (optional)</Label>
                             <Select
@@ -358,6 +374,76 @@ export default function CamOnlyVoicePage() {
                                 ))}
                               </SelectContent>
                             </Select>
+                          </div>
+
+                          {/* Timeout Configuration */}
+                          <div className="space-y-2 border-t pt-2">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-medium">Timeout on Kick</Label>
+                              <Switch
+                                checked={currentTimeout.enabled}
+                                onCheckedChange={(checked) => {
+                                  setChannelTimeouts({
+                                    ...channelTimeouts,
+                                    [channelId]: {
+                                      ...currentTimeout,
+                                      enabled: checked
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                            {currentTimeout.enabled && (
+                              <div className="grid grid-cols-2 gap-2 ml-4">
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Duration</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={currentTimeout.duration}
+                                    onChange={(e) => {
+                                      setChannelTimeouts({
+                                        ...channelTimeouts,
+                                        [channelId]: {
+                                          ...currentTimeout,
+                                          duration: parseInt(e.target.value) || 1
+                                        }
+                                      });
+                                    }}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Unit</Label>
+                                  <Select
+                                    value={currentTimeout.unit}
+                                    onValueChange={(value: 'minutes' | 'hours' | 'days') => {
+                                      setChannelTimeouts({
+                                        ...channelTimeouts,
+                                        [channelId]: {
+                                          ...currentTimeout,
+                                          unit: value
+                                        }
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="minutes">Minutes</SelectItem>
+                                      <SelectItem value="hours">Hours</SelectItem>
+                                      <SelectItem value="days">Days</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground ml-4">
+                              {currentTimeout.enabled 
+                                ? `Users kicked from this channel will be timed out for ${currentTimeout.duration} ${currentTimeout.unit}`
+                                : 'Users can rejoin immediately after being kicked'}
+                            </p>
                           </div>
                         </div>
                       );

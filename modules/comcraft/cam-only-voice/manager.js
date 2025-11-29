@@ -78,7 +78,8 @@ class CamOnlyVoiceManager {
       exempt_roles: [],
       exempt_users: [],
       log_channel_id: null,
-      channel_log_channels: {}
+      channel_log_channels: {},
+      channel_timeouts: {}
     };
   }
 
@@ -149,6 +150,94 @@ class CamOnlyVoiceManager {
   }
 
   /**
+   * Check if user is currently in timeout for a channel
+   */
+  async isUserInTimeout(guildId, userId, channelId) {
+    try {
+      const { data, error } = await this.supabase
+        .from('cam_only_voice_timeouts')
+        .select('expires_at')
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .eq('channel_id', channelId)
+        .single();
+
+      if (error || !data) return false;
+
+      const expiresAt = new Date(data.expires_at);
+      const now = new Date();
+
+      // If timeout expired, delete it and return false
+      if (expiresAt <= now) {
+        await this.supabase
+          .from('cam_only_voice_timeouts')
+          .delete()
+          .eq('guild_id', guildId)
+          .eq('user_id', userId)
+          .eq('channel_id', channelId);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ [Cam-Only Voice] Error checking timeout:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Calculate timeout expiration time from duration and unit
+   */
+  calculateTimeoutExpiration(duration, unit) {
+    const now = new Date();
+    const msPerMinute = 60 * 1000;
+    const msPerHour = 60 * msPerMinute;
+    const msPerDay = 24 * msPerHour;
+
+    let milliseconds = 0;
+    switch (unit) {
+      case 'minutes':
+        milliseconds = duration * msPerMinute;
+        break;
+      case 'hours':
+        milliseconds = duration * msPerHour;
+        break;
+      case 'days':
+        milliseconds = duration * msPerDay;
+        break;
+      default:
+        milliseconds = duration * msPerMinute;
+    }
+
+    return new Date(now.getTime() + milliseconds);
+  }
+
+  /**
+   * Apply timeout to user for a channel
+   */
+  async applyTimeout(guildId, userId, channelId, duration, unit) {
+    try {
+      const expiresAt = this.calculateTimeoutExpiration(duration, unit);
+
+      await this.supabase
+        .from('cam_only_voice_timeouts')
+        .upsert({
+          guild_id: guildId,
+          user_id: userId,
+          channel_id: channelId,
+          expires_at: expiresAt.toISOString()
+        }, {
+          onConflict: 'guild_id,user_id,channel_id'
+        });
+
+      return expiresAt;
+    } catch (error) {
+      console.error('❌ [Cam-Only Voice] Error applying timeout:', error);
+      return null;
+    }
+  }
+
+  /**
    * Handle voice state update
    */
   async handleVoiceStateUpdate(oldState, newState) {
@@ -163,6 +252,61 @@ class CamOnlyVoiceManager {
       // Check if exempt
       const exempt = await this.isExempt(member, config);
       if (exempt) return;
+
+      // Check if user is in timeout
+      const inTimeout = await this.isUserInTimeout(member.guild.id, member.id, newState.channelId);
+      if (inTimeout) {
+        // Get timeout config for this channel
+        const channelTimeout = config.channel_timeouts?.[newState.channelId];
+        if (channelTimeout && channelTimeout.enabled) {
+          try {
+            // Get timeout expiration
+            const { data: timeoutData } = await this.supabase
+              .from('cam_only_voice_timeouts')
+              .select('expires_at')
+              .eq('guild_id', member.guild.id)
+              .eq('user_id', member.id)
+              .eq('channel_id', newState.channelId)
+              .single();
+
+            if (timeoutData) {
+              const expiresAt = new Date(timeoutData.expires_at);
+              const now = new Date();
+              const remainingMs = expiresAt.getTime() - now.getTime();
+              const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+              const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+              const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+
+              let timeLeft;
+              if (remainingDays >= 1) {
+                timeLeft = `${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+              } else if (remainingHours >= 1) {
+                timeLeft = `${remainingHours} hour${remainingHours > 1 ? 's' : ''}`;
+              } else {
+                timeLeft = `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+              }
+
+              // Disconnect user
+              await member.voice.disconnect('You are timed out from this cam-only voice channel');
+
+              const embed = new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle('🚫 Timeout Active')
+                .setDescription(
+                  `You cannot join <#${newState.channelId}> because you are currently timed out.\n\n` +
+                  `**Time remaining:** ${timeLeft}\n\n` +
+                  `You were timed out for not having your camera enabled. Please wait until the timeout expires.`
+                )
+                .setTimestamp();
+
+              await member.send({ embeds: [embed] }).catch(() => {});
+              return;
+            }
+          } catch (error) {
+            console.error('❌ [Cam-Only Voice] Error handling timeout check:', error);
+          }
+        }
+      }
 
       // Check if user has video
       if (!this.hasVideoStream(newState)) {
@@ -286,13 +430,47 @@ class CamOnlyVoiceManager {
     // Max warnings reached or warnings disabled - disconnect user
     try {
       await member.voice.disconnect('Camera required in this voice channel');
-      
+
+      // Check if timeout is enabled for this channel
+      const channelTimeout = config.channel_timeouts?.[channelId];
+      let timeoutExpiresAt = null;
+      let timeoutMessage = '';
+
+      if (channelTimeout && channelTimeout.enabled) {
+        // Apply timeout
+        timeoutExpiresAt = await this.applyTimeout(
+          member.guild.id,
+          userId,
+          channelId,
+          channelTimeout.duration,
+          channelTimeout.unit
+        );
+
+        if (timeoutExpiresAt) {
+          const now = new Date();
+          const remainingMs = timeoutExpiresAt.getTime() - now.getTime();
+          const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+          const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+          const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+
+          let timeLeft;
+          if (remainingDays >= 1) {
+            timeLeft = `${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+          } else if (remainingHours >= 1) {
+            timeLeft = `${remainingHours} hour${remainingHours > 1 ? 's' : ''}`;
+          } else {
+            timeLeft = `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+          }
+
+          timeoutMessage = `\n\n⏰ **Timeout:** You are timed out for ${channelTimeout.duration} ${channelTimeout.unit} (${timeLeft} remaining). You cannot rejoin this channel until the timeout expires.`;
+        }
+      }
+
       const embed = new EmbedBuilder()
         .setColor(0xFF0000)
         .setTitle('🚫 Disconnected')
         .setDescription(
-          `You were disconnected from <#${channelId}> because your camera is not enabled.\n\n` +
-          `To rejoin, please enable your camera first.`
+          `You were disconnected from <#${channelId}> because your camera is not enabled.${timeoutMessage}`
         )
         .setTimestamp();
 

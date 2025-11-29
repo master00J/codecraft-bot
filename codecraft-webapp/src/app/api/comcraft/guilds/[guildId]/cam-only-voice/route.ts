@@ -47,7 +47,8 @@ export async function GET(
           exempt_roles: [],
           exempt_users: [],
           log_channel_id: null,
-          channel_log_channels: {}
+          channel_log_channels: {},
+          channel_timeouts: {}
         }
       });
     }
@@ -89,6 +90,7 @@ export async function PATCH(
       exempt_users: body.exempt_users || [],
       log_channel_id: body.log_channel_id || null,
       channel_log_channels: body.channel_log_channels || {},
+      channel_timeouts: body.channel_timeouts || {},
       updated_at: new Date().toISOString()
     };
 
