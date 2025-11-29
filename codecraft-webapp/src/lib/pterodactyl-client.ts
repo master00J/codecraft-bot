@@ -308,7 +308,7 @@ class PterodactylClient {
       };
 
       // Build startup command from egg
-      const startupCommand = egg.startup || 'node bot-comcraft.js';
+      const startupCommand = egg.startup || 'node index.js';
       
       // Replace environment variables in startup command
       let finalStartup = startupCommand;

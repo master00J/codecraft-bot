@@ -91,7 +91,7 @@ try {
   
   console.log('🔄 [Startup] Loading Auto-Reactions Manager module...');
   console.log('   Current working directory:', process.cwd());
-  console.log('   __dirname (bot-comcraft.js):', __dirname);
+  console.log('   __dirname (index.js):', __dirname);
   
   // Try multiple possible paths
   const possiblePaths = [

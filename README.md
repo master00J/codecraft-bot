@@ -37,7 +37,7 @@ cp env.example .env
 
 4. Start the bot:
 ```bash
-node bot-comcraft.js
+node index.js
 ```
 
 ## Environment Variables
@@ -66,7 +66,7 @@ echo "✅ Bot installed!"
 
 ### Startup Command:
 ```
-node bot-comcraft.js
+node index.js
 ```
 
 ## License

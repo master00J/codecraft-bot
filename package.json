@@ -2,12 +2,12 @@
   "name": "comcraft-bot",
   "version": "1.0.0",
   "description": "Advanced Discord bot platform for content creators with web dashboard",
-  "main": "bot-comcraft.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot-comcraft.js",
+    "start": "node index.js",
     "start:sharded": "node bot-sharded.js",
-    "dev": "nodemon bot-comcraft.js",
-    "comcraft": "node bot-comcraft.js"
+    "dev": "nodemon index.js",
+    "comcraft": "node index.js"
   },
   "keywords": [
     "discord",

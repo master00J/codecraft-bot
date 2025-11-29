@@ -784,12 +784,12 @@ Please check:
         headers['Authorization'] = `token ${githubToken}`
       }
       
-      // 1. Download and upload bot-comcraft.js as index.js
-      console.log(`📥 Downloading bot-comcraft.js as index.js...`)
+      // 1. Download and upload index.js
+      console.log(`📥 Downloading index.js...`)
       console.log(`   Server UUID: ${serverUuid}`)
-      console.log(`   GitHub URL: ${baseUrl}/bot-comcraft.js`)
+      console.log(`   GitHub URL: ${baseUrl}/index.js`)
       try {
-        const botFileUrl = `${baseUrl}/bot-comcraft.js`
+        const botFileUrl = `${baseUrl}/index.js`
         const botResponse = await fetch(botFileUrl, { headers })
         if (botResponse.ok) {
           const botContent = await botResponse.text()
@@ -799,19 +799,19 @@ Please check:
             throw new Error(`Downloaded content is too short or empty (${botContent.length} bytes)`)
           }
           
-          // Check if content looks like bot-comcraft.js (should have COMCRAFT or discord.js)
+          // Check if content looks like the bot file (should have COMCRAFT or discord.js)
           if (!botContent.includes('COMCRAFT') && !botContent.includes('discord.js') && !botContent.includes('require')) {
-            console.warn(`⚠️  Downloaded content doesn't look like bot-comcraft.js. First 200 chars: ${botContent.substring(0, 200)}`)
+            console.warn(`⚠️  Downloaded content doesn't look like index.js. First 200 chars: ${botContent.substring(0, 200)}`)
           }
           
           console.log(`   Downloaded ${botContent.length} bytes, uploading to server ${serverUuid}...`)
           await this.uploadFile(serverUuid, 'index.js', botContent)
-          console.log(`✅ Uploaded bot-comcraft.js as index.js to server ${serverUuid}`)
+          console.log(`✅ Uploaded index.js to server ${serverUuid}`)
         } else {
-          throw new Error(`Failed to download bot-comcraft.js: ${botResponse.statusText} (${botResponse.status})`)
+          throw new Error(`Failed to download index.js: ${botResponse.statusText} (${botResponse.status})`)
         }
       } catch (error: any) {
-        console.error(`❌ Could not download/upload bot-comcraft.js:`, error.message)
+        console.error(`❌ Could not download/upload index.js:`, error.message)
         throw error
       }
       
@@ -873,7 +873,7 @@ cd /home/container
 
 echo "📦 Cloning repository from GitHub..."
 # Remove existing files if they exist (except .env)
-rm -f index.js bot-comcraft.js package.json package-lock.json 2>/dev/null || true
+rm -f index.js package.json package-lock.json 2>/dev/null || true
 rm -rf modules 2>/dev/null || true
 
 # Clone repository
@@ -886,11 +886,11 @@ fi
 
 echo "📋 Copying bot files..."
 # Copy main bot file as index.js
-if [ -f /tmp/bot-repo/bot-comcraft.js ]; then
-    cp /tmp/bot-repo/bot-comcraft.js ./index.js
-    echo "✅ Copied bot-comcraft.js -> index.js"
+if [ -f /tmp/bot-repo/index.js ]; then
+    cp /tmp/bot-repo/index.js ./index.js
+    echo "✅ Copied index.js"
 else
-    echo "⚠️  bot-comcraft.js not found in repository"
+    echo "⚠️  index.js not found in repository"
 fi
 
 # Copy package files
@@ -1057,8 +1057,8 @@ if [ ! -f index.js ]; then
     ${githubToken ? `GIT_ASKPASS=echo GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch ${branch} ${cloneUrl} /tmp/bot-files 2>/dev/null || true` : `git clone --depth 1 --branch ${branch} ${repoUrl} /tmp/bot-files 2>/dev/null || true`}
     
     if [ -d /tmp/bot-files ]; then
-        # Copy bot files (bot-comcraft.js as index.js for auto-start)
-        cp -r /tmp/bot-files/bot-comcraft.js ./index.js 2>/dev/null || true
+        # Copy bot files (index.js for auto-start)
+        cp -r /tmp/bot-files/index.js ./index.js 2>/dev/null || true
         cp -r /tmp/bot-files/modules . 2>/dev/null || true
         cp -r /tmp/bot-files/package*.json . 2>/dev/null || true
         cp -r /tmp/bot-files/*.json . 2>/dev/null || true
