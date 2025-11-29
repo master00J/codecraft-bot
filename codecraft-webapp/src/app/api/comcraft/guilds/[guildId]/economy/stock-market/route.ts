@@ -102,7 +102,7 @@ export async function GET(
 
       const { data: allOrders, error: allError } = await supabase
         .from('stock_market_orders')
-        .select('status, created_at')
+        .select('status, created_at, executed_at')
         .eq('guild_id', guildId);
 
       const { data: recentOrders, error: recentError } = await supabase
@@ -121,9 +121,11 @@ export async function GET(
       }
 
       const pending = (allOrders || []).filter(o => o.status === 'pending').length;
-      const executed = (allOrders || []).filter(o => 
-        o.status === 'executed' && new Date(o.executed_at || o.created_at) >= today
-      ).length;
+      const executed = (allOrders || []).filter(o => {
+        if (o.status !== 'executed') return false;
+        const executedDate = (o as any).executed_at || (o as any).created_at;
+        return executedDate && new Date(executedDate) >= today;
+      }).length;
 
       return NextResponse.json({
         pending,
