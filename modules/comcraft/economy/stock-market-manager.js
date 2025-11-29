@@ -349,6 +349,19 @@ class StockMarketManager {
         ? ((proceeds - totalCost) / totalCost) * 100 
         : 0;
 
+      // Track quest progress (stock_profit quest type) - only track profits, not losses
+      if (global.questManager && profitLoss > 0) {
+        try {
+          if (await global.questManager.isTracking(guildId, 'stock_profit')) {
+            await global.questManager.updateProgress(guildId, userId, 'stock_profit', {
+              increment: Math.floor(profitLoss) // Track profit amount
+            });
+          }
+        } catch (error) {
+          console.error('[StockMarket] Error tracking stock_profit quest:', error.message);
+        }
+      }
+
       // Add coins to user
       const addResult = await economyManager.addCoins(
         guildId,

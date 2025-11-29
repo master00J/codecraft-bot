@@ -150,7 +150,14 @@ export async function POST(
       max_completions,
       completion_cooldown_hours,
       chain_id,
-      chain_position
+      chain_position,
+      difficulty,
+      rarity,
+      deadline_at,
+      time_limit_hours,
+      start_date,
+      end_date,
+      milestones
     } = body;
 
     // Validate required fields
@@ -183,7 +190,14 @@ export async function POST(
         max_completions: max_completions || null,
         completion_cooldown_hours: completion_cooldown_hours || null,
         chain_id: chain_id || null,
-        chain_position: chain_position || null
+        chain_position: chain_position || null,
+        difficulty: difficulty || 'normal',
+        rarity: rarity || 'common',
+        deadline_at: deadline_at || null,
+        time_limit_hours: time_limit_hours || null,
+        start_date: start_date || null,
+        end_date: end_date || null,
+        milestones: milestones || []
       })
       .select()
       .single();

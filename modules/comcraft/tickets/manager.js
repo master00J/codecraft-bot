@@ -600,6 +600,19 @@ class TicketManager {
 
       console.log(`✅ Created ticket ${ticketNumber} for ${user.tag}`);
 
+      // Track quest progress (ticket_create quest type)
+      if (global.questManager && guild) {
+        try {
+          if (await global.questManager.isTracking(guild.id, 'ticket_create')) {
+            await global.questManager.updateProgress(guild.id, user.id, 'ticket_create', {
+              increment: 1
+            });
+          }
+        } catch (error) {
+          console.error('[Tickets] Error tracking ticket_create quest:', error.message);
+        }
+      }
+
       return {
         success: true,
         ticketNumber,

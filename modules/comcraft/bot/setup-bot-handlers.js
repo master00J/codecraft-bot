@@ -641,6 +641,33 @@ function setupEventHandlers(client, handlers) {
 
     await welcomeHandler.handleMemberJoin(member);
     await analyticsTracker.trackMemberJoin(member);
+
+    // Track quest progress (invite_count quest type) - credit inviter if known
+    if (global.questManager && member.guild) {
+      try {
+        // Try to get inviter from invites (Discord.js v14+ has invite tracking)
+        let inviterId = null;
+        try {
+          const invites = await member.guild.invites.fetch();
+          // Try to match invite by checking invite uses
+          // Note: This is a simplified approach - full invite tracking requires caching
+          // For now, we'll track when a user joins (they were invited by someone)
+          // This could be enhanced with proper invite tracking
+        } catch (inviteError) {
+          // Invite fetching failed, skip
+        }
+        
+        // If we have an inviter ID, track the quest
+        // For now, skip invite tracking until proper invite system is implemented
+        // if (inviterId && await global.questManager.isTracking(member.guild.id, 'invite_count')) {
+        //   await global.questManager.updateProgress(member.guild.id, inviterId, 'invite_count', {
+        //     increment: 1
+        //   });
+        // }
+      } catch (error) {
+        console.error('[GuildMemberAdd] Error tracking invite quest:', error.message);
+      }
+    }
   });
 
   // Guild Member Remove handler
@@ -921,6 +948,48 @@ function setupEventHandlers(client, handlers) {
 
     // Giveaway reactions
     await giveawayManager.handleReactionAdd(reaction, user);
+
+    // Track quest progress (reaction_count quest type)
+    if (global.questManager && reaction.message.guild) {
+      try {
+        if (await global.questManager.isTracking(reaction.message.guild.id, 'reaction_count')) {
+          await global.questManager.updateProgress(reaction.message.guild.id, user.id, 'reaction_count', {
+            increment: 1
+          });
+        }
+      } catch (error) {
+        console.error('[ReactionAdd] Error updating quest progress:', error.message);
+      }
+    }
+  });
+
+  // Guild Member Update handler (for role changes)
+  client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    if (isCustomBot && guildId && newMember.guild.id !== guildId) {
+      return;
+    }
+
+    if (!(await ensureGuildLicense(newMember.guild.id))) return;
+
+    // Track quest progress (role_obtain quest type)
+    if (global.questManager && newMember.guild) {
+      try {
+        const oldRoles = oldMember.roles.cache.map(r => r.id);
+        const newRoles = newMember.roles.cache.map(r => r.id);
+        const gainedRoles = newRoles.filter(r => !oldRoles.includes(r));
+
+        if (gainedRoles.length > 0 && await global.questManager.isTracking(newMember.guild.id, 'role_obtain')) {
+          for (const roleId of gainedRoles) {
+            await global.questManager.updateProgress(newMember.guild.id, newMember.user.id, 'role_obtain', {
+              roleId: roleId,
+              increment: 1
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[GuildMemberUpdate] Error tracking role_obtain quest:', error.message);
+      }
+    }
   });
 
   // Message Reaction Remove handler

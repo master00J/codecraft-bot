@@ -1458,6 +1458,20 @@ client.on('interactionCreate', async (interaction) => {
   // Track command usage for analytics
   await analyticsTracker.trackCommand(interaction, commandName);
 
+  // Track quest progress (command_use quest type)
+  if (global.questManager && interaction.guild && interaction.user) {
+    try {
+      if (await global.questManager.isTracking(interaction.guild.id, 'command_use')) {
+        await global.questManager.updateProgress(interaction.guild.id, interaction.user.id, 'command_use', {
+          commandName: commandName,
+          increment: 1
+        });
+      }
+    } catch (error) {
+      console.error('[InteractionCreate] Error tracking command_use quest:', error.message);
+    }
+  }
+
   try {
     switch (commandName) {
       // ============ LEVELING COMMANDS ============

@@ -63,7 +63,14 @@ export default function QuestsConfig() {
     enabled: true,
     visible: true,
     max_completions: null as number | null,
-    completion_cooldown_hours: null as number | null
+    completion_cooldown_hours: null as number | null,
+    difficulty: 'normal' as 'easy' | 'normal' | 'hard' | 'expert',
+    rarity: 'common' as 'common' | 'rare' | 'epic' | 'legendary',
+    deadline_at: null as string | null,
+    time_limit_hours: null as number | null,
+    start_date: null as string | null,
+    end_date: null as string | null,
+    milestones: [] as Array<{ progress: number; rewards: { coins?: number; xp?: number }; message?: string }>
   });
 
   // Editing quest
@@ -118,7 +125,7 @@ export default function QuestsConfig() {
         rewards.xp = newQuest.xp;
       }
 
-      const questData = {
+      const questData: any = {
         name: newQuest.name,
         description: newQuest.description || null,
         emoji: newQuest.emoji,
@@ -134,7 +141,14 @@ export default function QuestsConfig() {
         enabled: newQuest.enabled,
         visible: newQuest.visible,
         max_completions: newQuest.max_completions || null,
-        completion_cooldown_hours: newQuest.completion_cooldown_hours || null
+        completion_cooldown_hours: newQuest.completion_cooldown_hours || null,
+        difficulty: newQuest.difficulty,
+        rarity: newQuest.rarity,
+        deadline_at: newQuest.deadline_at,
+        time_limit_hours: newQuest.time_limit_hours || null,
+        start_date: newQuest.start_date,
+        end_date: newQuest.end_date,
+        milestones: newQuest.milestones.length > 0 ? newQuest.milestones : null
       };
 
       const url = editingQuest
@@ -273,6 +287,7 @@ export default function QuestsConfig() {
         <TabsList>
           <TabsTrigger value="quests">Active Quests</TabsTrigger>
           <TabsTrigger value="create">{editingQuest ? 'Edit Quest' : 'Create Quest'}</TabsTrigger>
+          <TabsTrigger value="chains">Quest Chains</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
@@ -436,8 +451,108 @@ export default function QuestsConfig() {
                       <SelectItem value="xp_gain">XP Gain</SelectItem>
                       <SelectItem value="level_reach">Level Reach</SelectItem>
                       <SelectItem value="duel_win">Duel Win</SelectItem>
+                      <SelectItem value="reaction_count">Reaction Count</SelectItem>
+                      <SelectItem value="invite_count">Invite Count</SelectItem>
+                      <SelectItem value="channel_visit">Channel Visit</SelectItem>
+                      <SelectItem value="role_obtain">Role Obtain</SelectItem>
+                      <SelectItem value="stock_profit">Stock Profit</SelectItem>
+                      <SelectItem value="command_use">Command Use</SelectItem>
+                      <SelectItem value="giveaway_enter">Giveaway Enter</SelectItem>
+                      <SelectItem value="ticket_create">Ticket Create</SelectItem>
+                      <SelectItem value="custom">Custom (Manual)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              {/* Difficulty & Rarity */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="difficulty">Difficulty</Label>
+                  <Select
+                    value={newQuest.difficulty || 'normal'}
+                    onValueChange={(value) => setNewQuest({ ...newQuest, difficulty: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select difficulty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                      <SelectItem value="expert">Expert</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="rarity">Rarity</Label>
+                  <Select
+                    value={newQuest.rarity || 'common'}
+                    onValueChange={(value) => setNewQuest({ ...newQuest, rarity: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select rarity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="common">Common</SelectItem>
+                      <SelectItem value="rare">Rare</SelectItem>
+                      <SelectItem value="epic">Epic</SelectItem>
+                      <SelectItem value="legendary">Legendary</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Timer & Deadlines */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="deadline">Deadline (Optional)</Label>
+                  <Input
+                    id="deadline"
+                    type="datetime-local"
+                    value={newQuest.deadline_at ? newQuest.deadline_at.slice(0, 16) : ''}
+                    onChange={(e) => setNewQuest({ ...newQuest, deadline_at: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Quest must be completed before this date</p>
+                </div>
+
+                <div>
+                  <Label htmlFor="time_limit">Time Limit (hours, Optional)</Label>
+                  <Input
+                    id="time_limit"
+                    type="number"
+                    min="1"
+                    value={newQuest.time_limit_hours || ''}
+                    onChange={(e) => setNewQuest({ ...newQuest, time_limit_hours: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="e.g., 24"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Time limit from when quest is started</p>
+                </div>
+              </div>
+
+              {/* Start & End Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="start_date">Start Date (Optional)</Label>
+                  <Input
+                    id="start_date"
+                    type="datetime-local"
+                    value={newQuest.start_date ? newQuest.start_date.slice(0, 16) : ''}
+                    onChange={(e) => setNewQuest({ ...newQuest, start_date: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">When quest becomes available</p>
+                </div>
+
+                <div>
+                  <Label htmlFor="end_date">End Date (Optional)</Label>
+                  <Input
+                    id="end_date"
+                    type="datetime-local"
+                    value={newQuest.end_date ? newQuest.end_date.slice(0, 16) : ''}
+                    onChange={(e) => setNewQuest({ ...newQuest, end_date: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">When quest expires</p>
                 </div>
               </div>
 
@@ -569,6 +684,93 @@ export default function QuestsConfig() {
                 </div>
               </div>
 
+              {/* Milestones Section */}
+              <div className="border-t pt-4">
+                <Label className="text-base font-semibold">Milestones (Optional)</Label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Set milestone rewards that users receive at specific progress percentages (e.g., 25%, 50%, 75%).
+                </p>
+                <div className="space-y-3">
+                  {newQuest.milestones.map((milestone, index) => (
+                    <Card key={index} className="p-3">
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-3">
+                          <Label>Progress %</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="99"
+                            value={milestone.progress}
+                            onChange={(e) => {
+                              const updated = [...newQuest.milestones];
+                              updated[index].progress = parseInt(e.target.value) || 0;
+                              setNewQuest({ ...newQuest, milestones: updated });
+                            }}
+                            placeholder="25"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <Label>Coins</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={milestone.rewards?.coins || 0}
+                            onChange={(e) => {
+                              const updated = [...newQuest.milestones];
+                              if (!updated[index].rewards) updated[index].rewards = {};
+                              updated[index].rewards.coins = parseInt(e.target.value) || 0;
+                              setNewQuest({ ...newQuest, milestones: updated });
+                            }}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <Label>XP</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={milestone.rewards?.xp || 0}
+                            onChange={(e) => {
+                              const updated = [...newQuest.milestones];
+                              if (!updated[index].rewards) updated[index].rewards = {};
+                              updated[index].rewards.xp = parseInt(e.target.value) || 0;
+                              setNewQuest({ ...newQuest, milestones: updated });
+                            }}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const updated = newQuest.milestones.filter((_, i) => i !== index);
+                              setNewQuest({ ...newQuest, milestones: updated });
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setNewQuest({
+                        ...newQuest,
+                        milestones: [...newQuest.milestones, { progress: 25, rewards: { coins: 0, xp: 0 } }]
+                      });
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Milestone
+                  </Button>
+                </div>
+              </div>
+
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <Switch
@@ -613,7 +815,14 @@ export default function QuestsConfig() {
                         enabled: true,
                         visible: true,
                         max_completions: null,
-                        completion_cooldown_hours: null
+                        completion_cooldown_hours: null,
+                        difficulty: 'normal',
+                        rarity: 'common',
+                        deadline_at: null,
+                        time_limit_hours: null,
+                        start_date: null,
+                        end_date: null,
+                        milestones: []
                       });
                     }}
                   >
@@ -621,6 +830,23 @@ export default function QuestsConfig() {
                   </Button>
                 )}
               </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="chains" className="space-y-4">
+          <Card className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Quest Chains</h2>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Chain
+              </Button>
+            </div>
+            <div className="text-center py-8 text-muted-foreground">
+              Quest Chains allow you to link multiple quests together. Complete quests in order to unlock the next quest in the chain.
+              <br />
+              <span className="text-xs mt-2 block">This feature is coming soon!</span>
             </div>
           </Card>
         </TabsContent>

@@ -28,6 +28,9 @@ class QuestManager {
 
     // Scheduled reset check (runs every hour)
     this.setupResetScheduler();
+    
+    // Setup deadline/timer checker (runs every 5 minutes)
+    this.setupDeadlineChecker();
   }
 
   /**
@@ -178,6 +181,16 @@ class QuestManager {
           if (!currentProgress) continue;
         }
 
+        // Check if quest is expired/over deadline
+        if (await this.isQuestExpired(quest, currentProgress)) {
+          continue; // Quest expired, skip tracking
+        }
+
+        // Check if quest is available (start_date/end_date)
+        if (!this.isQuestAvailable(quest)) {
+          continue; // Quest not yet available or expired
+        }
+
         // Calculate new progress
         const newProgress = this.calculateProgress(quest, currentProgress, data);
 
@@ -194,6 +207,9 @@ class QuestManager {
           console.error('Error updating quest progress:', updateError);
           continue;
         }
+
+        // Check milestones
+        await this.checkMilestones(quest, userId, currentProgress.id, currentProgress.current_progress, newProgress);
 
         // Check if completed
         const target = quest.requirements?.target || 0;
@@ -462,6 +478,233 @@ class QuestManager {
    */
   calculateLevel(xp) {
     return Math.floor(Math.sqrt(xp / 100));
+  }
+
+  /**
+   * Check if quest is expired (deadline passed)
+   */
+  async isQuestExpired(quest, progress) {
+    if (!quest.deadline_at && !quest.time_limit_hours) {
+      return false; // No deadline
+    }
+
+    const now = new Date();
+    
+    // Check absolute deadline
+    if (quest.deadline_at) {
+      const deadline = new Date(quest.deadline_at);
+      if (now > deadline) {
+        return true; // Deadline passed
+      }
+    }
+
+    // Check time limit from start
+    if (quest.time_limit_hours && progress && progress.started_at) {
+      const startTime = new Date(progress.started_at);
+      const elapsedHours = (now - startTime) / (1000 * 60 * 60);
+      if (elapsedHours >= quest.time_limit_hours) {
+        return true; // Time limit exceeded
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if quest is available (start_date/end_date)
+   */
+  isQuestAvailable(quest) {
+    const now = new Date();
+    
+    if (quest.start_date) {
+      const startDate = new Date(quest.start_date);
+      if (now < startDate) {
+        return false; // Quest not started yet
+      }
+    }
+
+    if (quest.end_date) {
+      const endDate = new Date(quest.end_date);
+      if (now > endDate) {
+        return false; // Quest expired
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Check milestones and give rewards
+   */
+  async checkMilestones(quest, userId, progressId, oldProgress, newProgress) {
+    if (!quest.milestones || !Array.isArray(quest.milestones) || quest.milestones.length === 0) {
+      return; // No milestones
+    }
+
+    const target = quest.requirements?.target || 0;
+    
+    for (const milestone of quest.milestones) {
+      const milestoneProgress = Math.floor((milestone.progress / 100) * target);
+      
+      // Check if milestone was just reached
+      if (oldProgress < milestoneProgress && newProgress >= milestoneProgress) {
+        // Check if milestone was already completed
+        const { data: existing } = await this.supabase
+          .from('quest_milestones')
+          .select('id')
+          .eq('quest_progress_id', progressId)
+          .eq('milestone_progress', milestoneProgress)
+          .maybeSingle();
+
+        if (existing) {
+          continue; // Already completed
+        }
+
+        // Give milestone rewards
+        if (milestone.rewards) {
+          await this.giveRewards(quest.guild_id, userId, milestone.rewards);
+        }
+
+        // Log milestone completion
+        await this.supabase
+          .from('quest_milestones')
+          .insert({
+            quest_progress_id: progressId,
+            milestone_progress: milestoneProgress,
+            rewards_given: milestone.rewards || {}
+          });
+
+        // Send milestone notification
+        await this.sendMilestoneNotification(quest, userId, milestone, newProgress, target);
+      }
+    }
+  }
+
+  /**
+   * Send milestone notification
+   */
+  async sendMilestoneNotification(quest, userId, milestone, currentProgress, target) {
+    if (!this.client) return;
+
+    try {
+      const guild = this.client.guilds.cache.get(quest.guild_id);
+      if (!guild) return;
+
+      const user = await this.client.users.fetch(userId).catch(() => null);
+      if (!user) return;
+
+      const percentage = Math.floor((currentProgress / target) * 100);
+      
+      const rewardsList = [];
+      if (milestone.rewards?.coins) rewardsList.push(`💰 ${milestone.rewards.coins} coins`);
+      if (milestone.rewards?.xp) rewardsList.push(`⭐ ${milestone.rewards.xp} XP`);
+
+      const embed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle(`🎯 Milestone Reached!`)
+        .setDescription(`Congratulations! You reached **${percentage}%** progress on **${quest.name}**!`)
+        .addFields({
+          name: 'Milestone Rewards',
+          value: rewardsList.length > 0 ? rewardsList.join('\n') : 'Keep going!',
+          inline: false
+        })
+        .setTimestamp();
+
+      if (milestone.message) {
+        embed.setDescription(`${milestone.message}\n\n**Progress:** ${currentProgress}/${target} (${percentage}%)`);
+      }
+
+      try {
+        await user.send({ embeds: [embed] });
+      } catch (error) {
+        // User has DMs disabled - that's okay
+      }
+    } catch (error) {
+      console.error('Error sending milestone notification:', error);
+    }
+  }
+
+  /**
+   * Setup deadline checker (runs every 5 minutes)
+   */
+  setupDeadlineChecker() {
+    setInterval(async () => {
+      try {
+        await this.processExpiredQuests();
+      } catch (error) {
+        console.error('Error in deadline checker:', error);
+      }
+    }, 5 * 60 * 1000); // Every 5 minutes
+
+    // Also check immediately
+    setTimeout(() => this.processExpiredQuests(), 60000); // After 1 minute
+  }
+
+  /**
+   * Process expired quests
+   */
+  async processExpiredQuests() {
+    try {
+      const now = new Date();
+
+      // Get quests with deadlines that have passed
+      const { data: expiredQuests, error } = await this.supabase
+        .from('quests')
+        .select('id, guild_id, name, deadline_at, time_limit_hours')
+        .or(`deadline_at.lt.${now.toISOString()},time_limit_hours.not.is.null`)
+        .eq('enabled', true);
+
+      if (error || !expiredQuests) {
+        return;
+      }
+
+      for (const quest of expiredQuests) {
+        // Get all incomplete progress records for this quest
+        const { data: progressRecords } = await this.supabase
+          .from('quest_progress')
+          .select('*')
+          .eq('quest_id', quest.id)
+          .eq('completed', false);
+
+        if (!progressRecords) continue;
+
+        for (const progress of progressRecords) {
+          // Check if this specific progress is expired
+          let isExpired = false;
+
+          if (quest.deadline_at) {
+            const deadline = new Date(quest.deadline_at);
+            if (now > deadline) {
+              isExpired = true;
+            }
+          }
+
+          if (quest.time_limit_hours && progress.started_at) {
+            const startTime = new Date(progress.started_at);
+            const elapsedHours = (now - startTime) / (1000 * 60 * 60);
+            if (elapsedHours >= quest.time_limit_hours) {
+              isExpired = true;
+            }
+          }
+
+          if (isExpired) {
+            // Mark as expired (could send notification, but for now just mark)
+            await this.supabase
+              .from('quest_progress')
+              .update({
+                current_progress: 0, // Reset or keep current?
+                updated_at: now.toISOString()
+              })
+              .eq('id', progress.id);
+
+            // Optionally send expiration notification
+            // await this.sendExpirationNotification(quest, progress.user_id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error processing expired quests:', error);
+    }
   }
 
   /**

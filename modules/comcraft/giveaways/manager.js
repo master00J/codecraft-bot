@@ -350,6 +350,20 @@ class GiveawayManager {
 
     giveaway.entries = entries;
     await this.updateActiveMessage(giveaway).catch(() => {});
+
+    // Track quest progress (giveaway_enter quest type)
+    if (global.questManager && member.guild) {
+      try {
+        if (await global.questManager.isTracking(member.guild.id, 'giveaway_enter')) {
+          await global.questManager.updateProgress(member.guild.id, member.id, 'giveaway_enter', {
+            increment: 1
+          });
+        }
+      } catch (error) {
+        console.error('[Giveaway] Error tracking giveaway_enter quest:', error.message);
+      }
+    }
+
     return { success: true, message: 'You are now entered in this giveaway! 🎉', joined: true };
   }
 
