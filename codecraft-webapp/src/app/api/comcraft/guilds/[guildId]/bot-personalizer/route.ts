@@ -492,61 +492,33 @@ export async function POST(
           }
         });
 
-      // Start the server automatically after a short delay
+      // Start the server automatically after a delay
       // Use Client API token approach for automatic starting
-      console.log(`⏳ Waiting 15 seconds for server installation to complete before starting...`);
+      // We know the user ID from server creation, so we don't need to fetch server details
+      const userId = parseInt(process.env.PTERODACTYL_DEFAULT_USER_ID || '1');
+      
+      console.log(`⏳ Waiting 20 seconds for server installation to complete before starting...`);
       setTimeout(async () => {
-        try {
-          console.log(`🚀 Attempting to start Pterodactyl server: ${pterodactylServer?.identifier}`);
-          
-          // Get the user ID who owns the server (from server details)
-          const serverDetails = await client.getServer(pterodactylServer.uuid);
-          const userId = serverDetails?.relationships?.user?.attributes?.id || 
-                        serverDetails?.user_id || 
-                        parseInt(process.env.PTERODACTYL_DEFAULT_USER_ID || '1');
-          
-          console.log(`🔑 Creating Client API token for user ${userId}...`);
-          
-          // Create a Client API token for the user
-          const clientToken = await client.createClientApiToken(userId);
-          
-          // Use Client API token to start the server
-          console.log(`🚀 Starting server ${pterodactylServer.uuid} with Client API token...`);
-          await client.startServerWithClientToken(pterodactylServer.uuid, clientToken);
-          
-          console.log(`✅ Pterodactyl server started successfully: ${pterodactylServer?.identifier}`);
-          
-          // Update status to 'starting' (only if column exists)
-          await supabase
-            .from('custom_bot_tokens')
-            .update({
-              server_status: 'starting',
-              updated_at: new Date().toISOString()
-            })
-            .eq('guild_id', params.guildId);
-
-          // Log start event
-          await supabase
-            .from('bot_container_events')
-            .insert({
-              guild_id: params.guildId,
-              bot_application_id: botUser.id,
-              event_type: 'server_starting',
-              event_data: {
-                server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier
-              },
-              message: `Pterodactyl server starting automatically for custom bot`
-            });
-        } catch (startError: any) {
-          console.error('❌ Error starting Pterodactyl server automatically:', startError);
-          
-          // If Client API token method fails, try fallback method
+        let retryCount = 0;
+        const maxRetries = 3;
+        const retryDelay = 5000; // 5 seconds between retries
+        
+        const attemptStart = async (): Promise<void> => {
           try {
-            console.log(`⚠️  Client API token method failed, trying fallback via Application API...`);
-            await client.sendPowerAction(pterodactylServer.uuid, 'start');
-            console.log(`✅ Server started via fallback method`);
+            console.log(`🚀 Attempting to start Pterodactyl server (attempt ${retryCount + 1}/${maxRetries}): ${pterodactylServer?.identifier}`);
             
-            // Update status to 'starting'
+            console.log(`🔑 Creating Client API token for user ${userId}...`);
+            
+            // Create a Client API token for the user
+            const clientToken = await client.createClientApiToken(userId);
+            
+            // Use Client API token to start the server
+            console.log(`🚀 Starting server ${pterodactylServer.uuid} with Client API token...`);
+            await client.startServerWithClientToken(pterodactylServer.uuid, clientToken);
+            
+            console.log(`✅ Pterodactyl server started successfully: ${pterodactylServer?.identifier}`);
+            
+            // Update status to 'starting' (only if column exists)
             await supabase
               .from('custom_bot_tokens')
               .update({
@@ -554,35 +526,56 @@ export async function POST(
                 updated_at: new Date().toISOString()
               })
               .eq('guild_id', params.guildId);
-          } catch (fallbackError: any) {
-            // Both methods failed - log error but don't fail the request
-            console.error('❌ Both start methods failed:', fallbackError.message);
-            
-            // Update status to 'error' (only if column exists)
-            await supabase
-              .from('custom_bot_tokens')
-              .update({
-                server_status: 'error',
-                updated_at: new Date().toISOString()
-              })
-              .eq('guild_id', params.guildId);
 
-            // Log error event
+            // Log start event
             await supabase
               .from('bot_container_events')
               .insert({
                 guild_id: params.guildId,
                 bot_application_id: botUser.id,
-                event_type: 'server_error',
+                event_type: 'server_starting',
                 event_data: {
-                  server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier,
-                  error: `Failed to start automatically: ${startError.message}, Fallback: ${fallbackError.message}`
+                  server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier
                 },
-                message: `Failed to start Pterodactyl server automatically. Please start manually via panel.`
+                message: `Pterodactyl server starting automatically for custom bot`
               });
+            
+            return; // Success!
+          } catch (error: any) {
+            retryCount++;
+            
+            // If server not found (404) and we have retries left, wait and retry
+            if ((error?.status === 404 || error?.isNotFound || error.message?.includes('404') || error.message?.includes('NotFound')) && retryCount < maxRetries) {
+              console.log(`⚠️  Server not ready yet (404), waiting ${retryDelay / 1000}s before retry ${retryCount + 1}/${maxRetries}...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              return attemptStart(); // Retry
+            }
+            
+            // If other error or max retries reached, throw to be caught by outer catch
+            throw error;
           }
+        };
+        
+        try {
+          await attemptStart();
+        } catch (startError: any) {
+          console.error('❌ Error starting Pterodactyl server automatically after all retries:', startError);
+          
+          // Log error event
+          await supabase
+            .from('bot_container_events')
+            .insert({
+              guild_id: params.guildId,
+              bot_application_id: botUser.id,
+              event_type: 'server_error',
+              event_data: {
+                server_id: pterodactylServer?.id?.toString() || pterodactylServer?.identifier,
+                error: `Failed to start automatically after ${maxRetries} attempts: ${startError.message}`
+              },
+              message: `Failed to start Pterodactyl server automatically. Please start manually via panel.`
+            });
         }
-      }, 15000); // Wait 15 seconds before attempting to start
+      }, 20000); // Wait 20 seconds before attempting to start
 
     } catch (provisioningErr: any) {
       console.error('❌ Error provisioning Pterodactyl server:', provisioningErr);
