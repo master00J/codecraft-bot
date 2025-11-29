@@ -15,11 +15,11 @@ const shardCount = process.env.SHARD_COUNT === 'auto'
 if (shardCount === 1) {
   console.log('ℹ️ Sharding disabled (SHARD_COUNT=1). Starting single instance...');
   // If no sharding needed, just start the bot directly
-  require('./bot-comcraft.js');
+  require('./index.js');
 } else {
   console.log(`🚀 Starting Comcraft Bot with ${shardCount === 'auto' ? 'auto' : shardCount} shard(s)...`);
 
-  const manager = new ShardingManager('./bot-comcraft.js', {
+  const manager = new ShardingManager('./index.js', {
     totalShards: shardCount,
     token: process.env.DISCORD_BOT_TOKEN,
     respawn: true, // Auto-respawn shards on crash
