@@ -22,6 +22,51 @@ export async function GET(
     }
 
     const { guildId } = params;
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+    const stockId = searchParams.get('stock_id');
+    const limit = parseInt(searchParams.get('limit') || '100');
+
+    // Get price history for a specific stock
+    if (action === 'price_history' && stockId) {
+      const { data: stock, error } = await supabase
+        .from('stock_market_stocks')
+        .select('price_history, symbol, name')
+        .eq('id', stockId)
+        .eq('guild_id', guildId)
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: 'Stock not found' }, { status: 404 });
+      }
+
+      const priceHistory = (stock.price_history || []) as Array<{ price: number; timestamp: string }>;
+      return NextResponse.json({
+        symbol: stock.symbol,
+        name: stock.name,
+        priceHistory: priceHistory.slice(-limit) // Last N entries
+      });
+    }
+
+    // Get market activity log (transactions)
+    if (action === 'activity_log') {
+      const { data: transactions, error } = await supabase
+        .from('stock_market_transactions')
+        .select(`
+          *,
+          stock:stock_market_stocks(symbol, name, emoji)
+        `)
+        .eq('guild_id', guildId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('Error fetching activity log:', error);
+        return NextResponse.json({ error: 'Failed to fetch activity log' }, { status: 500 });
+      }
+
+      return NextResponse.json({ transactions: transactions || [] });
+    }
 
     // Get all stocks
     const { data: stocks, error: stocksError } = await supabase
@@ -170,6 +215,98 @@ export async function POST(
       }
 
       return NextResponse.json({ success: true });
+    } else if (action === 'bulk_update') {
+      const { stock_ids, updates } = data;
+
+      if (!stock_ids || !Array.isArray(stock_ids) || stock_ids.length === 0) {
+        return NextResponse.json({ error: 'stock_ids array is required' }, { status: 400 });
+      }
+
+      const updateData: any = {};
+      if (updates.status !== undefined) updateData.status = updates.status;
+      if (updates.volatility !== undefined) updateData.volatility = parseFloat(updates.volatility);
+
+      const { error } = await supabase
+        .from('stock_market_stocks')
+        .update(updateData)
+        .in('id', stock_ids)
+        .eq('guild_id', guildId);
+
+      if (error) {
+        console.error('Error bulk updating stocks:', error);
+        return NextResponse.json({ error: 'Failed to bulk update stocks' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, updated: stock_ids.length });
+    } else if (action === 'bulk_delete') {
+      const { stock_ids } = data;
+
+      if (!stock_ids || !Array.isArray(stock_ids) || stock_ids.length === 0) {
+        return NextResponse.json({ error: 'stock_ids array is required' }, { status: 400 });
+      }
+
+      const { error } = await supabase
+        .from('stock_market_stocks')
+        .delete()
+        .in('id', stock_ids)
+        .eq('guild_id', guildId);
+
+      if (error) {
+        console.error('Error bulk deleting stocks:', error);
+        return NextResponse.json({ error: 'Failed to bulk delete stocks' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, deleted: stock_ids.length });
+    } else if (action === 'export') {
+      // Export all stocks as JSON
+      const { data: stocks, error } = await supabase
+        .from('stock_market_stocks')
+        .select('symbol, name, description, emoji, base_price, current_price, volatility, total_shares, status')
+        .eq('guild_id', guildId)
+        .order('symbol', { ascending: true });
+
+      if (error) {
+        console.error('Error exporting stocks:', error);
+        return NextResponse.json({ error: 'Failed to export stocks' }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        stocks: stocks || [],
+        exported_at: new Date().toISOString()
+      });
+    } else if (action === 'import') {
+      const { stocks: stocksToImport } = data;
+
+      if (!stocksToImport || !Array.isArray(stocksToImport)) {
+        return NextResponse.json({ error: 'stocks array is required' }, { status: 400 });
+      }
+
+      const stocksData = stocksToImport.map((stock: any) => ({
+        guild_id: guildId,
+        symbol: stock.symbol?.toUpperCase(),
+        name: stock.name,
+        description: stock.description || null,
+        emoji: stock.emoji || null,
+        base_price: parseFloat(stock.base_price || stock.current_price || 100),
+        current_price: parseFloat(stock.current_price || stock.base_price || 100),
+        volatility: parseFloat(stock.volatility || 5),
+        total_shares: parseInt(stock.total_shares || 1000000),
+        available_shares: parseInt(stock.total_shares || 1000000),
+        status: stock.status || 'active'
+      }));
+
+      const { data: inserted, error } = await supabase
+        .from('stock_market_stocks')
+        .insert(stocksData)
+        .select();
+
+      if (error) {
+        console.error('Error importing stocks:', error);
+        return NextResponse.json({ error: 'Failed to import stocks' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, imported: inserted?.length || 0 });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

@@ -1598,6 +1598,16 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                     </Card>
                   </Link>
 
+                  <Link href={`/comcraft/dashboard/${guildId}/economy/stock-market`}>
+                    <Card className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-green-500/50 h-full hover:scale-105 duration-200">
+                      <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 p-5">
+                        <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">📈</div>
+                        <h3 className="font-semibold text-base mb-1">Stock Market</h3>
+                        <p className="text-xs text-muted-foreground">Manage stocks</p>
+                      </div>
+                    </Card>
+                  </Link>
+
                   <Link href={`/comcraft/dashboard/${guildId}/stats`}>
                     <Card className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-blue-500/50 h-full hover:scale-105 duration-200">
                       <div className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 p-5">
