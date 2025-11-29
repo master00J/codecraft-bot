@@ -651,7 +651,9 @@ Please check:
             continue
           }
         }
-      throw error
+        // If all retries exhausted or non-retryable error, throw
+        throw error
+      }
     }
   }
 
