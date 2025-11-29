@@ -1305,8 +1305,8 @@ export default function StockMarketPage() {
                         <Input
                           type="number"
                           min="1"
-                          value={newEvent.duration_minutes}
-                          onChange={(e) => setNewEvent({...newEvent, duration_minutes: parseInt(e.target.value) || null})}
+                          value={newEvent.duration_minutes ?? ''}
+                          onChange={(e) => setNewEvent({...newEvent, duration_minutes: e.target.value ? parseInt(e.target.value) : null})}
                           placeholder="Leave empty for permanent"
                         />
                         <p className="text-xs text-muted-foreground">
