@@ -104,6 +104,7 @@ export default function GuildDashboardLayout({
     { name: 'Vote Kick', href: `/comcraft/dashboard/${guildId}/vote-kick`, icon: Vote },
     { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video },
     { name: 'Quests', href: `/comcraft/dashboard/${guildId}/quests`, icon: Target },
+    { name: 'Polls', href: `/comcraft/dashboard/${guildId}/polls`, icon: BarChart3 },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings },
   ];
