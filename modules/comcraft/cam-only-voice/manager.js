@@ -328,8 +328,64 @@ class CamOnlyVoiceManager {
       const member = newState.member;
       if (!member) return;
 
+      // Check if exempt
       const exempt = await this.isExempt(member, config);
       if (exempt) return;
+
+      // Check if user is in timeout for the target channel
+      const inTimeout = await this.isUserInTimeout(member.guild.id, member.id, newState.channelId);
+      if (inTimeout) {
+        // Get timeout config for this channel
+        const channelTimeout = config.channel_timeouts?.[newState.channelId];
+        if (channelTimeout && channelTimeout.enabled) {
+          try {
+            // Get timeout expiration
+            const { data: timeoutData } = await this.supabase
+              .from('cam_only_voice_timeouts')
+              .select('expires_at')
+              .eq('guild_id', member.guild.id)
+              .eq('user_id', member.id)
+              .eq('channel_id', newState.channelId)
+              .single();
+
+            if (timeoutData) {
+              const expiresAt = new Date(timeoutData.expires_at);
+              const now = new Date();
+              const remainingMs = expiresAt.getTime() - now.getTime();
+              const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+              const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+              const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+
+              let timeLeft;
+              if (remainingDays >= 1) {
+                timeLeft = `${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+              } else if (remainingHours >= 1) {
+                timeLeft = `${remainingHours} hour${remainingHours > 1 ? 's' : ''}`;
+              } else {
+                timeLeft = `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+              }
+
+              // Disconnect user (move them back to their previous channel or disconnect)
+              await member.voice.disconnect('You are timed out from this cam-only voice channel');
+
+              const embed = new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle('🚫 Timeout Active')
+                .setDescription(
+                  `You cannot join <#${newState.channelId}> because you are currently timed out.\n\n` +
+                  `**Time remaining:** ${timeLeft}\n\n` +
+                  `You were timed out for not having your camera enabled. Please wait until the timeout expires.`
+                )
+                .setTimestamp();
+
+              await member.send({ embeds: [embed] }).catch(() => {});
+              return;
+            }
+          } catch (error) {
+            console.error('❌ [Cam-Only Voice] Error handling timeout check on channel switch:', error);
+          }
+        }
+      }
 
       if (!this.hasVideoStream(newState)) {
         // Record join time for grace period tracking
