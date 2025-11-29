@@ -378,7 +378,6 @@ let duelManager;
 let combatXPManager;
 let itemManager;
 let inventoryManager;
-let stockMarketManager;
 
 // ================================================================
 // BOT READY EVENT
