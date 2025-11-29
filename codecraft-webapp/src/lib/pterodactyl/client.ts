@@ -315,12 +315,23 @@ Please check:
     }
   }
 
-  // Get server details by UUID
+  // Get server details by UUID (using Application API)
   async getServer(serverUuid: string): Promise<any> {
-    const response = await this.request<any>(
-      `/servers/${serverUuid}`
-    )
-    return response.attributes
+    try {
+      const response = await this.request<any>(
+        `/servers/${serverUuid}`,
+        {},
+        'application' // Use Application API, not Client API
+      )
+      // Handle both response formats: { attributes } or { data: { attributes } }
+      return 'data' in response ? response.data.attributes : response.attributes
+    } catch (error: any) {
+      // Fallback: try without specifying API mode (might default correctly)
+      const response = await this.request<any>(
+        `/servers/${serverUuid}`
+      )
+      return 'data' in response ? response.data.attributes : response.attributes
+    }
   }
 
   // Wait for server installation to complete
