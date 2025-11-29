@@ -555,6 +555,8 @@ exec node index.js
           }
           
           // Set startup command to use the script (ensures dependencies are installed)
+          // IMPORTANT: This must be done AFTER deployBotFilesDirectly so start.sh exists
+          // We use Application API to update server details
           try {
             await client.setStartupCommand(pterodactylServer.uuid, 'bash start.sh');
             console.log(`✅ Startup command set to: bash start.sh`);
@@ -562,40 +564,12 @@ exec node index.js
             console.warn(`⚠️  Could not set startup command automatically:`, startupError.message);
             console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: bash start.sh`);
             console.log(`   This ensures dependencies are installed before the bot starts`);
+            console.log(`   Location: Panel → Server → Startup → Startup Command`);
           }
         } catch (deployError: any) {
           console.error(`❌ Failed to deploy bot files directly:`, deployError.message);
           console.log(`ℹ️  Fallback: You may need to manually configure deployment`);
           // Don't throw - continue with other setup
-        }
-        
-        // Install required Node.js packages
-        try {
-          const requiredPackages = [
-            'p-queue',
-            '@google/generative-ai',
-            '@anthropic-ai/sdk',
-            'prompt-utils',
-            '@google/genai',
-            'canvas',
-            'topgg-autoposter'
-          ];
-          
-          console.log(`📦 Installing required Node.js packages...`);
-          await client.installNodePackages(pterodactylServer.uuid, requiredPackages);
-          console.log(`✅ Package installation script created`);
-        } catch (packageError: any) {
-          console.warn(`⚠️  Could not create package installation script:`, packageError.message);
-          console.log(`ℹ️  Please install packages manually: npm install p-queue @google/generative-ai @anthropic-ai/sdk prompt-utils @google/genai canvas topgg-autoposter`);
-        }
-        
-        // Set startup command to node index.js (required for Pterodactyl to auto-start)
-        try {
-          await client.setStartupCommand(pterodactylServer.uuid, 'node index.js');
-          console.log(`✅ Startup command automatically set to: node index.js`);
-        } catch (startupError: any) {
-          console.warn(`⚠️  Could not set startup command automatically:`, startupError.message);
-          console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: node index.js`);
         }
         
         console.log(`✅ Environment variables automatically set for custom bot:`);

@@ -354,17 +354,34 @@ Please check:
         console.log(`⏳ Server still installing... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`)
         await new Promise(resolve => setTimeout(resolve, checkInterval))
       } catch (error: any) {
+        // If we get a 404, server might not exist yet or API access issue
+        if (error?.isNotFound || error?.status === 404) {
+          console.log(`⏳ Server not found yet (might still be creating)... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`)
+          await new Promise(resolve => setTimeout(resolve, checkInterval))
+          continue
+        }
+        // If we get a 403, API access issue - but we can still proceed
+        if (error?.status === 403) {
+          console.log(`⚠️  Cannot check server status via API (403) - assuming installation will complete`)
+          console.log(`ℹ️  Proceeding without status check...`)
+          return // Don't block - server might still be installing but we can't check
+        }
         // If we get a 409 error, server is still installing
         if (error.message?.includes('409') || error.message?.includes('installation')) {
           console.log(`⏳ Server still installing... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`)
           await new Promise(resolve => setTimeout(resolve, checkInterval))
           continue
         }
-        throw error
+        // For other errors, log but don't throw - we'll try a few more times
+        console.warn(`⚠️  Error checking server status:`, error.message)
+        await new Promise(resolve => setTimeout(resolve, checkInterval))
+        continue
       }
     }
     
-    throw new Error(`Server installation timeout after ${maxWaitTime / 1000}s`)
+    console.warn(`⚠️  Server installation check timeout after ${maxWaitTime / 1000}s`)
+    console.log(`ℹ️  Proceeding anyway - server might still be installing`)
+    // Don't throw - allow process to continue
   }
 
   // Update server resources - Using Dedicated API
@@ -611,9 +628,37 @@ Please check:
   // Set startup command for server
   async setStartupCommand(serverUuid: string, command: string): Promise<void> {
     try {
-      // Use Client API endpoint: PUT /api/client/servers/{server_uuid}/startup/command
-      // According to API docs, it expects "value" field, not "command"
-      // Note: Some Pterodactyl hosts (like SparkedHost) may block this via API
+      // Try Application API first (PUT /api/application/servers/{uuid}/startup)
+      // Get current startup data first
+      const startup = await this.request<any>(
+        `/servers/${serverUuid}/startup`,
+        {},
+        'application'
+      ).catch(() => null)
+      
+      if (startup) {
+        // Update via Application API
+        await this.request(
+          `/servers/${serverUuid}/startup`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              startup: command,
+              ...(startup.meta || {}),
+              ...(startup.startup_variables || [])
+            })
+          },
+          'application'
+        )
+        console.log(`✅ Startup command set via Application API: ${command}`)
+        return
+      }
+    } catch (appError: any) {
+      console.log(`⚠️  Application API method failed, trying Client API fallback...`)
+    }
+    
+    // Fallback to Client API (if we have client API key or server user token)
+    try {
       await this.request(
         `/servers/${serverUuid}/startup/command`,
         {
@@ -631,6 +676,10 @@ Please check:
         console.log(`ℹ️  Startup command cannot be changed via API (host restriction)`)
         console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: ${command}`)
         console.log(`ℹ️  Or use the start.sh script which handles deployment automatically`)
+      } else if (error?.status === 403) {
+        console.log(`ℹ️  Startup command cannot be changed via API (no Client API access)`)
+        console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: ${command}`)
+        console.log(`ℹ️  Location: Panel → Server → Startup → Startup Command`)
       } else {
         console.warn(`⚠️  Could not set startup command via API:`, error.message)
         console.log(`ℹ️  Please set startup command manually in Pterodactyl panel to: ${command}`)
