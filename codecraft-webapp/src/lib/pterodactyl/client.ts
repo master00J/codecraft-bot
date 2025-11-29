@@ -657,39 +657,26 @@ Please check:
     }
   }
 
-  // Create a Client API token for a specific user via Application API
-  // This allows us to start servers via Client API
+  // Note: Application API cannot create Client API tokens
+  // Client API tokens must be created by users themselves via the panel
+  // This method is a placeholder - we'll use a pre-configured token or skip automatic start
   async createClientApiToken(userId: number): Promise<string> {
-    try {
-      console.log(`🔑 Creating Client API token for user ${userId}...`)
-      
-      const response = await this.request<{ attributes: { identifier: string } }>(
-        `/users/${userId}/api-keys`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            description: `Auto-generated token for server management - ${new Date().toISOString()}`,
-            allowed_ips: [] // Allow from any IP
-          })
-        },
-        'application'
-      )
-      
-      // The token is only returned once, in the response
-      const token = 'data' in response 
-        ? (response.data as any).attributes?.token || (response.data as any).attributes?.identifier
-        : (response as any).attributes?.token || (response as any).attributes?.identifier
-      
-      if (!token) {
-        throw new Error('Client API token was not returned in response')
-      }
-      
-      console.log(`✅ Client API token created for user ${userId}`)
-      return token
-    } catch (error: any) {
-      console.error(`❌ Failed to create Client API token for user ${userId}:`, error.message)
-      throw error
+    // Check if we have a pre-configured Client API token in environment
+    const preConfiguredToken = process.env.PTERODACTYL_CLIENT_API_TOKEN
+    
+    if (preConfiguredToken) {
+      console.log(`🔑 Using pre-configured Client API token from environment`)
+      return preConfiguredToken
     }
+    
+    // If no token is configured, throw error explaining how to set one up
+    throw new Error(`Client API token not configured. 
+    
+To enable automatic server startup, you need to:
+1. Create a Client API token in Pterodactyl Panel → Account Settings → API Credentials
+2. Add it to Vercel environment variables as: PTERODACTYL_CLIENT_API_TOKEN
+
+OR manually start the server via Pterodactyl panel after creation.`)
   }
 
   // Start server using Client API token
