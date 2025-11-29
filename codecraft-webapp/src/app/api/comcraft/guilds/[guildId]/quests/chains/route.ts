@@ -71,13 +71,10 @@ export async function GET(
     const chainId = searchParams.get('id');
 
     if (chainId) {
-      // Get single chain with quests
+      // Get single chain
       const { data: chain, error } = await supabaseAdmin
         .from('quest_chains')
-        .select(`
-          *,
-          quests:quests!chain_id(*)
-        `)
+        .select('*')
         .eq('id', chainId)
         .eq('guild_id', params.guildId)
         .single();
@@ -86,21 +83,26 @@ export async function GET(
         return NextResponse.json({ error: 'Chain not found' }, { status: 404 });
       }
 
-      // Sort quests by chain_position
-      if (chain.quests) {
-        chain.quests.sort((a: any, b: any) => (a.chain_position || 0) - (b.chain_position || 0));
-      }
+      // Get quests for this chain separately
+      const { data: chainQuests } = await supabaseAdmin
+        .from('quests')
+        .select('id, name, emoji, chain_position')
+        .eq('chain_id', chainId)
+        .eq('guild_id', params.guildId)
+        .order('chain_position', { ascending: true });
 
-      return NextResponse.json({ chain });
+      return NextResponse.json({ 
+        chain: {
+          ...chain,
+          quests: chainQuests || []
+        }
+      });
     }
 
     // Get all chains for guild
     const { data: chains, error } = await supabaseAdmin
       .from('quest_chains')
-      .select(`
-        *,
-        quests:quests!chain_id(id, name, chain_position)
-      `)
+      .select('*')
       .eq('guild_id', params.guildId)
       .order('created_at', { ascending: false });
 
@@ -109,7 +111,24 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch chains' }, { status: 500 });
     }
 
-    return NextResponse.json({ chains: chains || [] });
+    // Get quests for each chain separately
+    const chainsWithQuests = await Promise.all(
+      (chains || []).map(async (chain) => {
+        const { data: chainQuests } = await supabaseAdmin
+          .from('quests')
+          .select('id, name, chain_position')
+          .eq('chain_id', chain.id)
+          .eq('guild_id', params.guildId)
+          .order('chain_position', { ascending: true });
+
+        return {
+          ...chain,
+          quests: chainQuests || []
+        };
+      })
+    );
+
+    return NextResponse.json({ chains: chainsWithQuests });
   } catch (error) {
     console.error('Error in GET /quests/chains:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
