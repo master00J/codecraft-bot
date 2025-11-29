@@ -99,6 +99,9 @@ export default function QuestsConfig() {
   // Editing quest
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
 
+  // Creating new chain flag
+  const [creatingNewChain, setCreatingNewChain] = useState(false);
+
   useEffect(() => {
     if (guildId) {
       fetchQuests();
@@ -199,6 +202,7 @@ export default function QuestsConfig() {
           quest_ids: []
         });
         setEditingChain(null);
+        setCreatingNewChain(false);
         fetchChains();
         fetchQuests(); // Refresh quests to show chain assignments
       } else {
@@ -244,6 +248,7 @@ export default function QuestsConfig() {
 
   const startEditingChain = (chain: any) => {
     setEditingChain(chain);
+    setCreatingNewChain(false);
     setNewChain({
       name: chain.name,
       description: chain.description || '',
@@ -1003,6 +1008,7 @@ export default function QuestsConfig() {
               <Button
                 onClick={() => {
                   setEditingChain(null);
+                  setCreatingNewChain(true);
                   setNewChain({
                     name: '',
                     description: '',
@@ -1013,6 +1019,12 @@ export default function QuestsConfig() {
                     enabled: true,
                     quest_ids: []
                   });
+                  setTimeout(() => {
+                    const nameInput = document.getElementById('chain_name') as HTMLInputElement;
+                    if (nameInput) {
+                      nameInput.focus();
+                    }
+                  }, 100);
                 }}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -1020,11 +1032,11 @@ export default function QuestsConfig() {
               </Button>
             </div>
 
-            {chains.length === 0 && !editingChain ? (
+            {chains.length === 0 && !editingChain && !creatingNewChain ? (
               <div className="text-center py-8 text-muted-foreground">
                 No quest chains created yet. Create your first chain to link quests together!
               </div>
-            ) : editingChain || newChain.name || newChain.quest_ids.length > 0 ? (
+            ) : editingChain || creatingNewChain || newChain.name || newChain.quest_ids.length > 0 ? (
               <div className="space-y-4 mt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1238,11 +1250,12 @@ export default function QuestsConfig() {
                   >
                     {saving ? 'Saving...' : editingChain ? 'Update Chain' : 'Create Chain'}
                   </Button>
-                  {(editingChain || newChain.name) && (
+                  {(editingChain || creatingNewChain || newChain.name) && (
                     <Button
                       variant="outline"
                       onClick={() => {
                         setEditingChain(null);
+                        setCreatingNewChain(false);
                         setNewChain({
                           name: '',
                           description: '',
