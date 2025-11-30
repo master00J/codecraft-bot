@@ -225,13 +225,14 @@ class RouletteGenerator {
     // Find index of winning number in wheel
     const winningIndex = this.numbers.indexOf(finalNumber);
     const anglePerNum = (Math.PI * 2) / this.numbers.length;
-    const targetAngle = -(winningIndex * anglePerNum) - (anglePerNum / 2) + (Math.PI / 2); // Point to top
+    const targetWheelRotation = -(winningIndex * anglePerNum) - (anglePerNum / 2) + (Math.PI / 2); // Point to top
+    const targetBallAngle = 0; // Ball should be at top (pointer position) when wheel stops
 
     // Animation phases
-    let currentRotation = 0;
+    let wheelRotation = 0;
     let ballAngle = 0;
-    let ballSpeed = 0.3; // radians per frame
-    let wheelSpeed = 0.4; // radians per frame
+    let wheelSpeed = 0.4; // radians per frame - wheel rotation
+    let ballSpeed = 0.6; // radians per frame - ball moves faster than wheel initially
 
     for (let frame = 0; frame < totalFrames; frame++) {
       this.drawBackground(ctx);
@@ -239,35 +240,42 @@ class RouletteGenerator {
       // Phase 1: Fast spin
       if (frame < this.spinFrames) {
         wheelSpeed = 0.4;
-        ballSpeed = 0.35;
+        ballSpeed = 0.6; // Ball moves faster than wheel
       }
       // Phase 2: Deceleration
       else if (frame < this.spinFrames + this.decelerationFrames) {
         const decelProgress = (frame - this.spinFrames) / this.decelerationFrames;
-        wheelSpeed = 0.4 * (1 - decelProgress);
-        ballSpeed = 0.35 * (1 - decelProgress);
+        const decelFactor = 1 - decelProgress;
+        wheelSpeed = 0.4 * decelFactor;
+        ballSpeed = 0.6 * decelFactor; // Both slow down
       }
       // Phase 3: Stop at target
       else {
         wheelSpeed = 0;
         ballSpeed = 0;
         // Snap to final position
-        currentRotation = targetAngle;
-        ballAngle = targetAngle + Math.PI;
+        wheelRotation = targetWheelRotation;
+        ballAngle = targetBallAngle; // Ball at top (pointer position)
       }
 
       // Update rotations
-      currentRotation += wheelSpeed;
+      wheelRotation += wheelSpeed;
       ballAngle += ballSpeed;
+      
+      // Normalize angles to prevent overflow
+      wheelRotation = wheelRotation % (Math.PI * 2);
+      ballAngle = ballAngle % (Math.PI * 2);
 
-      // Draw wheel
-      this.drawWheel(ctx, centerX, centerY, wheelRadius, currentRotation);
+      // Draw wheel (rotates independently)
+      this.drawWheel(ctx, centerX, centerY, wheelRadius, wheelRotation);
 
-      // Draw pointer
+      // Draw pointer (fixed at top)
       this.drawPointer(ctx, centerX, centerY, wheelRadius);
 
-      // Draw ball
-      this.drawBall(ctx, centerX, centerY, wheelRadius, ballAngle, frame);
+      // Draw ball (relative to wheel rotation - ball moves around the wheel)
+      // Ball angle is relative to the wheel, so we need to combine wheel rotation with ball position
+      const ballPositionOnWheel = ballAngle - wheelRotation;
+      this.drawBall(ctx, centerX, centerY, wheelRadius, ballPositionOnWheel, frame);
 
       // Draw info text
       ctx.fillStyle = '#ffffff';
