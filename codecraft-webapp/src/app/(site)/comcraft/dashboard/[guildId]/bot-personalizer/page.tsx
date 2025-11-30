@@ -38,19 +38,20 @@ export default function BotPersonalizer() {
 
   // Initialize presenceText from botConfig when it first loads (but not on subsequent updates)
   useEffect(() => {
-    // Only update if user is not actively typing and presenceText is empty or matches the old value
+    // Only update if user is not actively typing
     if (botConfig?.bot_presence_text !== undefined) {
       const configText = botConfig.bot_presence_text;
       // Only update if:
       // 1. presenceText is empty (initial load), OR
-      // 2. User is not actively typing (inputRef is empty) AND presenceText matches config (meaning it hasn't been changed)
-      if (presenceText === '' || 
-          (presenceTextInputRef.current === '' && presenceText === configText)) {
+      // 2. User is not actively typing (inputRef is empty string means not typing)
+      //    AND the current presenceText doesn't match the config (meaning it hasn't been manually set)
+      const isUserTyping = presenceTextInputRef.current !== '';
+      
+      if (!isUserTyping && (presenceText === '' || presenceText === configText)) {
         setPresenceText(configText);
-        presenceTextInputRef.current = '';
       }
     }
-  }, [botConfig?.bot_presence_text]);
+  }, [botConfig?.bot_presence_text, presenceText]);
 
   // Auto-refresh bot status if bot is offline/installing/starting
   useEffect(() => {
