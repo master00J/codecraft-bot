@@ -445,11 +445,6 @@ class TopGGManager {
    * @param {Array} commands - Array of command JSON objects
    */
   async postCommandsToDiscordBotList(commands) {
-    if (!this.discordBotListToken) {
-      console.log('⚠️  [DiscordBotList] No DISCORDBOTLIST_TOKEN found, skipping command posting');
-      return false;
-    }
-
     if (!this.client || !this.client.user) {
       console.warn('⚠️  [DiscordBotList] Client or user not available, skipping command posting');
       return false;
@@ -457,13 +452,22 @@ class TopGGManager {
 
     const botId = this.client.user.id;
 
+    // Try with token if available, otherwise try without (commands endpoint might not require auth)
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+
+    if (this.discordBotListToken) {
+      headers['Authorization'] = this.discordBotListToken;
+    } else {
+      console.log('⚠️  [DiscordBotList] No DISCORDBOTLIST_TOKEN found, trying without authentication...');
+      console.log('   💡 If this fails with 401, you may need to generate a token in the Admin section on discordbotlist.com');
+    }
+
     try {
       const response = await fetch(`https://discordbotlist.com/api/v1/bots/${botId}/commands`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': this.discordBotListToken
-        },
+        headers: headers,
         body: JSON.stringify(commands)
       });
 
@@ -473,6 +477,14 @@ class TopGGManager {
       } else {
         const errorText = await response.text();
         console.error(`❌ [DiscordBotList] Failed to post commands: ${response.status} - ${errorText}`);
+        
+        if (response.status === 401 && !this.discordBotListToken) {
+          console.error('   💡 Tip: Commands posting requires authentication. You may need to:');
+          console.error('      1. Go to your bot page on discordbotlist.com');
+          console.error('      2. Look for "Admin" section or "Generate Token" button');
+          console.error('      3. Add the token to your .env as DISCORDBOTLIST_TOKEN');
+        }
+        
         return false;
       }
     } catch (error) {
