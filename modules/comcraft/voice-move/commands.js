@@ -16,17 +16,17 @@ module.exports = [
         .setDescription('Verplaats alle gebruikers van een voice channel naar een ander')
         .addChannelOption(option =>
           option
-            .setName('from')
-            .setDescription('Bron voice channel (laat leeg voor jouw huidige channel)')
-            .addChannelTypes(ChannelType.GuildVoice)
-            .setRequired(false)
-        )
-        .addChannelOption(option =>
-          option
             .setName('to')
             .setDescription('Doel voice channel')
             .addChannelTypes(ChannelType.GuildVoice)
             .setRequired(true)
+        )
+        .addChannelOption(option =>
+          option
+            .setName('from')
+            .setDescription('Bron voice channel (laat leeg voor jouw huidige channel)')
+            .addChannelTypes(ChannelType.GuildVoice)
+            .setRequired(false)
         )
         .addStringOption(option =>
           option
