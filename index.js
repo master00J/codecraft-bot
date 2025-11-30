@@ -6049,20 +6049,133 @@ async function handleCasinoBetModal(interaction) {
     // Keep GIF in result if it exists
     if (slotsGif) {
       embed.setImage('attachment://slots-spin.gif');
-      return interaction.editReply({ 
+      await interaction.editReply({ 
         content: null,
         embeds: [embed], 
         files: [slotsGif], // Keep GIF in result
-        components: [row] 
+        components: result.bonusTriggered ? [] : [row] // No button if bonus triggered
+      });
+    } else {
+      await interaction.editReply({ 
+        content: null,
+        embeds: [embed], 
+        files: [],
+        components: result.bonusTriggered ? [] : [row] // No button if bonus triggered
       });
     }
 
-    return interaction.editReply({ 
-      content: null,
-      embeds: [embed], 
-      files: [],
-      components: [row] 
-    });
+    // Handle bonus spins if triggered
+    if (result.bonusTriggered && result.bonusSpins > 0) {
+      // Show bonus trigger message
+      const bonusTriggerEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🎁 BONUS TRIGGERED! 🎁')
+        .setDescription(
+          `🎰 **BONUS SPINS ACTIVATED!** 🎰\n\n` +
+          `You got **${result.bonusSpins} FREE BONUS SPINS**!\n\n` +
+          `Get ready for some free wins! 🎉`
+        )
+        .setTimestamp();
+
+      await interaction.followUp({
+        embeds: [bonusTriggerEmbed],
+        components: []
+      });
+
+      // Wait a moment before starting bonus spins
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Execute bonus spins
+      const bonusResult = await casinoManager.playBonusSpins(
+        guildId,
+        userId,
+        username,
+        betAmount,
+        result.bonusSpins
+      );
+
+      if (bonusResult.success) {
+        // Show each bonus spin result
+        for (let i = 0; i < bonusResult.bonusResults.length; i++) {
+          const spinResult = bonusResult.bonusResults[i];
+          
+          const topRow = `${spinResult.reels[0][0]} │ ${spinResult.reels[1][0]} │ ${spinResult.reels[2][0]}`;
+          const middleRow = `${spinResult.reels[0][1]} │ ${spinResult.reels[1][1]} │ ${spinResult.reels[2][1]}`;
+          const bottomRow = `${spinResult.reels[0][2]} │ ${spinResult.reels[1][2]} │ ${spinResult.reels[2][2]}`;
+          
+          let winText = '❌ No win';
+          if (spinResult.result === 'win' && spinResult.winningLines) {
+            const lineNames = spinResult.winningLines.map(l => l.name).join(', ');
+            winText = `✨ **${spinResult.winningLines.length} winning line(s)**: ${lineNames}`;
+          }
+
+          const bonusSpinEmbed = new EmbedBuilder()
+            .setColor(spinResult.result === 'win' ? '#22C55E' : '#EF4444')
+            .setTitle(`🎁 Bonus Spin ${spinResult.spin}/${result.bonusSpins}`)
+            .setDescription(
+              `🎰 **BONUS SPIN** 🎰\n\n` +
+              `**${topRow}**\n` +
+              `**${middleRow}**\n` +
+              `**${bottomRow}**\n\n` +
+              `${winText}`
+            )
+            .addFields(
+              {
+                name: '💰 Base Bet',
+                value: `${economyManager.formatCoins(betAmount)} coins`,
+                inline: true,
+              },
+              ...(spinResult.result === 'win' ? [{
+                name: '✨ Multiplier',
+                value: `**${spinResult.multiplier}x**`,
+                inline: true,
+              }] : []),
+              {
+                name: spinResult.result === 'win' ? '🎁 Win Amount' : '💸 Loss',
+                value: spinResult.result === 'win'
+                  ? `+${economyManager.formatCoins(spinResult.netResult)} coins`
+                  : 'No win',
+                inline: true,
+              }
+            )
+            .setTimestamp();
+
+          await interaction.followUp({
+            embeds: [bonusSpinEmbed],
+            components: []
+          });
+
+          // Wait between spins (1.5 seconds)
+          if (i < bonusResult.bonusResults.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        }
+
+        // Show final bonus summary
+        const bonusSummaryEmbed = new EmbedBuilder()
+          .setColor('#FFD700')
+          .setTitle('🎁 BONUS SPINS COMPLETE! 🎁')
+          .setDescription(
+            `🎰 **BONUS SUMMARY** 🎰\n\n` +
+            `**Total Bonus Spins:** ${result.bonusSpins}\n` +
+            `**Total Bonus Wins:** ${economyManager.formatCoins(bonusResult.totalWinAmount)} coins\n` +
+            `**Net Bonus Result:** +${economyManager.formatCoins(bonusResult.totalNetResult)} coins`
+          )
+          .setTimestamp();
+
+        const finalRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`casino_slots_${userId}`)
+            .setLabel('🎰 Spin Again')
+            .setStyle(ButtonStyle.Primary)
+        );
+
+        await interaction.followUp({
+          embeds: [bonusSummaryEmbed],
+          components: [finalRow]
+        });
+      }
+    }
   }
 
   if (gameType === 'blackjack') {

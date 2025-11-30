@@ -413,8 +413,8 @@ class CasinoManager {
       return { success: false, error: 'Insufficient balance' };
     }
 
-    // Slot symbols: 🍒 🍋 🍊 🍇 🔔 ⭐ 💎
-    const symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎'];
+    // Slot symbols: 🍒 🍋 🍊 🍇 🔔 ⭐ 💎 🎁 (bonus)
+    const symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎', '🎁'];
     
     // Generate 3x3 grid (3 reels, each with 3 rows)
     const reels = [
@@ -455,12 +455,22 @@ class CasinoManager {
       { name: 'Diagonal ↙', symbols: [reels[0][2], reels[1][1], reels[2][0]], row: -1 },
     ];
 
+    // Check for bonus trigger (3 bonus symbols on any payline)
+    let bonusTriggered = false;
+    let bonusSpins = 0;
+    
     // Check each payline
     for (const line of paylines) {
       const [s1, s2, s3] = line.symbols;
       let lineMultiplier = 0;
 
-      if (s1 === s2 && s2 === s3) {
+      // Check for bonus trigger (3 bonus symbols)
+      if (s1 === '🎁' && s2 === '🎁' && s3 === '🎁') {
+        bonusTriggered = true;
+        // Random bonus spins between 3 and 10
+        bonusSpins = Math.floor(Math.random() * 8) + 3; // 3-10 spins
+        lineMultiplier = 0; // Bonus doesn't pay on the trigger spin
+      } else if (s1 === s2 && s2 === s3) {
         // Three of a kind
         if (s1 === '💎') {
           lineMultiplier = 10; // Jackpot
@@ -567,6 +577,147 @@ class CasinoManager {
       winningLines,
       netResult: result === 'win' ? winAmount - betAmount : -betAmount,
       gifBuffer, // Animated slots GIF
+      bonusTriggered, // Whether bonus was triggered
+      bonusSpins, // Number of bonus spins (if triggered)
+    };
+  }
+
+  /**
+   * Execute bonus spins (free spins without bet)
+   */
+  async playBonusSpins(guildId, userId, username, originalBetAmount, numberOfSpins) {
+    const config = await this.getCasinoConfig(guildId);
+    if (!config || !config.slots_enabled) {
+      return { success: false, error: 'Slots is disabled' };
+    }
+
+    const bonusResults = [];
+    let totalWinAmount = 0;
+    let totalNetResult = 0;
+
+    // Slot symbols: 🍒 🍋 🍊 🍇 🔔 ⭐ 💎 (no bonus symbol in bonus spins)
+    const symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎'];
+
+    for (let spin = 0; spin < numberOfSpins; spin++) {
+      // Generate 3x3 grid
+      const reels = [
+        [
+          symbols[Math.floor(Math.random() * symbols.length)],
+          symbols[Math.floor(Math.random() * symbols.length)],
+          symbols[Math.floor(Math.random() * symbols.length)]
+        ],
+        [
+          symbols[Math.floor(Math.random() * symbols.length)],
+          symbols[Math.floor(Math.random() * symbols.length)],
+          symbols[Math.floor(Math.random() * symbols.length)]
+        ],
+        [
+          symbols[Math.floor(Math.random() * symbols.length)],
+          symbols[Math.floor(Math.random() * symbols.length)],
+          symbols[Math.floor(Math.random() * symbols.length)]
+        ]
+      ];
+
+      let result = 'loss';
+      let winAmount = 0;
+      let multiplier = 0;
+      let winningLines = [];
+
+      const paylines = [
+        { name: 'Top Row', symbols: [reels[0][0], reels[1][0], reels[2][0]], row: 0 },
+        { name: 'Middle Row', symbols: [reels[0][1], reels[1][1], reels[2][1]], row: 1 },
+        { name: 'Bottom Row', symbols: [reels[0][2], reels[1][2], reels[2][2]], row: 2 },
+        { name: 'Diagonal ↘', symbols: [reels[0][0], reels[1][1], reels[2][2]], row: -1 },
+        { name: 'Diagonal ↙', symbols: [reels[0][2], reels[1][1], reels[2][0]], row: -1 },
+      ];
+
+      // Check each payline
+      for (const line of paylines) {
+        const [s1, s2, s3] = line.symbols;
+        let lineMultiplier = 0;
+
+        if (s1 === s2 && s2 === s3) {
+          // Three of a kind
+          if (s1 === '💎') {
+            lineMultiplier = 10;
+          } else if (s1 === '⭐') {
+            lineMultiplier = 5;
+          } else if (s1 === '🔔') {
+            lineMultiplier = 3;
+          } else {
+            lineMultiplier = 2;
+          }
+        } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+          // Two of a kind
+          lineMultiplier = 1.5;
+        }
+
+        if (lineMultiplier > 0) {
+          winningLines.push({
+            name: line.name,
+            symbols: line.symbols,
+            multiplier: lineMultiplier,
+            row: line.row
+          });
+          
+          if (lineMultiplier > multiplier) {
+            multiplier = lineMultiplier;
+          }
+        }
+      }
+
+      // Calculate win
+      if (winningLines.length > 0) {
+        const totalMultiplier = winningLines.reduce((sum, line) => sum + line.multiplier, 0);
+        const payout = Math.floor(originalBetAmount * totalMultiplier * (1 - config.house_edge / 100));
+        winAmount = payout;
+        result = 'win';
+        multiplier = totalMultiplier;
+      }
+
+      // Add winnings (bonus spins are free, so we only add wins)
+      if (result === 'win') {
+        await this.economyManager.addCoins(
+          guildId,
+          userId,
+          winAmount,
+          'casino_win',
+          `Slots Bonus Spin ${spin + 1}/${numberOfSpins}: ${winningLines.length} line(s)`,
+          { game_type: 'slots_bonus', reels: reels, multiplier, winningLines, spin: spin + 1 }
+        );
+        totalWinAmount += winAmount;
+        totalNetResult += winAmount;
+      }
+
+      // Log bonus spin
+      await this.logGame(guildId, userId, username, 'slots_bonus', 0, winAmount, result, {
+        reels: reels,
+        multiplier: multiplier || 0,
+        winningLines: winningLines.length,
+        spin: spin + 1,
+        totalSpins: numberOfSpins,
+      });
+
+      bonusResults.push({
+        spin: spin + 1,
+        reels,
+        result,
+        winAmount,
+        multiplier,
+        winningLines,
+        netResult: result === 'win' ? winAmount : 0,
+      });
+    }
+
+    // Update stats (use original bet amount for stats)
+    await this.updateStats(guildId, userId, 'slots', originalBetAmount, totalWinAmount, totalWinAmount > 0 ? 'win' : 'loss');
+
+    return {
+      success: true,
+      bonusResults,
+      totalWinAmount,
+      totalNetResult,
+      numberOfSpins,
     };
   }
 

@@ -18,7 +18,7 @@ class SlotsGifGenerator {
     this.resultFrames = options.resultFrames || 12;
     
     // Slot symbols
-    this.symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎'];
+    this.symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '💎', '🎁'];
     
     // Symbol colors
     this.symbolColors = {
@@ -29,6 +29,7 @@ class SlotsGifGenerator {
       '🔔': { primary: '#FFD700', secondary: '#DAA520', accent: '#B8860B' },
       '⭐': { primary: '#FFD700', secondary: '#FFA500', accent: '#FFFF00' },
       '💎': { primary: '#00BFFF', secondary: '#0080FF', accent: '#87CEEB' },
+      '🎁': { primary: '#FF1493', secondary: '#FF69B4', accent: '#FFB6C1' }, // Pink for bonus
     };
   }
 
@@ -317,6 +318,69 @@ class SlotsGifGenerator {
   }
 
   /**
+   * Draw bonus/gift box symbol
+   */
+  drawBonus(ctx, x, y, size) {
+    const w = size * 0.4;
+    const h = size * 0.35;
+    
+    // Main box
+    ctx.beginPath();
+    ctx.rect(x - w, y - h * 0.5, w * 2, h);
+    
+    const boxGrad = ctx.createLinearGradient(x - w, y - h, x + w, y + h);
+    boxGrad.addColorStop(0, '#FF69B4');
+    boxGrad.addColorStop(0.3, '#FF1493');
+    boxGrad.addColorStop(0.7, '#FF1493');
+    boxGrad.addColorStop(1, '#DC143C');
+    ctx.fillStyle = boxGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#FFB6C1';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Ribbon/bow on top
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.3, y - h * 0.5);
+    ctx.lineTo(x - w * 0.6, y - h * 0.8);
+    ctx.lineTo(x - w * 0.2, y - h * 0.6);
+    ctx.lineTo(x, y - h * 0.7);
+    ctx.lineTo(x + w * 0.2, y - h * 0.6);
+    ctx.lineTo(x + w * 0.6, y - h * 0.8);
+    ctx.lineTo(x + w * 0.3, y - h * 0.5);
+    ctx.closePath();
+    
+    const ribbonGrad = ctx.createLinearGradient(x - w * 0.6, y - h * 0.8, x + w * 0.6, y - h * 0.6);
+    ribbonGrad.addColorStop(0, '#FFB6C1');
+    ribbonGrad.addColorStop(0.5, '#FFFFFF');
+    ribbonGrad.addColorStop(1, '#FFB6C1');
+    ctx.fillStyle = ribbonGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#FF1493';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    
+    // Bow center
+    ctx.beginPath();
+    ctx.arc(x, y - h * 0.65, w * 0.15, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.strokeStyle = '#FF1493';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Shine on box
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.6, y - h * 0.3);
+    ctx.lineTo(x - w * 0.2, y - h * 0.4);
+    ctx.lineTo(x - w * 0.3, y);
+    ctx.lineTo(x - w * 0.7, y - h * 0.1);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /**
    * Draw symbol by type
    */
   drawSymbol(ctx, symbol, x, y, size = 45, alpha = 1) {
@@ -331,6 +395,7 @@ class SlotsGifGenerator {
       case '🔔': this.drawBell(ctx, x, y, size); break;
       case '⭐': this.drawStar(ctx, x, y, size); break;
       case '💎': this.drawDiamond(ctx, x, y, size); break;
+      case '🎁': this.drawBonus(ctx, x, y, size); break;
       default: this.drawStar(ctx, x, y, size); break;
     }
     
