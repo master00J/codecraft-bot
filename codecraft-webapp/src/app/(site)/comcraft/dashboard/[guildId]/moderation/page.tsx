@@ -182,11 +182,13 @@ export default function ModerationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-red-500/5">
-      <div className="container mx-auto max-w-6xl px-4 py-8 space-y-6">
-        <Button asChild variant="ghost" size="sm" className="w-fit hover:bg-primary/10">
-          <Link href={`/comcraft/dashboard/${guildId}`}>← Back to Dashboard</Link>
-        </Button>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-red-500/5 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="w-full space-y-6">
+        <div className="flex items-center justify-between mb-4">
+          <Button asChild variant="ghost" size="sm" className="w-fit hover:bg-primary/10">
+            <Link href={`/comcraft/dashboard/${guildId}`}>← Back to Dashboard</Link>
+          </Button>
+        </div>
 
         {/* Header */}
         <Card className="border-2 shadow-2xl overflow-hidden">
