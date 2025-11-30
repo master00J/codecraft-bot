@@ -4446,7 +4446,7 @@ async function handleCombatLeaderboardCommand(interaction) {
 // ================================================================
 
 async function handleCasinoCommand(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ ephemeral: false });
 
   const userId = interaction.user.id;
   const guildId = interaction.guild.id;
