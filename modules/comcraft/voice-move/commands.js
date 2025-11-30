@@ -8,78 +8,78 @@ const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('disco
 module.exports = [
   new SlashCommandBuilder()
     .setName('voicemove')
-    .setDescription('Verplaats meerdere gebruikers tussen voice channels')
+    .setDescription('Move multiple users between voice channels')
     .setDefaultMemberPermissions(PermissionFlagsBits.MoveMembers)
     .addSubcommand(subcommand =>
       subcommand
         .setName('all')
-        .setDescription('Verplaats alle gebruikers van een voice channel naar een ander')
+        .setDescription('Move all users from one voice channel to another')
         .addChannelOption(option =>
           option
             .setName('to')
-            .setDescription('Doel voice channel')
+            .setDescription('Target voice channel')
             .addChannelTypes(ChannelType.GuildVoice)
             .setRequired(true)
         )
         .addChannelOption(option =>
           option
             .setName('from')
-            .setDescription('Bron voice channel (laat leeg voor jouw huidige channel)')
+            .setDescription('Source voice channel (leave empty to use your current channel)')
             .addChannelTypes(ChannelType.GuildVoice)
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('reason')
-            .setDescription('Reden voor verplaatsing (optioneel)')
+            .setDescription('Reason for moving (optional)')
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('users')
-        .setDescription('Verplaats specifieke gebruikers naar een voice channel')
+        .setDescription('Move specific users to a voice channel')
         .addChannelOption(option =>
           option
             .setName('to')
-            .setDescription('Doel voice channel')
+            .setDescription('Target voice channel')
             .addChannelTypes(ChannelType.GuildVoice)
             .setRequired(true)
         )
         .addStringOption(option =>
           option
             .setName('users')
-            .setDescription('Gebruikers IDs of mentions (gescheiden door spatie of komma)')
+            .setDescription('User IDs or mentions (separated by space or comma)')
             .setRequired(true)
         )
         .addStringOption(option =>
           option
             .setName('reason')
-            .setDescription('Reden voor verplaatsing (optioneel)')
+            .setDescription('Reason for moving (optional)')
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('role')
-        .setDescription('Verplaats alle gebruikers met een bepaalde role naar een voice channel')
+        .setDescription('Move all users with a specific role to a voice channel')
         .addRoleOption(option =>
           option
             .setName('role')
-            .setDescription('Role waarvan alle leden verplaatst moeten worden')
+            .setDescription('Role whose members should be moved')
             .setRequired(true)
         )
         .addChannelOption(option =>
           option
             .setName('to')
-            .setDescription('Doel voice channel')
+            .setDescription('Target voice channel')
             .addChannelTypes(ChannelType.GuildVoice)
             .setRequired(true)
         )
         .addStringOption(option =>
           option
             .setName('reason')
-            .setDescription('Reden voor verplaatsing (optioneel)')
+            .setDescription('Reason for moving (optional)')
             .setRequired(false)
         )
     )

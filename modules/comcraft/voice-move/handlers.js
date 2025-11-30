@@ -20,7 +20,7 @@ class VoiceMoveHandlers {
       if (!interaction.member.permissions.has(PermissionFlagsBits.MoveMembers)) {
         console.log('❌ [Voice Move] User lacks MoveMembers permission');
         return interaction.reply({
-          content: '❌ Je hebt geen toestemming om gebruikers te verplaatsen.',
+          content: '❌ You do not have permission to move members.',
           ephemeral: true
         });
       }
@@ -40,7 +40,7 @@ class VoiceMoveHandlers {
         break;
       default:
         await interaction.reply({
-          content: '❌ Onbekend subcommando.',
+          content: '❌ Unknown subcommand.',
           ephemeral: true
         });
     }
@@ -48,7 +48,7 @@ class VoiceMoveHandlers {
       console.error('❌ [Voice Move] Error in handleVoiceMove:', error);
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
-          content: '❌ Er is een fout opgetreden bij het uitvoeren van dit commando.',
+          content: '❌ An error occurred while executing this command.',
           ephemeral: true
         }).catch(() => {});
       } else if (interaction.deferred && !interaction.replied) {
@@ -67,7 +67,7 @@ class VoiceMoveHandlers {
 
     const fromChannel = interaction.options.getChannel('from');
     const toChannel = interaction.options.getChannel('to');
-    const reason = interaction.options.getString('reason') || 'Geen reden opgegeven';
+    const reason = interaction.options.getString('reason') || 'No reason provided';
 
     // Determine source channel
     let sourceChannel = fromChannel;
@@ -77,13 +77,13 @@ class VoiceMoveHandlers {
 
     if (!sourceChannel) {
       return interaction.editReply({
-        content: '❌ Je moet een bron channel opgeven of in een voice channel zijn.'
+        content: '❌ You must specify a source channel or be in a voice channel.'
       });
     }
 
     if (sourceChannel.id === toChannel.id) {
       return interaction.editReply({
-        content: '❌ Het bron en doel channel kunnen niet hetzelfde zijn.'
+        content: '❌ Source and target channels cannot be the same.'
       });
     }
 
@@ -95,7 +95,7 @@ class VoiceMoveHandlers {
 
     if (membersToMove.size === 0) {
       return interaction.editReply({
-        content: `❌ Er zijn geen gebruikers in ${sourceChannel.name} om te verplaatsen.`
+        content: `❌ There are no users in ${sourceChannel.name} to move.`
       });
     }
 
@@ -105,16 +105,16 @@ class VoiceMoveHandlers {
     // Create embed response
     const embed = new EmbedBuilder()
       .setColor('#00FF00')
-      .setTitle('✅ Gebruikers Verplaatst')
-      .setDescription(`Gebruikers verplaatst van **${sourceChannel.name}** naar **${toChannel.name}**`)
+      .setTitle('✅ Users Moved')
+      .setDescription(`Users moved from **${sourceChannel.name}** to **${toChannel.name}**`)
       .addFields(
         {
-          name: '📊 Resultaat',
-          value: `✅ Succesvol: ${results.success}\n❌ Gefaald: ${results.failed}\n⏭️ Overgeslagen: ${results.skipped}`,
+          name: '📊 Results',
+          value: `✅ Successful: ${results.success}\n❌ Failed: ${results.failed}\n⏭️ Skipped: ${results.skipped}`,
           inline: false
         },
         {
-          name: '📝 Reden',
+          name: '📝 Reason',
           value: reason,
           inline: false
         }
@@ -123,9 +123,9 @@ class VoiceMoveHandlers {
 
     if (results.failedMembers.length > 0) {
       embed.addFields({
-        name: '❌ Kon niet verplaatsen',
+        name: '❌ Could Not Move',
         value: results.failedMembers.slice(0, 10).map(m => `• ${m.tag}`).join('\n') + 
-               (results.failedMembers.length > 10 ? `\n*... en ${results.failedMembers.length - 10} meer*` : ''),
+               (results.failedMembers.length > 10 ? `\n*... and ${results.failedMembers.length - 10} more*` : ''),
         inline: false
       });
     }
@@ -141,7 +141,7 @@ class VoiceMoveHandlers {
 
     const toChannel = interaction.options.getChannel('to');
     const usersInput = interaction.options.getString('users');
-    const reason = interaction.options.getString('reason') || 'Geen reden opgegeven';
+    const reason = interaction.options.getString('reason') || 'No reason provided';
 
     // Parse user IDs from input (can be IDs, mentions, or usernames)
     const userIds = usersInput
@@ -164,7 +164,7 @@ class VoiceMoveHandlers {
 
     if (membersToMove.size === 0) {
       return interaction.editReply({
-        content: '❌ Geen geldige gebruikers gevonden die in een voice channel zijn.'
+        content: '❌ No valid users found who are in a voice channel.'
       });
     }
 
@@ -174,16 +174,16 @@ class VoiceMoveHandlers {
     // Create embed response
     const embed = new EmbedBuilder()
       .setColor('#00FF00')
-      .setTitle('✅ Gebruikers Verplaatst')
-      .setDescription(`Gebruikers verplaatst naar **${toChannel.name}**`)
+      .setTitle('✅ Users Moved')
+      .setDescription(`Users moved to **${toChannel.name}**`)
       .addFields(
         {
-          name: '📊 Resultaat',
-          value: `✅ Succesvol: ${results.success}\n❌ Gefaald: ${results.failed}\n⏭️ Overgeslagen: ${results.skipped}`,
+          name: '📊 Results',
+          value: `✅ Successful: ${results.success}\n❌ Failed: ${results.failed}\n⏭️ Skipped: ${results.skipped}`,
           inline: false
         },
         {
-          name: '📝 Reden',
+          name: '📝 Reason',
           value: reason,
           inline: false
         }
@@ -192,9 +192,9 @@ class VoiceMoveHandlers {
 
     if (results.failedMembers.length > 0) {
       embed.addFields({
-        name: '❌ Kon niet verplaatsen',
+        name: '❌ Could Not Move',
         value: results.failedMembers.slice(0, 10).map(m => `• ${m.tag}`).join('\n') + 
-               (results.failedMembers.length > 10 ? `\n*... en ${results.failedMembers.length - 10} meer*` : ''),
+               (results.failedMembers.length > 10 ? `\n*... and ${results.failedMembers.length - 10} more*` : ''),
         inline: false
       });
     }
@@ -210,7 +210,7 @@ class VoiceMoveHandlers {
 
     const role = interaction.options.getRole('role');
     const toChannel = interaction.options.getChannel('to');
-    const reason = interaction.options.getString('reason') || 'Geen reden opgegeven';
+    const reason = interaction.options.getString('reason') || 'No reason provided';
 
     // Get all members with the role who are in a voice channel
     const membersToMove = new Map();
@@ -223,7 +223,7 @@ class VoiceMoveHandlers {
 
     if (membersToMove.size === 0) {
       return interaction.editReply({
-        content: `❌ Geen gebruikers met de role **${role.name}** gevonden die in een voice channel zijn.`
+        content: `❌ No users with the role **${role.name}** found who are in a voice channel.`
       });
     }
 
@@ -233,16 +233,16 @@ class VoiceMoveHandlers {
     // Create embed response
     const embed = new EmbedBuilder()
       .setColor('#00FF00')
-      .setTitle('✅ Gebruikers Verplaatst')
-      .setDescription(`Alle gebruikers met de role **${role.name}** verplaatst naar **${toChannel.name}**`)
+      .setTitle('✅ Users Moved')
+      .setDescription(`All users with the role **${role.name}** moved to **${toChannel.name}**`)
       .addFields(
         {
-          name: '📊 Resultaat',
-          value: `✅ Succesvol: ${results.success}\n❌ Gefaald: ${results.failed}\n⏭️ Overgeslagen: ${results.skipped}`,
+          name: '📊 Results',
+          value: `✅ Successful: ${results.success}\n❌ Failed: ${results.failed}\n⏭️ Skipped: ${results.skipped}`,
           inline: false
         },
         {
-          name: '📝 Reden',
+          name: '📝 Reason',
           value: reason,
           inline: false
         }
@@ -251,9 +251,9 @@ class VoiceMoveHandlers {
 
     if (results.failedMembers.length > 0) {
       embed.addFields({
-        name: '❌ Kon niet verplaatsen',
+        name: '❌ Could Not Move',
         value: results.failedMembers.slice(0, 10).map(m => `• ${m.tag}`).join('\n') + 
-               (results.failedMembers.length > 10 ? `\n*... en ${results.failedMembers.length - 10} meer*` : ''),
+               (results.failedMembers.length > 10 ? `\n*... and ${results.failedMembers.length - 10} more*` : ''),
         inline: false
       });
     }
@@ -278,7 +278,7 @@ class VoiceMoveHandlers {
 
     // Check if bot has permission to move members
     if (!targetChannel.permissionsFor(targetChannel.guild.members.me)?.has(PermissionFlagsBits.MoveMembers)) {
-      throw new Error('Ik heb geen toestemming om gebruikers naar dit channel te verplaatsen.');
+      throw new Error('I do not have permission to move members to this channel.');
     }
 
     // Move members one by one (Discord rate limits apply)
