@@ -52,7 +52,7 @@ export default function BotPersonalizer() {
     }
   }, [botConfig?.setup_completed, botConfig?.bot_online, botConfig?.server_status]);
 
-  const fetchBotConfig = async () => {
+  const fetchBotConfig = async (skipPresenceTextUpdate = false) => {
     try {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/bot-personalizer`);
       const data = await response.json();
@@ -60,8 +60,9 @@ export default function BotPersonalizer() {
       if (data.botConfig) {
         setBotConfig(data.botConfig);
         setStep(data.botConfig.setup_completed ? 4 : 1);
-        // Update local presence text state when config is fetched
-        if (data.botConfig.bot_presence_text !== undefined) {
+        // Only update local presence text state if not currently being edited
+        // and if skipPresenceTextUpdate is false (to prevent overwriting user input)
+        if (!skipPresenceTextUpdate && data.botConfig.bot_presence_text !== undefined) {
           setPresenceText(data.botConfig.bot_presence_text);
         }
       }
@@ -642,7 +643,7 @@ export default function BotPersonalizer() {
                   <Label htmlFor="presenceText">Status Text</Label>
                   <Input
                     id="presenceText"
-                    value={presenceText || botConfig?.bot_presence_text || 'codecraft-solutions.com | /help'}
+                    value={presenceText !== '' ? presenceText : (botConfig?.bot_presence_text || 'codecraft-solutions.com | /help')}
                     onChange={(e) => {
                       const value = e.target.value;
                       // Update local state immediately for responsive UI
@@ -661,19 +662,20 @@ export default function BotPersonalizer() {
                           });
                           const result = await response.json();
                           if (result.success) {
-                            // Update botConfig with new value
+                            // Update botConfig with new value without refetching
                             setBotConfig((prev: any) => ({
                               ...prev,
                               bot_presence_text: value
                             }));
+                            // Keep local state as is - don't overwrite user input
                           } else {
                             alert(`❌ Error: ${result.error}\n${result.message || ''}`);
-                            // Revert to original value on error
+                            // Revert to saved value on error
                             setPresenceText(botConfig?.bot_presence_text || 'codecraft-solutions.com | /help');
                           }
                         } catch (error) {
                           alert('❌ Error updating presence');
-                          // Revert to original value on error
+                          // Revert to saved value on error
                           setPresenceText(botConfig?.bot_presence_text || 'codecraft-solutions.com | /help');
                         } finally {
                           setPresenceSaving(false);
