@@ -30,9 +30,16 @@ export default function BotPersonalizer() {
 
   useEffect(() => {
     if (guildId) {
-      fetchBotConfig();
+      fetchBotConfig(false);
     }
   }, [guildId]);
+
+  // Initialize presenceText from botConfig when it first loads (but not on subsequent updates)
+  useEffect(() => {
+    if (botConfig?.bot_presence_text !== undefined && presenceText === '') {
+      setPresenceText(botConfig.bot_presence_text);
+    }
+  }, [botConfig?.bot_presence_text]);
 
   // Auto-refresh bot status if bot is offline/installing/starting
   useEffect(() => {
@@ -45,7 +52,7 @@ export default function BotPersonalizer() {
       const refreshInterval = isProvisioning ? 10000 : 30000; // 10s when provisioning, 30s when offline
       
       const interval = setInterval(() => {
-        fetchBotConfig();
+        fetchBotConfig(true); // Skip presence text update during auto-refresh to prevent overwriting user input
       }, refreshInterval);
 
       return () => clearInterval(interval);
