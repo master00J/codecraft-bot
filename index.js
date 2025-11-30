@@ -79,6 +79,17 @@ const VoteKickCommands = require('./modules/comcraft/vote-kick/commands');
 const CamOnlyVoiceManager = require('./modules/comcraft/cam-only-voice/manager');
 const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands');
 const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
+// Voice Move Commands and Handlers
+let voiceMoveCommands = null;
+let VoiceMoveHandlers = null;
+try {
+  voiceMoveCommands = require('./modules/comcraft/voice-move/commands');
+  VoiceMoveHandlers = require('./modules/comcraft/voice-move/handlers');
+  console.log('✅ Voice Move modules loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load Voice Move modules:', error.message);
+  console.error('   Stack:', error.stack);
+}
 const userStatsManager = require('./modules/comcraft/stats/user-stats-manager');
 const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generator');
 const combatCardGenerator = require('./modules/comcraft/combat/combat-card-generator');
@@ -594,6 +605,22 @@ client.once('ready', async () => {
     console.error('❌ Failed to initialize Cam-Only Voice Manager:', error.message);
     global.camOnlyVoiceManager = null;
     global.camOnlyVoiceHandlers = null;
+  }
+
+  // Initialize Voice Move Handler
+  let voiceMoveHandlers = null;
+  if (VoiceMoveHandlers) {
+    try {
+      voiceMoveHandlers = new VoiceMoveHandlers();
+      global.voiceMoveHandlers = voiceMoveHandlers;
+      console.log('✅ Voice Move Handler initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize Voice Move Handler:', error.message);
+      console.error('   Stack:', error.stack);
+      global.voiceMoveHandlers = null;
+    }
+  } else {
+    console.warn('⚠️ Voice Move Handlers not available - module failed to load');
   }
 
   // Register slash commands (will include music commands if initialized)
@@ -2207,6 +2234,17 @@ client.on('interactionCreate', async (interaction) => {
               });
           }
         }
+        break;
+
+      // ============ VOICE MOVE COMMANDS ============
+      case 'voicemove':
+        if (!global.voiceMoveHandlers) {
+          return interaction.reply({ 
+            content: '❌ Voice move system not initialized', 
+            ephemeral: true 
+          });
+        }
+        await global.voiceMoveHandlers.handleVoiceMove(interaction);
         break;
 
       default:
@@ -7043,6 +7081,15 @@ async function registerCommands(clientInstance) {
   if (camOnlyVoiceCommands && Array.isArray(camOnlyVoiceCommands)) {
     commandBuilders.push(...camOnlyVoiceCommands);
     console.log(`✅ Added ${camOnlyVoiceCommands.length} cam-only voice commands to registration`);
+  }
+
+  // Add voice move commands
+  if (voiceMoveCommands && Array.isArray(voiceMoveCommands)) {
+    commandBuilders.push(...voiceMoveCommands);
+    console.log(`✅ Added ${voiceMoveCommands.length} voice move commands to registration`);
+    console.log(`   Voice move command names: ${voiceMoveCommands.map(cmd => cmd.name).join(', ')}`);
+  } else {
+    console.warn('⚠️ Voice move commands not found or not an array');
   }
 
   const commands = commandBuilders.map((command) => command.toJSON());
