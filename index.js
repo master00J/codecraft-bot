@@ -6664,11 +6664,19 @@ async function handleRouletteBetModal(interaction) {
       .setStyle(ButtonStyle.Primary)
   );
 
+  // Keep the GIF visible in the result embed
+  const files = [];
+  if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+    const rouletteGif = new AttachmentBuilder(result.gifBuffer, { name: 'roulette-spin.gif' });
+    files.push(rouletteGif);
+    embed.setImage('attachment://roulette-spin.gif');
+  }
+
   return interaction.editReply({
     content: null,
     embeds: [embed],
     components: [row],
-    files: [], // Clear files for result embed
+    files: files, // Keep GIF in result embed
   });
 }
 
