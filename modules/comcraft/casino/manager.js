@@ -1198,14 +1198,19 @@ class CasinoManager {
     const profit = result === 'win' ? winAmount - betAmount : result === 'draw' ? 0 : -betAmount;
 
     if (existing) {
+      // Handle undefined values for new game types (e.g., roulette)
+      const existingProfit = existing[`${gameType}_profit`] ?? 0;
+      const existingGames = existing[`${gameType}_games`] ?? 0;
+      const existingWins = existing[`${gameType}_wins`] ?? 0;
+      
       const updates = {
-        total_games: existing.total_games + 1,
-        total_bet: (BigInt(existing.total_bet) + BigInt(betAmount)).toString(),
-        total_won: result === 'win' ? (BigInt(existing.total_won) + BigInt(winAmount)).toString() : existing.total_won,
-        total_lost: result === 'loss' ? (BigInt(existing.total_lost) + BigInt(betAmount)).toString() : existing.total_lost,
-        [`${gameType}_games`]: existing[`${gameType}_games`] + 1,
-        [`${gameType}_wins`]: result === 'win' ? existing[`${gameType}_wins`] + 1 : existing[`${gameType}_wins`],
-        [`${gameType}_profit`]: (BigInt(existing[`${gameType}_profit`]) + BigInt(profit)).toString(),
+        total_games: (existing.total_games ?? 0) + 1,
+        total_bet: (BigInt(existing.total_bet ?? 0) + BigInt(betAmount)).toString(),
+        total_won: result === 'win' ? (BigInt(existing.total_won ?? 0) + BigInt(winAmount)).toString() : (existing.total_won ?? 0).toString(),
+        total_lost: result === 'loss' ? (BigInt(existing.total_lost ?? 0) + BigInt(betAmount)).toString() : (existing.total_lost ?? 0).toString(),
+        [`${gameType}_games`]: existingGames + 1,
+        [`${gameType}_wins`]: result === 'win' ? existingWins + 1 : existingWins,
+        [`${gameType}_profit`]: (BigInt(existingProfit) + BigInt(profit)).toString(),
         updated_at: new Date().toISOString(),
       };
 
