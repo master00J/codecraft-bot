@@ -4859,6 +4859,7 @@ async function handleCasinoButton(interaction, featureGate) {
     // Use deferUpdate() to update the existing message instead of creating a new reply
     await interaction.deferUpdate();
     
+    const userId = interaction.user.id;
     const parts = customId.split('_');
     const action = parts[2];
     const gameId = parts.slice(3).join('_');
