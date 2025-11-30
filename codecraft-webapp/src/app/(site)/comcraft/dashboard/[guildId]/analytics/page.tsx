@@ -164,20 +164,20 @@ export default function Analytics() {
   const COLORS = ['#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981'];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
-      <div className="container mx-auto max-w-7xl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
             <div>
               <h1 className="text-3xl font-bold mb-2">📊 Analytics Dashboard</h1>
               <p className="text-gray-600 dark:text-gray-400">
                 Insights into your server activity and engagement
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full md:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -186,7 +186,7 @@ export default function Analytics() {
                   <SelectItem value="90">Last 90 days</SelectItem>
                 </SelectContent>
               </Select>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="w-full md:w-auto">
                 <Link href={`/comcraft/dashboard/${guildId}`}>← Back</Link>
               </Button>
             </div>
@@ -194,29 +194,29 @@ export default function Analytics() {
         </div>
 
         {/* Key Metrics */}
-        <div className="grid md:grid-cols-4 gap-4 mb-4">
-          <Card className="p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Total Messages
             </div>
             <div className="text-3xl font-bold">{data.totals.messages.toLocaleString()}</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               New Members
             </div>
             <div className="text-3xl font-bold text-green-600">+{data.totals.joins}</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Members Left
             </div>
             <div className="text-3xl font-bold text-red-600">-{data.totals.leaves}</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Net Growth
             </div>
@@ -227,8 +227,8 @@ export default function Analytics() {
         </div>
 
         {/* Voice Metrics */}
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
-          <Card className="p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Total Voice Time
             </div>
@@ -238,7 +238,7 @@ export default function Analytics() {
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Unique Voice Users
             </div>
@@ -248,7 +248,7 @@ export default function Analytics() {
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Average Session Length
             </div>
@@ -264,10 +264,10 @@ export default function Analytics() {
         </div>
 
         {/* Daily Activity Chart */}
-        <Card className="p-6 mb-8">
+        <Card className="p-4 sm:p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">📈 Daily Activity</h2>
           {data.dailyStats.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
               <AreaChart data={data.dailyStats}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
@@ -293,10 +293,10 @@ export default function Analytics() {
         </Card>
 
         {/* Member Growth Chart */}
-        <Card className="p-6 mb-8">
+        <Card className="p-4 sm:p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">👥 Member Growth</h2>
           {data.dailyStats.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={300}>
               <LineChart data={data.dailyStats}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
@@ -316,9 +316,9 @@ export default function Analytics() {
           )}
         </Card>
 
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 mb-8">
           {/* Top Channels */}
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <h2 className="text-xl font-bold mb-4">🔥 Top Text Channels (Last 7 Days)</h2>
             {data.topChannels.length > 0 ? (
               <div className="space-y-3">
@@ -343,7 +343,7 @@ export default function Analytics() {
           </Card>
 
           {/* Top Users */}
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <h2 className="text-xl font-bold mb-4">⭐ Top Active Members</h2>
             {data.topUsers.length > 0 ? (
               <div className="space-y-3">
@@ -371,10 +371,10 @@ export default function Analytics() {
         </div>
 
         {/* Voice Activity Chart */}
-        <Card className="p-6 mb-8">
+        <Card className="p-4 sm:p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">🔊 Voice Activity Over Time</h2>
           {data.dailyStats.length > 0 && data.dailyStats.some((day: any) => day.voice_minutes > 0) ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
               <AreaChart data={data.dailyStats}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
@@ -404,9 +404,9 @@ export default function Analytics() {
         </Card>
 
         {/* Voice Statistics */}
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 mb-8">
           {/* Top Voice Channels */}
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <h2 className="text-xl font-bold mb-4">🎤 Top Voice Channels</h2>
             {data.topVoiceChannels && data.topVoiceChannels.length > 0 ? (
               <div className="space-y-3">
@@ -431,7 +431,7 @@ export default function Analytics() {
           </Card>
 
           {/* Top Voice Users */}
-          <Card className="p-6">
+          <Card className="p-4 sm:p-6">
             <h2 className="text-xl font-bold mb-4">🎙️ Top Voice Users</h2>
             {data.topVoiceUsers && data.topVoiceUsers.length > 0 ? (
               <div className="space-y-3">
@@ -460,12 +460,12 @@ export default function Analytics() {
 
         {/* Voice Activity Heatmap */}
         {data.voiceHourlyHeatmap && data.voiceHourlyHeatmap.length > 0 && (
-          <Card className="p-6 mb-8">
+          <Card className="p-4 sm:p-6 mb-8">
             <h2 className="text-xl font-bold mb-4">🕐 Voice Activity by Hour (Average)</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               When do members use voice channels the most?
             </p>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
               <BarChart data={data.voiceHourlyHeatmap}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
@@ -490,9 +490,9 @@ export default function Analytics() {
         )}
 
         {/* Retention Metrics */}
-        <Card className="p-6 mb-8">
+        <Card className="p-4 sm:p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">🎯 Member Retention & Conversion</h2>
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <h3 className="font-semibold mb-4">Retention Rates</h3>
               <div className="space-y-3">
@@ -532,13 +532,13 @@ export default function Analytics() {
         </Card>
 
         {/* Hourly Activity Heatmap */}
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <h2 className="text-xl font-bold mb-4">🕐 Best Times (Average)</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             When is your server most active? Use this to plan events/streams!
           </p>
           {data.hourlyHeatmap.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
               <BarChart data={data.hourlyHeatmap}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
