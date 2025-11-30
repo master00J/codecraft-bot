@@ -40,6 +40,7 @@ interface NavItem {
   href: string;
   icon: any;
   badge?: string;
+  tier?: string; // Required subscription tier (Free, Basic, Premium, Enterprise)
 }
 
 export default function GuildDashboardLayout({
@@ -53,6 +54,7 @@ export default function GuildDashboardLayout({
   const guildId = params.guildId as string;
   const locale = params.locale as string;
   const [currentHash, setCurrentHash] = useState<string>('');
+  const [featureTiers, setFeatureTiers] = useState<Record<string, string>>({});
 
   // Track hash changes for active state
   useEffect(() => {
@@ -79,34 +81,98 @@ export default function GuildDashboardLayout({
     };
   }, []);
 
+  // Fetch subscription tiers and determine required tier for each feature
+  useEffect(() => {
+    async function fetchFeatureTiers() {
+      try {
+        const response = await fetch('/api/comcraft/subscription-tiers');
+        const data = await response.json();
+        
+        if (data.success && data.tiers) {
+          // Map menu items to feature keys
+          const featureMap: Record<string, string> = {
+            'Leveling': 'leveling',
+            'Moderation': 'moderation_basic',
+            'Commands': 'custom_commands',
+            'Streaming': 'streaming_twitch',
+            'Birthdays': 'birthday_manager',
+            'Feedback': 'feedback_queue',
+            'Tickets': 'support_tickets',
+            'Economy': 'economy',
+            'Stock Market': 'stock_market',
+            'Casino': 'casino',
+            'Analytics': 'analytics',
+            'Statistics': 'user_statistics',
+            'Reactions': 'auto_reactions',
+            'Events': 'events',
+            'Giveaways': 'giveaways',
+            'Auto Roles': 'auto_roles',
+            'Embeds': 'embed_builder',
+            'Combat Items': 'pvp_duels',
+            'Game News': 'game_news',
+            'Scheduled Messages': 'scheduled_messages',
+            'Vote Kick': 'vote_kick',
+            'Cam-Only Voice': 'cam_only_voice',
+            'Quests': 'quests',
+            'Polls': 'polls',
+            'AI Assistant': 'ai_assistant',
+            'Bot Settings': 'custom_branding',
+          };
+
+          // Determine the minimum tier required for each feature
+          const tiers = data.tiers.sort((a: any, b: any) => a.sort_order - b.sort_order);
+          
+          const newFeatureTiers: Record<string, string> = {};
+          
+          Object.entries(featureMap).forEach(([menuItem, featureKey]) => {
+            // Find the first tier where this feature is enabled
+            for (const tier of tiers) {
+              const features = tier.features as Record<string, boolean> | undefined;
+              if (features && features[featureKey] === true) {
+                newFeatureTiers[menuItem] = tier.display_name;
+                break;
+              }
+            }
+          });
+          
+          setFeatureTiers(newFeatureTiers);
+        }
+      } catch (error) {
+        console.error('Error fetching feature tiers:', error);
+      }
+    }
+
+    fetchFeatureTiers();
+  }, []);
+
   const navigation: NavItem[] = [
     { name: 'Overview', href: `/comcraft/dashboard/${guildId}`, icon: LayoutDashboard },
-    { name: 'Leveling', href: `/comcraft/dashboard/${guildId}#leveling`, icon: TrendingUp },
-    { name: 'Moderation', href: `/comcraft/dashboard/${guildId}#moderation`, icon: Shield },
-    { name: 'Commands', href: `/comcraft/dashboard/${guildId}#commands`, icon: MessageSquare },
-    { name: 'Streaming', href: `/comcraft/dashboard/${guildId}#streaming`, icon: Tv },
-    { name: 'Birthdays', href: `/comcraft/dashboard/${guildId}#birthdays`, icon: Calendar },
-    { name: 'Feedback', href: `/comcraft/dashboard/${guildId}#feedback`, icon: MessageCircle },
-    { name: 'Tickets', href: `/comcraft/dashboard/${guildId}#tickets`, icon: Ticket },
-    { name: 'Economy', href: `/comcraft/dashboard/${guildId}#economy`, icon: DollarSign },
-    { name: 'Stock Market', href: `/comcraft/dashboard/${guildId}/economy/stock-market`, icon: TrendingUp },
-    { name: 'Casino', href: `/comcraft/dashboard/${guildId}#casino`, icon: Gamepad2 },
-    { name: 'Analytics', href: `/comcraft/dashboard/${guildId}#analytics`, icon: BarChart3 },
-    { name: 'Statistics', href: `/comcraft/dashboard/${guildId}/stats`, icon: BarChart3 },
-    { name: 'Reactions', href: `/comcraft/dashboard/${guildId}#auto-reactions`, icon: SmilePlus },
-    { name: 'Events', href: `/comcraft/dashboard/${guildId}/events`, icon: Gift },
-    { name: 'Giveaways', href: `/comcraft/dashboard/${guildId}/giveaways`, icon: Sparkles },
-    { name: 'Auto Roles', href: `/comcraft/dashboard/${guildId}/autoroles`, icon: Users },
-    { name: 'Embeds', href: `/comcraft/dashboard/${guildId}/embeds`, icon: Zap },
-    { name: 'Combat Items', href: `/comcraft/dashboard/${guildId}/combat-items`, icon: Swords },
-    { name: 'Game News', href: `/comcraft/dashboard/${guildId}/game-news`, icon: Newspaper },
-    { name: 'Scheduled Messages', href: `/comcraft/dashboard/${guildId}/scheduled-messages`, icon: Clock },
-    { name: 'Vote Kick', href: `/comcraft/dashboard/${guildId}/vote-kick`, icon: Vote },
-    { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video },
-    { name: 'Quests', href: `/comcraft/dashboard/${guildId}/quests`, icon: Target },
-    { name: 'Polls', href: `/comcraft/dashboard/${guildId}/polls`, icon: BarChart3 },
-    { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot },
-    { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings },
+    { name: 'Leveling', href: `/comcraft/dashboard/${guildId}#leveling`, icon: TrendingUp, tier: featureTiers['Leveling'] },
+    { name: 'Moderation', href: `/comcraft/dashboard/${guildId}#moderation`, icon: Shield, tier: featureTiers['Moderation'] },
+    { name: 'Commands', href: `/comcraft/dashboard/${guildId}#commands`, icon: MessageSquare, tier: featureTiers['Commands'] },
+    { name: 'Streaming', href: `/comcraft/dashboard/${guildId}#streaming`, icon: Tv, tier: featureTiers['Streaming'] },
+    { name: 'Birthdays', href: `/comcraft/dashboard/${guildId}#birthdays`, icon: Calendar, tier: featureTiers['Birthdays'] },
+    { name: 'Feedback', href: `/comcraft/dashboard/${guildId}#feedback`, icon: MessageCircle, tier: featureTiers['Feedback'] },
+    { name: 'Tickets', href: `/comcraft/dashboard/${guildId}#tickets`, icon: Ticket, tier: featureTiers['Tickets'] },
+    { name: 'Economy', href: `/comcraft/dashboard/${guildId}#economy`, icon: DollarSign, tier: featureTiers['Economy'] },
+    { name: 'Stock Market', href: `/comcraft/dashboard/${guildId}/economy/stock-market`, icon: TrendingUp, tier: featureTiers['Stock Market'] },
+    { name: 'Casino', href: `/comcraft/dashboard/${guildId}#casino`, icon: Gamepad2, tier: featureTiers['Casino'] },
+    { name: 'Analytics', href: `/comcraft/dashboard/${guildId}#analytics`, icon: BarChart3, tier: featureTiers['Analytics'] },
+    { name: 'Statistics', href: `/comcraft/dashboard/${guildId}/stats`, icon: BarChart3, tier: featureTiers['Statistics'] },
+    { name: 'Reactions', href: `/comcraft/dashboard/${guildId}#auto-reactions`, icon: SmilePlus, tier: featureTiers['Reactions'] },
+    { name: 'Events', href: `/comcraft/dashboard/${guildId}/events`, icon: Gift, tier: featureTiers['Events'] },
+    { name: 'Giveaways', href: `/comcraft/dashboard/${guildId}/giveaways`, icon: Sparkles, tier: featureTiers['Giveaways'] },
+    { name: 'Auto Roles', href: `/comcraft/dashboard/${guildId}/autoroles`, icon: Users, tier: featureTiers['Auto Roles'] },
+    { name: 'Embeds', href: `/comcraft/dashboard/${guildId}/embeds`, icon: Zap, tier: featureTiers['Embeds'] },
+    { name: 'Combat Items', href: `/comcraft/dashboard/${guildId}/combat-items`, icon: Swords, tier: featureTiers['Combat Items'] },
+    { name: 'Game News', href: `/comcraft/dashboard/${guildId}/game-news`, icon: Newspaper, tier: featureTiers['Game News'] },
+    { name: 'Scheduled Messages', href: `/comcraft/dashboard/${guildId}/scheduled-messages`, icon: Clock, tier: featureTiers['Scheduled Messages'] },
+    { name: 'Vote Kick', href: `/comcraft/dashboard/${guildId}/vote-kick`, icon: Vote, tier: featureTiers['Vote Kick'] },
+    { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video, tier: featureTiers['Cam-Only Voice'] },
+    { name: 'Quests', href: `/comcraft/dashboard/${guildId}/quests`, icon: Target, tier: featureTiers['Quests'] },
+    { name: 'Polls', href: `/comcraft/dashboard/${guildId}/polls`, icon: BarChart3, tier: featureTiers['Polls'] },
+    { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
+    { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
   ];
 
   const isActive = (href: string) => {
@@ -201,11 +267,27 @@ export default function GuildDashboardLayout({
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 <span className="flex-1">{item.name}</span>
-                {item.badge && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
-                    {item.badge}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {item.tier && (
+                    <span className={cn(
+                      "px-2 py-0.5 text-xs font-semibold rounded-full border",
+                      item.tier === 'Free' 
+                        ? "bg-gray-500/20 text-gray-300 border-gray-500/30"
+                        : item.tier === 'Basic'
+                        ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                        : item.tier === 'Premium'
+                        ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                        : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
+                    )}>
+                      {item.tier}
+                    </span>
+                  )}
+                  {item.badge && (
+                    <span className="px-2 py-0.5 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
               </Link>
             );
           })}
