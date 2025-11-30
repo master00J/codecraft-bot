@@ -795,17 +795,10 @@ export default function GuildAiPage() {
                     <SelectContent>
                       <SelectItem value="default">Provider Default</SelectItem>
                       {settingsForm.defaultProvider === 'gemini' && (
-                        <>
-                          <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
-                          <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
-                        </>
+                        <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
                       )}
                       {settingsForm.defaultProvider === 'claude' && (
-                        <>
-                          <SelectItem value="claude-3-5-haiku-latest">Claude 3.5 Haiku</SelectItem>
-                          <SelectItem value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</SelectItem>
-                          <SelectItem value="claude-3-opus-20240229">Claude 3 Opus</SelectItem>
-                        </>
+                        <SelectItem value="claude-3-5-haiku-latest">Claude 3.5 Haiku</SelectItem>
                       )}
                       {settingsForm.defaultProvider === 'deepseek' && (
                         <>

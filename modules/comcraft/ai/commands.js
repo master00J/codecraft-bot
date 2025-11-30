@@ -33,11 +33,8 @@ function getAiModelCommands() {
               .addChoices(
                 // Gemini models
                 { name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
-                { name: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
                 // Claude models
                 { name: 'Claude 3.5 Haiku', value: 'claude-3-5-haiku-latest' },
-                { name: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-latest' },
-                { name: 'Claude 3 Opus', value: 'claude-3-opus-20240229' },
                 // DeepSeek models
                 { name: 'DeepSeek Chat (V3.2)', value: 'deepseek-chat' },
                 { name: 'DeepSeek Reasoner (V3.2)', value: 'deepseek-reasoner' }
