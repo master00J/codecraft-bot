@@ -459,6 +459,7 @@ class AutoMod {
       ai_harassment: '🤖 Harassment (AI)',
       ai_violence: '🤖 Violent content (AI)',
       ai_sexual: '🤖 Sexual content (AI)',
+      ai_profanity: '🤖 Profanity/inappropriate language (AI)',
       ai_spam: '🤖 Spam (AI)'
     };
 

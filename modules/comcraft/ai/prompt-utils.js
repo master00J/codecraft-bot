@@ -41,13 +41,15 @@ function buildModerationPrompt(content) {
 
 CRITICAL: You must respond with ONLY valid JSON, no other text.
 
-Rules to detect:
-- toxicity: Toxic, offensive, or hostile language
-- hate: Hate speech, racism, discrimination
+Rules to detect (use these EXACT category names):
+- toxicity: Toxic, offensive, or hostile language (profanity falls under this)
+- hate: Hate speech, racism, discrimination based on race, religion, gender, etc.
 - harassment: Bullying, personal attacks, threatening language
-- violence: Threats of violence, graphic violence descriptions
+- violence: Threats of violence, graphic violence descriptions, kill threats
 - sexual: Sexual content, explicit sexual language, requests for sexual content
 - spam: Spam patterns (but prioritize other violations first)
+
+NOTE: If content contains profanity/swearing, categorize it as "toxicity" not "profanity"
 
 Return JSON in this EXACT format:
 {
