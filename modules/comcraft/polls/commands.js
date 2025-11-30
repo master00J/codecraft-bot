@@ -21,15 +21,15 @@ function createPollCommands() {
           )
           .addStringOption((option) =>
             option
-              .setName('description')
-              .setDescription('Optional description for the poll')
-              .setRequired(false)
-          )
-          .addStringOption((option) =>
-            option
               .setName('options')
               .setDescription('Poll options separated by commas (e.g., "Option 1, Option 2, Option 3")')
               .setRequired(true)
+          )
+          .addStringOption((option) =>
+            option
+              .setName('description')
+              .setDescription('Optional description for the poll')
+              .setRequired(false)
           )
           .addStringOption((option) =>
             option
