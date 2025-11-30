@@ -1297,7 +1297,7 @@ client.on('interactionCreate', async (interaction) => {
     if (customId.startsWith('casino_coinflip_') && 
         !customId.includes('_bet_custom_')) {
       try {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        await interaction.deferReply({ ephemeral: false });
       } catch (error) {
         // Interaction already expired, skip
         return;
@@ -5801,7 +5801,7 @@ async function handleStockEventsCommand(interaction) {
 async function handleCasinoBetModal(interaction) {
   // DEFER IMMEDIATELY - Discord gives only 3 seconds!
   try {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferReply({ ephemeral: false });
   } catch (error) {
     console.error('Failed to defer casino bet modal:', error.message);
     return; // Interaction expired
