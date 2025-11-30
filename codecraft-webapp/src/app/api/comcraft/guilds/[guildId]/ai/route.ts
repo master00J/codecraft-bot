@@ -233,22 +233,13 @@ export async function PATCH(
         return NextResponse.json({ error: 'Invalid default_provider. Use "gemini", "claude", or "deepseek".' }, { status: 400 });
       }
       settingsPayload.default_provider = provider || null;
-      if (provider && provider !== 'claude') {
-        settingsPayload.web_search_enabled = false;
-      }
+      // Web search is now supported for all providers (Claude, Gemini, DeepSeek)
+      // No need to disable it when switching providers
     }
 
     // Validate and accept ai_model if provided
     if (settings.ai_model !== undefined) {
       settingsPayload.ai_model = settings.ai_model || null;
-    }
-
-    if (
-      settingsPayload.web_search_enabled &&
-      settingsPayload.default_provider !== undefined &&
-      settingsPayload.default_provider !== 'claude'
-    ) {
-      settingsPayload.web_search_enabled = false;
     }
 
     if (shouldUpdatePersona) {

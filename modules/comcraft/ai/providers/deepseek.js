@@ -62,6 +62,7 @@ class DeepSeekProvider extends BaseProvider {
       prompt,
       temperature = 0.7,
       maxOutputTokens = 4096,
+      tools = null,
     } = payload;
 
     const messages = buildMessages({
@@ -95,6 +96,11 @@ class DeepSeekProvider extends BaseProvider {
         temperature,
         max_tokens: maxOutputTokens,
       };
+
+      // DeepSeek doesn't natively support web search tools like Claude
+      // But we can add it here if DeepSeek adds support in the future
+      // For now, web search is only available via Claude's web_search_20250305 tool
+      // Note: DeepSeek may support web search in future updates
 
       const result = await this.makeRequest('/chat/completions', requestPayload);
 

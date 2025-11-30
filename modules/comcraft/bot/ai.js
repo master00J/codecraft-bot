@@ -28,18 +28,28 @@ function createAiHandlers({
       const guildName = guild?.name || 'this server';
 
       const providerToUse = typeof settings?.default_provider === 'string' && settings.default_provider ? settings.default_provider : undefined;
-      const allowWebSearch =
-        settings?.web_search_enabled === true &&
-        (providerToUse ? providerToUse === 'claude' : false);
-      const webSearchTools = allowWebSearch
-        ? [
+      const allowWebSearch = settings?.web_search_enabled === true;
+      
+      // Web search tools configuration per provider
+      let webSearchTools = null;
+      if (allowWebSearch) {
+        if (providerToUse === 'claude') {
+          // Claude uses web_search_20250305 tool
+          webSearchTools = [
             {
               type: 'web_search_20250305',
               name: 'web_search',
               max_uses: 3,
             },
-          ]
-        : null;
+          ];
+        } else if (providerToUse === 'gemini') {
+          // Gemini uses grounding (Google Search) - handled in provider
+          webSearchTools = { type: 'grounding', enabled: true };
+        } else if (providerToUse === 'deepseek') {
+          // DeepSeek can use web search if supported (check provider capabilities)
+          webSearchTools = { type: 'web_search', enabled: true };
+        }
+      }
 
       const replaceTokens = (value) => {
         if (!value || typeof value !== 'string') {

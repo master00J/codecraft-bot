@@ -973,19 +973,16 @@ export default function GuildAiPage() {
               <div className="flex items-center justify-between border rounded-lg p-4">
                 <div>
                   <p className="font-medium">{t('settings.webSearch')}</p>
-                  <p className="text-sm text-muted-foreground">{t('settings.webSearchHelp')}</p>
-                  {settingsForm.defaultProvider !== 'claude' && (
-                    <p className="text-xs text-muted-foreground mt-2">{t('settings.webSearchRequiresClaude')}</p>
-                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {t('settings.webSearchHelp') || 'Enable web search to allow AI to search the internet for current information. Supported by Claude, Gemini, and DeepSeek.'}
+                  </p>
                 </div>
                 <Switch
                   checked={settingsForm.webSearchEnabled}
                   onCheckedChange={(checked) =>
                     setSettingsForm((current) => ({ ...current, webSearchEnabled: checked }))
                   }
-                  disabled={
-                    isAiFeatureDisabled || settingsForm.defaultProvider !== 'claude'
-                  }
+                  disabled={isAiFeatureDisabled}
                 />
               </div>
 

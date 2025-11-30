@@ -225,6 +225,7 @@ class GeminiProvider extends BaseProvider {
       prompt,
       temperature = 0.7,
       maxOutputTokens = 1024,
+      tools = null,
     } = payload;
 
     const messages = buildMessages({
@@ -236,9 +237,12 @@ class GeminiProvider extends BaseProvider {
 
     const { systemInstruction, contents } = splitSystemAndMessages(messages);
 
+    // Check if web search is enabled (tools will indicate this)
+    const useGrounding = tools && typeof tools === 'object' && tools.type === 'grounding' && tools.enabled;
+
     try {
-      const response = await this.client.models.generateContent({
-        model: this.getModelName(),
+      const requestConfig = {
+        model: guildModel || this.getModelName(),
         contents,
         generationConfig: {
           temperature,
@@ -252,7 +256,23 @@ class GeminiProvider extends BaseProvider {
               },
             }
           : {}),
-      });
+      };
+
+      // Add Google Search grounding if web search is enabled
+      if (useGrounding) {
+        requestConfig.tools = [
+          {
+            googleSearchRetrieval: {
+              dynamicRetrievalConfig: {
+                mode: 'MODE_DYNAMIC',
+                dynamicThreshold: 0.3,
+              },
+            },
+          },
+        ];
+      }
+
+      const response = await this.client.models.generateContent(requestConfig);
 
       const text = extractTextFromResponse(response);
       const usage = mapUsage(response?.usageMetadata);
@@ -281,6 +301,7 @@ class GeminiProvider extends BaseProvider {
       prompt,
       temperature = 0.7,
       maxOutputTokens = 1024,
+      tools = null,
     } = payload;
 
     const messages = buildMessages({
@@ -295,8 +316,11 @@ class GeminiProvider extends BaseProvider {
     const modelName = guildModel || this.getModelName();
     let collected = '';
 
+    // Check if web search is enabled
+    const useGrounding = tools && typeof tools === 'object' && tools.type === 'grounding' && tools.enabled;
+
     try {
-      const stream = await this.client.models.generateContentStream({
+      const requestConfig = {
         model: modelName,
         contents,
         generationConfig: {
@@ -311,7 +335,23 @@ class GeminiProvider extends BaseProvider {
               },
             }
           : {}),
-      });
+      };
+
+      // Add Google Search grounding if web search is enabled
+      if (useGrounding) {
+        requestConfig.tools = [
+          {
+            googleSearchRetrieval: {
+              dynamicRetrievalConfig: {
+                mode: 'MODE_DYNAMIC',
+                dynamicThreshold: 0.3,
+              },
+            },
+          },
+        ];
+      }
+
+      const stream = await this.client.models.generateContentStream(requestConfig);
 
       if (stream?.stream && typeof stream.stream[Symbol.asyncIterator] === 'function') {
         for await (const item of stream.stream) {
