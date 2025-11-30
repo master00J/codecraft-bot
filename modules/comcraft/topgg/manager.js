@@ -161,16 +161,45 @@ class TopGGManager {
 
       console.log(`📊 [Top.gg] Vote received from user ${user} (weekend: ${isWeekend})`);
 
-      // Get user from database
-      const { data: userData } = await this.supabase
+      // Get or create user in database
+      let { data: userData } = await this.supabase
         .from('users')
         .select('*')
         .eq('discord_id', user)
         .maybeSingle();
 
       if (!userData) {
-        console.log(`⚠️  [Top.gg] User ${user} not found in database`);
-        return { success: false, error: 'User not found' };
+        // User doesn't exist, try to fetch from Discord and create
+        try {
+          const discordUser = await this.client.users.fetch(user).catch(() => null);
+          if (discordUser) {
+            // Create user with Discord info
+            const { data: newUser, error: createError } = await this.supabase
+              .from('users')
+              .insert({
+                discord_id: user,
+                discord_tag: discordUser.tag || `${discordUser.username}#${discordUser.discriminator || '0'}`,
+                avatar_url: discordUser.displayAvatarURL() || null,
+                is_admin: false
+              })
+              .select()
+              .single();
+
+            if (createError) {
+              console.error(`❌ [Top.gg] Error creating user ${user}:`, createError);
+              return { success: false, error: 'Failed to create user' };
+            }
+
+            userData = newUser;
+            console.log(`✅ [Top.gg] Created user ${user} in database`);
+          } else {
+            console.log(`⚠️  [Top.gg] User ${user} not found in Discord and database`);
+            return { success: false, error: 'User not found' };
+          }
+        } catch (error) {
+          console.error(`❌ [Top.gg] Error fetching/creating user ${user}:`, error);
+          return { success: false, error: 'Failed to process user' };
+        }
       }
 
       // Log vote to database
@@ -218,15 +247,44 @@ class TopGGManager {
       const pointsToAward = isWeekend ? config.points_per_weekend_vote : config.points_per_vote;
 
       // Get or create user
-      const { data: userData } = await this.supabase
+      let { data: userData } = await this.supabase
         .from('users')
         .select('id, discord_id')
         .eq('discord_id', discordUserId)
         .maybeSingle();
 
       if (!userData) {
-        console.log(`⚠️  [Top.gg] User ${discordUserId} not found in database`);
-        return;
+        // User doesn't exist, try to fetch from Discord and create
+        try {
+          const discordUser = await this.client.users.fetch(discordUserId).catch(() => null);
+          if (discordUser) {
+            // Create user with Discord info
+            const { data: newUser, error: createError } = await this.supabase
+              .from('users')
+              .insert({
+                discord_id: discordUserId,
+                discord_tag: discordUser.tag || `${discordUser.username}#${discordUser.discriminator || '0'}`,
+                avatar_url: discordUser.displayAvatarURL() || null,
+                is_admin: false
+              })
+              .select('id, discord_id')
+              .single();
+
+            if (createError) {
+              console.error(`❌ [Top.gg] Error creating user ${discordUserId}:`, createError);
+              return;
+            }
+
+            userData = newUser;
+            console.log(`✅ [Top.gg] Created user ${discordUserId} in database for vote rewards`);
+          } else {
+            console.log(`⚠️  [Top.gg] User ${discordUserId} not found in Discord and database`);
+            return;
+          }
+        } catch (error) {
+          console.error(`❌ [Top.gg] Error fetching/creating user ${discordUserId}:`, error);
+          return;
+        }
       }
 
       // Get or create vote points record
