@@ -113,13 +113,14 @@ export async function GET(
         .order('xp', { ascending: false })
         .limit(10),
       
-      // Voice sessions (for voice stats)
+      // Voice sessions (for voice stats - single query with all needed fields)
       supabase
         .from('voice_sessions')
-        .select('*')
+        .select('channel_id, channel_name, duration_seconds, user_id, joined_at')
         .eq('guild_id', guildId)
         .gte('joined_at', startDate.toISOString())
-        .eq('is_active', false),
+        .eq('is_active', false)
+        .not('channel_id', 'is', null),
       
       // Top voice users
       supabase
@@ -128,16 +129,7 @@ export async function GET(
         .eq('guild_id', guildId)
         .gt('total_voice_seconds', 0)
         .order('total_voice_seconds', { ascending: false })
-        .limit(10),
-      
-      // Top voice channels (aggregate from voice_sessions for accurate channel names)
-      supabase
-        .from('voice_sessions')
-        .select('channel_id, channel_name, duration_seconds')
-        .eq('guild_id', guildId)
-        .eq('is_active', false)
-        .not('channel_id', 'is', null)
-        .gte('joined_at', startDate.toISOString())
+        .limit(10)
     ]);
 
     const dailyStats = dailyStatsRes.data || [];
@@ -147,7 +139,6 @@ export async function GET(
     const topUsers = topUsersRes.data || [];
     const voiceSessions = voiceSessionsRes.data || [];
     const topVoiceUsers = topVoiceUsersRes.data || [];
-    const topVoiceChannelsRaw = topVoiceChannelsRes.data || [];
 
     // Calculate retention rates
     const totalJoined = retention.length;
@@ -247,10 +238,12 @@ export async function GET(
       unique_users: number;
     }
     
-    // First, build a map of unique users per channel
+    // Build maps for aggregation
     const channelUserMap = new Map<string, Set<string>>();
     const channelNameMap = new Map<string, string>();
+    const channelSecondsMap = new Map<string, number>();
     
+    // Process all voice sessions
     voiceSessions.forEach((session: any) => {
       if (!session.channel_id) return;
       
@@ -266,34 +259,28 @@ export async function GET(
       if (session.channel_name && (!channelNameMap.has(session.channel_id) || channelNameMap.get(session.channel_id) === 'Unknown Channel')) {
         channelNameMap.set(session.channel_id, session.channel_name);
       }
-    });
-    
-    // Aggregate by channel
-    const topVoiceChannelsMap = new Map<string, VoiceChannelTotal>();
-    
-    topVoiceChannelsRaw.forEach((session: any) => {
-      if (!session.channel_id || !session.duration_seconds) return;
       
-      const existing = topVoiceChannelsMap.get(session.channel_id);
-      if (existing) {
-        existing.total_seconds += session.duration_seconds || 0;
-        existing.total_hours = (existing.total_seconds / 3600).toFixed(2);
-      } else {
-        topVoiceChannelsMap.set(session.channel_id, {
-          channel_id: session.channel_id,
-          channel_name: channelNameMap.get(session.channel_id) || session.channel_name || 'Unknown Channel',
-          total_seconds: session.duration_seconds || 0,
-          total_hours: ((session.duration_seconds || 0) / 3600).toFixed(2),
-          unique_users: 0
-        });
+      // Aggregate total seconds per channel
+      const duration = session.duration_seconds || 0;
+      if (duration > 0) {
+        channelSecondsMap.set(
+          session.channel_id,
+          (channelSecondsMap.get(session.channel_id) || 0) + duration
+        );
       }
     });
     
-    // Add unique users count and convert to array
-    const topVoiceChannels = Array.from(topVoiceChannelsMap.values()).map(ch => ({
-      ...ch,
-      unique_users: channelUserMap.get(ch.channel_id)?.size || 0
-    })).sort((a, b) => b.total_seconds - a.total_seconds).slice(0, 10);
+    // Build final channel list with all aggregated data
+    const topVoiceChannels = Array.from(channelSecondsMap.entries())
+      .map(([channelId, totalSeconds]) => ({
+        channel_id: channelId,
+        channel_name: channelNameMap.get(channelId) || 'Unknown Channel',
+        total_seconds: totalSeconds,
+        total_hours: (totalSeconds / 3600).toFixed(2),
+        unique_users: channelUserMap.get(channelId)?.size || 0
+      }))
+      .sort((a, b) => b.total_seconds - a.total_seconds)
+      .slice(0, 10);
 
     // Get user stats with voice data for top voice users
     const topVoiceUsersWithStats = await Promise.all(
