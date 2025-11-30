@@ -213,6 +213,61 @@ class ConfigManager {
   }
 
   /**
+   * Get channel-specific moderation rules
+   */
+  async getChannelModerationRules(guildId, channelId) {
+    const cacheKey = `channel_mod_rules:${guildId}:${channelId}`;
+    
+    if (this.cache.has(cacheKey)) {
+      const { rules, timestamp } = this.cache.get(cacheKey);
+      if (Date.now() - timestamp < this.cacheTTL) {
+        return rules;
+      }
+    }
+
+    const { data, error } = await this.supabase
+      .from('channel_moderation_rules')
+      .select('*')
+      .eq('guild_id', guildId)
+      .eq('channel_id', channelId)
+      .eq('enabled', true)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching channel moderation rules:', error);
+    }
+
+    const rules = data || null;
+
+    if (rules) {
+      this.cache.set(cacheKey, {
+        rules,
+        timestamp: Date.now()
+      });
+    }
+
+    return rules;
+  }
+
+  /**
+   * Clear channel moderation rules cache
+   */
+  clearChannelModRulesCache(guildId, channelId = null) {
+    if (channelId) {
+      this.cache.delete(`channel_mod_rules:${guildId}:${channelId}`);
+    } else {
+      // Clear all channel rules for this guild
+      const keysToDelete = [];
+      for (const key of this.cache.keys()) {
+        if (key.startsWith(`channel_mod_rules:${guildId}:`)) {
+          keysToDelete.push(key);
+        }
+      }
+      keysToDelete.forEach(key => this.cache.delete(key));
+    }
+  }
+
+  /**
    * Get welcome configuration
    */
   async getWelcomeConfig(guildId) {
