@@ -257,7 +257,8 @@ class StatsCardGenerator {
     if (stats.level === undefined) return y;
 
     const hasVoiceLevel = stats.voiceLevel !== undefined && stats.voiceLevel !== null;
-    const sectionHeight = hasVoiceLevel ? 140 : 80; // Increase height if voice level is shown
+    // Increase height to accommodate XP text and percentage - need space for bar + text below
+    const sectionHeight = hasVoiceLevel ? 160 : 95; // Increased from 140/80 to fit XP text inside
 
     // Background Container
     this.drawContainer(ctx, x, y, width, sectionHeight, { bg: 'rgba(0,0,0,0.2)', radius: 12 });
@@ -304,15 +305,19 @@ class StatsCardGenerator {
       ctx.shadowBlur = 0;
     }
 
-    // XP Text
+    // XP Text - inside container
     ctx.fillStyle = this.colors.textMuted;
     ctx.font = '10px "Segoe UI", Arial';
     ctx.textAlign = 'left';
     ctx.fillText(`${xpCurrent.toLocaleString()} / ${xpNext.toLocaleString()} XP`, barX, barY + barH + 14);
+    
+    // Add percentage for text level - inside container
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.floor(progress)}%`, x + width - 16, barY + barH + 14);
 
     // Voice Level Section (if available)
     if (hasVoiceLevel) {
-      const voiceY = y + 80;
+      const voiceY = y + 85; // Increased spacing from 80 to 85
       
       // "Voice Level" label
       ctx.fillStyle = this.colors.textSecondary;
@@ -355,7 +360,7 @@ class StatsCardGenerator {
         ctx.shadowBlur = 0;
       }
 
-      // Voice XP Text
+      // Voice XP Text - inside container
       ctx.fillStyle = this.colors.textMuted;
       ctx.font = '10px "Segoe UI", Arial';
       ctx.textAlign = 'left';
@@ -364,12 +369,6 @@ class StatsCardGenerator {
       ctx.textAlign = 'right';
       ctx.fillText(`${Math.floor(voiceProgress)}%`, x + width - 16, voiceBarY + voiceBarH + 14);
     }
-    
-    // Add percentage for text level too
-    ctx.fillStyle = this.colors.textMuted;
-    ctx.font = '10px "Segoe UI", Arial';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${Math.floor(progress)}%`, x + width - 16, barY + barH + 14);
 
     return y + sectionHeight + 15; // Add gap at the end
   }
