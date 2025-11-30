@@ -81,6 +81,42 @@ class XPManager {
   }
 
   /**
+   * Get voice XP multiplier for user's roles
+   * Returns the highest multiplier if user has multiple roles with multipliers
+   */
+  async getVoiceRankMultiplier(guildId, roleIds) {
+    try {
+      if (!roleIds || roleIds.length === 0) {
+        return null;
+      }
+
+      const { data, error } = await this.supabase
+        .from('rank_voice_xp_multipliers')
+        .select('role_id, role_name, multiplier')
+        .eq('guild_id', guildId)
+        .eq('enabled', true)
+        .in('role_id', roleIds)
+        .order('multiplier', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        // No multiplier found or error - this is fine, return null
+        if (error.code === 'PGRST116') {
+          return null; // No rows found
+        }
+        console.error('Error fetching voice rank multiplier:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in getVoiceRankMultiplier:', error);
+      return null;
+    }
+  }
+
+  /**
    * Calculate level from XP
    */
   calculateLevel(xp) {
@@ -282,6 +318,187 @@ class XPManager {
   }
 
   /**
+   * Add voice XP to user (called periodically for users in voice)
+   * @param {Object} guild - Discord Guild object (or guildId string for backwards compatibility)
+   * @param {Object} user - Discord User object (or userId string for backwards compatibility)
+   * @param {number} minutesActive - Number of minutes active in voice
+   */
+  async addVoiceXP(guild, user, minutesActive = 1) {
+    // Handle backwards compatibility with old signature (guildId, userId, minutesActive)
+    let guildId, userId;
+    if (typeof guild === 'string') {
+      guildId = guild;
+      userId = user;
+      user = null;
+      guild = null;
+    } else {
+      guildId = guild.id;
+      userId = user.id;
+    }
+    try {
+      // Check if guild is active and leveling is enabled
+      const guildConfig = await configManager.getGuildConfig(guildId);
+      if (!guildConfig) {
+        return null;
+      }
+
+      const subscriptionActive = typeof configManager.isSubscriptionActive === 'function'
+        ? await configManager.isSubscriptionActive(guildId)
+        : true;
+      if (!subscriptionActive) {
+        return null;
+      }
+      
+      if (!guildConfig.leveling_enabled) {
+        return null;
+      }
+
+      // Get leveling config
+      const levelingConfig = await configManager.getLevelingConfig(guildId);
+      if (!levelingConfig) {
+        return null;
+      }
+      
+      // Check if voice XP is enabled
+      if (!levelingConfig.voice_xp_enabled) {
+        return null;
+      }
+
+      const voiceXPPerMinute = levelingConfig.voice_xp_per_minute || 2;
+      const xpGain = voiceXPPerMinute * minutesActive;
+
+      console.log(`🔊 [Voice XP] User ${userId} gained ${xpGain} XP for ${minutesActive} minute(s) in voice`);
+
+      // Get voice rank-based multiplier (if user has roles with multipliers)
+      let voiceRankMultiplier = 1.0;
+      try {
+        if (guild && user) {
+          // Try to get member from guild cache
+          let member = guild.members.cache.get(userId);
+          if (!member && user.id) {
+            member = guild.members.cache.get(user.id);
+          }
+          
+          if (member && member.roles && member.roles.cache) {
+            const roleIds = Array.from(member.roles.cache.keys());
+            const voiceRankMultiplierData = await this.getVoiceRankMultiplier(guildId, roleIds);
+            if (voiceRankMultiplierData) {
+              voiceRankMultiplier = parseFloat(voiceRankMultiplierData.multiplier) || 1.0;
+              console.log(`   🎭 Voice Rank Multiplier: ${voiceRankMultiplier}x (Role: ${voiceRankMultiplierData.role_name || voiceRankMultiplierData.role_id})`);
+            }
+          }
+        }
+      } catch (error) {
+        // If we can't get member roles, just continue with multiplier 1.0
+        console.log(`   ⚠️  Could not fetch member roles for voice rank multiplier: ${error.message}`);
+      }
+
+      // Calculate XP with subscription tier boost and voice rank multiplier
+      const subscriptionLimits = await configManager.getSubscriptionLimits(guildId);
+      const subscriptionBoost = subscriptionLimits?.xp_boost || 1.0;
+      const totalBoost = subscriptionBoost * voiceRankMultiplier;
+      const boostedXP = Math.floor(xpGain * totalBoost);
+
+      // Get or create user level record
+      let { data: userLevel } = await this.supabase
+        .from('user_levels')
+        .select('*')
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .single();
+
+      if (!userLevel) {
+        // Create new record
+        const { data: newUser, error: insertError } = await this.supabase
+          .from('user_levels')
+          .insert({
+            guild_id: guildId,
+            user_id: userId,
+            voice_xp: boostedXP,
+            voice_level: 0,
+            xp: 0,
+            level: 0,
+            total_messages: 0,
+            last_xp_gain: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error(`   ❌ Failed to create voice XP record:`, insertError);
+          return null;
+        }
+
+        return {
+          xpGained: boostedXP,
+          leveledUp: false,
+          newVoiceLevel: 0,
+          totalVoiceXP: boostedXP
+        };
+      }
+
+      // Calculate old and new voice levels
+      const oldVoiceLevel = userLevel.voice_level || 0;
+      const newVoiceXP = (userLevel.voice_xp || 0) + boostedXP;
+      const newVoiceLevel = this.calculateLevel(newVoiceXP);
+      const leveledUp = newVoiceLevel > oldVoiceLevel;
+
+      // Update user
+      const { error: updateError } = await this.supabase
+        .from('user_levels')
+        .update({
+          voice_xp: newVoiceXP,
+          voice_level: newVoiceLevel,
+          last_xp_gain: new Date().toISOString()
+        })
+        .eq('guild_id', guildId)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        console.error(`   ❌ Failed to update voice XP:`, updateError);
+        return null;
+      }
+
+      if (leveledUp) {
+        console.log(`   🎉 VOICE LEVEL UP! ${oldVoiceLevel} → ${newVoiceLevel}`);
+      }
+
+      // Track quest progress (voice_minutes quest type if exists)
+      if (global.questManager) {
+        try {
+          if (await global.questManager.isTracking(guildId, 'voice_minutes')) {
+            await global.questManager.updateProgress(guildId, userId, 'voice_minutes', {
+              minutes: minutesActive
+            });
+          }
+
+          // Track quest progress (voice_level_reach) if user leveled up
+          if (leveledUp && await global.questManager.isTracking(guildId, 'voice_level_reach')) {
+            await global.questManager.updateProgress(guildId, userId, 'voice_level_reach', {
+              level: newVoiceLevel
+            });
+          }
+        } catch (error) {
+          console.error('[Voice XP] Error updating quest progress:', error.message);
+        }
+      }
+
+      return {
+        xpGained: boostedXP,
+        leveledUp,
+        oldVoiceLevel,
+        newVoiceLevel,
+        totalVoiceXP: newVoiceXP,
+        voiceXPForNext: this.xpForNextLevel(newVoiceLevel)
+      };
+
+    } catch (error) {
+      console.error('Error adding voice XP:', error);
+      return null;
+    }
+  }
+
+  /**
    * Remove XP from a user (for conversions, penalties, etc.)
    */
   async removeXP(guildId, userId, xpAmount) {
@@ -378,9 +595,12 @@ class XPManager {
     return {
       xp: data.xp || 0,
       level: data.level || 0,
+      voiceXP: data.voice_xp || 0,
+      voiceLevel: data.voice_level || 0,
       rank,
       totalMessages: data.total_messages || 0,
-      xpForNext: this.xpForNextLevel(data.level || 0)
+      xpForNext: this.xpForNextLevel(data.level || 0),
+      voiceXPForNext: this.xpForNextLevel(data.voice_level || 0)
     };
   }
 

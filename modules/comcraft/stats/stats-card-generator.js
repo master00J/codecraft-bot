@@ -256,14 +256,18 @@ class StatsCardGenerator {
   drawLevelSection(ctx, x, y, width, stats) {
     if (stats.level === undefined) return y;
 
-    // Background Container
-    this.drawContainer(ctx, x, y, width, 80, { bg: 'rgba(0,0,0,0.2)', radius: 12 });
+    const hasVoiceLevel = stats.voiceLevel !== undefined && stats.voiceLevel !== null;
+    const sectionHeight = hasVoiceLevel ? 140 : 80; // Increase height if voice level is shown
 
+    // Background Container
+    this.drawContainer(ctx, x, y, width, sectionHeight, { bg: 'rgba(0,0,0,0.2)', radius: 12 });
+
+    // Text Level Section
     // "Level" label
     ctx.fillStyle = this.colors.textSecondary;
     ctx.font = 'bold 10px "Segoe UI", Arial';
     ctx.textAlign = 'left';
-    ctx.fillText('CURRENT LEVEL', x + 16, y + 22);
+    ctx.fillText('TEXT LEVEL', x + 16, y + 22);
 
     // Big Level Number
     ctx.fillStyle = this.colors.accentOrange;
@@ -304,12 +308,70 @@ class StatsCardGenerator {
     ctx.fillStyle = this.colors.textMuted;
     ctx.font = '10px "Segoe UI", Arial';
     ctx.textAlign = 'left';
-    ctx.fillText(`${Math.floor(xpCurrent)} / ${xpNext} XP`, x + 16, y + 70);
-    
-    ctx.textAlign = 'right';
-    ctx.fillText(`${Math.floor(progress)}%`, x + width - 16, y + 70);
+    ctx.fillText(`${xpCurrent.toLocaleString()} / ${xpNext.toLocaleString()} XP`, barX, barY + barH + 14);
 
-    return y + 95; // Gap
+    // Voice Level Section (if available)
+    if (hasVoiceLevel) {
+      const voiceY = y + 80;
+      
+      // "Voice Level" label
+      ctx.fillStyle = this.colors.textSecondary;
+      ctx.font = 'bold 10px "Segoe UI", Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('VOICE LEVEL', x + 16, voiceY + 22);
+
+      // Big Voice Level Number
+      ctx.fillStyle = this.colors.accentPurple;
+      ctx.font = 'bold 32px "Segoe UI", Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(stats.voiceLevel.toString(), x + width - 16, voiceY + 36);
+
+      // Voice XP Calculations
+      const voiceXPStart = Math.pow(stats.voiceLevel, 2) * 100;
+      const voiceXPCurrent = Math.max(0, stats.voiceXP - voiceXPStart);
+      const voiceXPNext = stats.voiceXPForNext - voiceXPStart;
+      const voiceProgress = Math.min(100, Math.max(0, (voiceXPCurrent / voiceXPNext) * 100));
+
+      // Voice Progress Bar Background
+      const voiceBarX = x + 16;
+      const voiceBarY = voiceY + 50;
+      const voiceBarW = width - 32;
+      const voiceBarH = 6;
+      
+      this.roundedRect(ctx, voiceBarX, voiceBarY, voiceBarW, voiceBarH, 3);
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fill();
+
+      // Voice Progress Fill
+      if (voiceProgress > 0) {
+        this.roundedRect(ctx, voiceBarX, voiceBarY, (voiceProgress/100) * voiceBarW, voiceBarH, 3);
+        ctx.fillStyle = this.colors.accentPurple;
+        ctx.fill();
+        
+        // Glow
+        ctx.shadowColor = this.colors.accentPurple;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // Voice XP Text
+      ctx.fillStyle = this.colors.textMuted;
+      ctx.font = '10px "Segoe UI", Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${voiceXPCurrent.toLocaleString()} / ${voiceXPNext.toLocaleString()} XP`, voiceBarX, voiceBarY + voiceBarH + 14);
+      
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.floor(voiceProgress)}%`, x + width - 16, voiceBarY + voiceBarH + 14);
+    }
+    
+    // Add percentage for text level too
+    ctx.fillStyle = this.colors.textMuted;
+    ctx.font = '10px "Segoe UI", Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.floor(progress)}%`, x + width - 16, barY + barH + 14);
+
+    return y + sectionHeight + 15; // Add gap at the end
   }
 
   drawRanksRow(ctx, x, y, width, stats, config = {}) {

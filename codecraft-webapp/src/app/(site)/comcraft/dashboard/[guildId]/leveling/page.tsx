@@ -25,6 +25,7 @@ export default function LevelingConfig() {
   const [rewards, setRewards] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [rankMultipliers, setRankMultipliers] = useState<any[]>([]);
+  const [voiceMultipliers, setVoiceMultipliers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,6 +45,14 @@ export default function LevelingConfig() {
     enabled: true
   });
 
+  // New voice multiplier form
+  const [newVoiceMultiplier, setNewVoiceMultiplier] = useState({
+    role_id: '',
+    role_name: '',
+    multiplier: 1.5,
+    enabled: true
+  });
+
   useEffect(() => {
     if (guildId) {
       fetchData();
@@ -52,9 +61,10 @@ export default function LevelingConfig() {
 
   const fetchData = async () => {
     try {
-      const [levelingRes, multipliersRes, rolesRes] = await Promise.all([
+      const [levelingRes, multipliersRes, voiceMultipliersRes, rolesRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/leveling`),
         fetch(`/api/comcraft/guilds/${guildId}/leveling/rank-multipliers`),
+        fetch(`/api/comcraft/guilds/${guildId}/leveling/voice-multipliers`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/roles`)
       ]);
 
@@ -68,6 +78,11 @@ export default function LevelingConfig() {
       if (multipliersRes.ok) {
         const multipliersData = await multipliersRes.json();
         setRankMultipliers(multipliersData.multipliers || []);
+      }
+
+      if (voiceMultipliersRes.ok) {
+        const voiceMultipliersData = await voiceMultipliersRes.json();
+        setVoiceMultipliers(voiceMultipliersData.multipliers || []);
       }
 
       if (rolesRes.ok) {
@@ -236,6 +251,69 @@ export default function LevelingConfig() {
     }
   };
 
+  const addVoiceMultiplier = async () => {
+    try {
+      if (!newVoiceMultiplier.role_id || !newVoiceMultiplier.multiplier) {
+        toast({
+          title: 'Missing fields',
+          description: 'Please fill in Role ID and Multiplier.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/leveling/voice-multipliers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVoiceMultiplier)
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Voice multiplier created',
+          description: `Voice XP multiplier has been added (${newVoiceMultiplier.multiplier}x).`,
+        });
+        fetchData();
+        setNewVoiceMultiplier({ role_id: '', role_name: '', multiplier: 1.5, enabled: true });
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: 'Create failed',
+          description: errorData.error || 'We could not add this multiplier. Please try again.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Create failed',
+        description: 'We could not add this multiplier. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const deleteVoiceMultiplier = async (roleId: string) => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/leveling/voice-multipliers?role_id=${roleId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Voice multiplier deleted',
+          description: 'The voice XP multiplier has been removed.',
+        });
+        fetchData();
+      }
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: 'We could not remove this multiplier. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -380,6 +458,46 @@ export default function LevelingConfig() {
                     Send a message whenever a member levels up.
                   </p>
                 </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-6">Voice XP Settings</h2>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>
+                    <input 
+                      type="checkbox"
+                      checked={config?.voice_xp_enabled || false}
+                      onChange={(e) => setConfig({...config, voice_xp_enabled: e.target.checked})}
+                      className="mr-2"
+                    />
+                    Enable voice XP
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Award XP to members who are actively in voice channels.
+                  </p>
+                </div>
+
+                {config?.voice_xp_enabled && (
+                  <div className="space-y-2">
+                    <Label>XP per minute in voice</Label>
+                    <Input 
+                      type="number"
+                      value={config?.voice_xp_per_minute ?? 2}
+                      onChange={(e) => setConfig({...config, voice_xp_per_minute: parseInt(e.target.value)})}
+                      min={1}
+                      max={50}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Amount of XP awarded per minute. Default: 2 XP/minute.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Note: Users must be unmuted and undeafened to receive XP.
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -636,6 +754,147 @@ export default function LevelingConfig() {
                           variant="destructive" 
                           size="sm"
                           onClick={() => deleteMultiplier(multiplier.role_id)}
+                        >
+                          🗑️ Delete
+                        </Button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Voice XP Multipliers Tab */}
+          <TabsContent value="voice-multipliers" className="space-y-6">
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-2">🔊 Voice XP Multipliers</h2>
+              <p className="text-muted-foreground mb-6">
+                Set custom voice XP multipliers for specific Discord roles. Users with these roles will earn more (or less) voice XP per minute.
+                <br />
+                <span className="text-sm">If a user has multiple roles with multipliers, the highest multiplier will be used.</span>
+              </p>
+
+              {/* Add New Voice Multiplier */}
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-6">
+                <h3 className="font-semibold mb-4">Add New Voice XP Multiplier</h3>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Select Role</Label>
+                    <Select 
+                      value={newVoiceMultiplier.role_id} 
+                      onValueChange={(value) => {
+                        const selectedRole = roles.find(r => r.id === value);
+                        setNewVoiceMultiplier({
+                          ...newVoiceMultiplier, 
+                          role_id: value,
+                          role_name: selectedRole?.name || ''
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a role..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.length === 0 ? (
+                          <SelectItem value="" disabled>No roles available</SelectItem>
+                        ) : (
+                          roles
+                            .filter(role => !voiceMultipliers.find(m => m.role_id === role.id))
+                            .map((role) => (
+                              <SelectItem key={role.id} value={role.id}>
+                                <div className="flex items-center gap-2">
+                                  {role.color && role.color !== 0 && (
+                                    <div 
+                                      className="w-3 h-3 rounded-full" 
+                                      style={{ backgroundColor: `#${role.color.toString(16).padStart(6, '0')}` }}
+                                    />
+                                  )}
+                                  {role.name}
+                                </div>
+                              </SelectItem>
+                            ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {roles.length === 0 ? 'Loading roles...' : 'Choose a role to set voice XP multiplier'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Multiplier</Label>
+                    <Input 
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="10"
+                      value={newVoiceMultiplier.multiplier}
+                      onChange={(e) => setNewVoiceMultiplier({...newVoiceMultiplier, multiplier: parseFloat(e.target.value) || 1.0})}
+                      placeholder="1.5"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      1.5 = 150% Voice XP, 2.0 = 200% Voice XP
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Enabled</Label>
+                    <div className="flex items-center h-10">
+                      <input 
+                        type="checkbox"
+                        checked={newVoiceMultiplier.enabled}
+                        onChange={(e) => setNewVoiceMultiplier({...newVoiceMultiplier, enabled: e.target.checked})}
+                        className="w-4 h-4"
+                      />
+                      <span className="ml-2 text-sm text-muted-foreground">Enable multiplier</span>
+                    </div>
+                  </div>
+                </div>
+                <Button onClick={addVoiceMultiplier} className="mt-4">
+                  ➕ Add Voice Multiplier
+                </Button>
+              </div>
+
+              {/* Voice Multipliers List */}
+              <div className="space-y-3">
+                {voiceMultipliers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No voice XP multipliers configured yet.
+                    <br />
+                    <span className="text-sm">Add one above to give specific roles bonus voice XP!</span>
+                  </div>
+                ) : (
+                  voiceMultipliers.map((multiplier) => {
+                    const role = roles.find(r => r.id === multiplier.role_id);
+                    return (
+                      <div key={multiplier.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center gap-4">
+                          {role && role.color && role.color !== 0 && (
+                            <div 
+                              className="w-4 h-4 rounded-full" 
+                              style={{ backgroundColor: `#${role.color.toString(16).padStart(6, '0')}` }}
+                            />
+                          )}
+                          <div>
+                            <div className="font-semibold">
+                              {multiplier.role_name || role?.name || `Role ${multiplier.role_id}`}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {role ? `${role.name} (${multiplier.role_id})` : `Role ID: ${multiplier.role_id}`}
+                            </div>
+                          </div>
+                          <Badge className={multiplier.multiplier >= 1.0 ? "bg-green-600" : "bg-orange-600"}>
+                            {multiplier.multiplier}x Voice XP
+                          </Badge>
+                          <Badge variant={multiplier.enabled ? "default" : "secondary"}>
+                            {multiplier.enabled ? "Enabled" : "Disabled"}
+                          </Badge>
+                        </div>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => deleteVoiceMultiplier(multiplier.role_id)}
                         >
                           🗑️ Delete
                         </Button>

@@ -846,6 +846,103 @@ client.once('ready', async () => {
     console.error('❌ Failed to initialize Vote Rewards Scheduler:', error.message);
   }
 
+  // Initialize Voice XP Scheduler
+  // Awards XP every minute to users who are actively in voice channels
+  try {
+    if (xpManager && userStatsManager) {
+      setInterval(async () => {
+        try {
+          // Get all active voice sessions
+          const { data: activeSessions } = await userStatsManager.supabase
+            .from('voice_sessions')
+            .select('guild_id, user_id, joined_at')
+            .eq('is_active', true);
+
+          if (!activeSessions || activeSessions.length === 0) {
+            return;
+          }
+
+          // Group by guild to check configs efficiently
+          const guildSessions = {};
+          for (const session of activeSessions) {
+            if (!guildSessions[session.guild_id]) {
+              guildSessions[session.guild_id] = [];
+            }
+            guildSessions[session.guild_id].push(session);
+          }
+
+          // Process each guild
+          for (const [guildId, sessions] of Object.entries(guildSessions)) {
+            try {
+              // Check if voice XP is enabled for this guild
+              const levelingConfig = await configManager.getLevelingConfig(guildId);
+              if (!levelingConfig || !levelingConfig.voice_xp_enabled) {
+                continue;
+              }
+
+              // Check guild config
+              const guildConfig = await configManager.getGuildConfig(guildId);
+              if (!guildConfig || !guildConfig.leveling_enabled) {
+                continue;
+              }
+
+              // Check subscription
+              const subscriptionActive = typeof configManager.isSubscriptionActive === 'function'
+                ? await configManager.isSubscriptionActive(guildId)
+                : true;
+              if (!subscriptionActive) {
+                continue;
+              }
+
+              // Get guild from client to check if user is actually in voice
+              const guild = client.guilds.cache.get(guildId);
+              if (!guild) {
+                continue;
+              }
+
+              // Process each session
+              for (const session of sessions) {
+                try {
+                  const member = guild.members.cache.get(session.user_id);
+                  if (!member) {
+                    continue;
+                  }
+
+                  // Check if user is actually in a voice channel and not muted/deafened
+                  const voiceState = member.voice;
+                  if (!voiceState || !voiceState.channel || voiceState.mute || voiceState.deaf || voiceState.selfMute || voiceState.selfDeaf) {
+                    continue;
+                  }
+
+                  // Calculate minutes active (rounded down)
+                  const joinedAt = new Date(session.joined_at);
+                  const now = new Date();
+                  const minutesActive = Math.floor((now - joinedAt) / (1000 * 60));
+
+                  // Only award XP if user has been in voice for at least 1 minute
+                  if (minutesActive >= 1) {
+                    // Award XP for this minute (pass guild and member for role multiplier support)
+                    await xpManager.addVoiceXP(guild, member.user, 1);
+                  }
+                } catch (sessionError) {
+                  console.error(`❌ [Voice XP] Error processing session for user ${session.user_id}:`, sessionError.message);
+                }
+              }
+            } catch (guildError) {
+              console.error(`❌ [Voice XP] Error processing guild ${guildId}:`, guildError.message);
+            }
+          }
+        } catch (error) {
+          console.error('❌ [Voice XP] Error in scheduler:', error.message);
+        }
+      }, 60 * 1000); // Every minute
+
+      console.log('✅ [Voice XP] Scheduler started (checks every minute)');
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize Voice XP Scheduler:', error.message);
+  }
+
   // Initialize User Stats Manager
   try {
     global.userStatsManager = userStatsManager;
@@ -1271,6 +1368,28 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             channel.id,
             channel.name
           );
+        }
+      }
+    }
+
+    // Voice XP tracking - award XP for users in voice
+    if (global.xpManager && global.userStatsManager) {
+      const guildId = newState.guild?.id || oldState.guild?.id;
+      const userId = newState.id || oldState.id;
+
+      if (!guildId || !userId) return;
+
+      // User is in a voice channel (joined or already there)
+      if (newState.channelId) {
+        const channel = newState.channel;
+        if (channel && channel.type === 2) { // Voice channel
+          // Don't give XP if user is muted/deafened (they're not actively participating)
+          if (newState.mute || newState.deaf) {
+            return;
+          }
+
+          // Track voice session start time for XP calculation
+          // The periodic checker will handle awarding XP
         }
       }
     }
@@ -2418,7 +2537,10 @@ async function handleStatsCommand(interaction) {
           level: levelData?.level || 0,
           xp: levelData?.xp || 0,
           xpForNext: levelData?.xpForNext || 100,
-          levelRank: levelData?.rank || null
+          levelRank: levelData?.rank || null,
+          voiceLevel: levelData?.voiceLevel || 0,
+          voiceXP: levelData?.voiceXP || 0,
+          voiceXPForNext: levelData?.voiceXPForNext || 100
         },
         config: statsConfig
       });

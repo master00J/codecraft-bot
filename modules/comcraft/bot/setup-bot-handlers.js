@@ -1587,7 +1587,10 @@ async function handleRankCommand(interaction, xpManager) {
         rank: rankData.rank,
         xp: rankData.xp,
         xpForNext: rankData.xpForNext,
-        totalMessages: rankData.totalMessages
+        totalMessages: rankData.totalMessages,
+        voiceLevel: rankData.voiceLevel || 0,
+        voiceXP: rankData.voiceXP || 0,
+        voiceXPForNext: rankData.voiceXPForNext || 0
       },
       config: levelingConfig || {}
     });
@@ -1603,7 +1606,7 @@ async function handleRankCommand(interaction, xpManager) {
       .setColor(borderColor)
       .setTitle(`📊 Rank Card - ${user.username}`)
       .setImage('attachment://rank-card.png')
-      .setFooter({ text: `Rank #${rankData.rank} • Level ${rankData.level} • ${rankData.totalMessages.toLocaleString()} Messages` })
+      .setFooter({ text: `Rank #${rankData.rank} • Level ${rankData.level}${rankData.voiceLevel ? ` • Voice Level ${rankData.voiceLevel}` : ''} • ${rankData.totalMessages.toLocaleString()} Messages` })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed], files: [attachment] });
@@ -1624,19 +1627,36 @@ async function handleRankCommand(interaction, xpManager) {
       `⭐ **Level:** ${rankData.level}\n` +
       `💬 **Messages:** ${rankData.totalMessages.toLocaleString()}`;
     
+    const fields = [
+      { 
+        name: '📊 Text XP Progress', 
+        value: `\`${xpBar}\` **${xpProgress}%**\n\`${currentLevelXP.toLocaleString()} / ${rankData.xpForNext.toLocaleString()} XP\`\n**Total XP:** ${rankData.xp.toLocaleString()}`, 
+        inline: false 
+      }
+    ];
+
+    // Add voice XP if available
+    if (rankData.voiceXP !== undefined && rankData.voiceXPForNext !== undefined) {
+      const voiceLevelXP = rankData.voiceXP % rankData.voiceXPForNext;
+      const voiceXPProgress = rankData.voiceXPForNext > 0 
+        ? Math.floor((voiceLevelXP / rankData.voiceXPForNext) * 100)
+        : 0;
+      const voiceXPBar = xpManager.generateXPBar(voiceXPProgress, levelingConfig || {});
+      
+      fields.push({
+        name: '🔊 Voice XP Progress',
+        value: `**Voice Level:** ${rankData.voiceLevel || 0}\n\`${voiceXPBar}\` **${voiceXPProgress}%**\n\`${voiceLevelXP.toLocaleString()} / ${rankData.voiceXPForNext.toLocaleString()} XP\`\n**Total Voice XP:** ${(rankData.voiceXP || 0).toLocaleString()}`,
+        inline: false
+      });
+    }
+    
     const embed = new EmbedBuilder()
       .setColor(borderColor)
       .setTitle(`📊 Rank Card`)
       .setDescription(description)
       .setThumbnail(user.displayAvatarURL({ size: 256, dynamic: true }))
-      .addFields(
-        { 
-          name: '📊 XP Progress', 
-          value: `\`${xpBar}\` **${xpProgress}%**\n\`${currentLevelXP.toLocaleString()} / ${rankData.xpForNext.toLocaleString()} XP\`\n**Total XP:** ${rankData.xp.toLocaleString()}`, 
-          inline: false 
-        }
-      )
-      .setFooter({ text: `Rank #${rankData.rank} • Level ${rankData.level}` })
+      .addFields(fields)
+      .setFooter({ text: `Rank #${rankData.rank} • Level ${rankData.level}${rankData.voiceLevel ? ` • Voice Level ${rankData.voiceLevel}` : ''}` })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
