@@ -130,13 +130,14 @@ export async function GET(
         .order('total_voice_seconds', { ascending: false })
         .limit(10),
       
-      // Top voice channels (from user_channel_stats)
+      // Top voice channels (aggregate from voice_sessions for accurate channel names)
       supabase
-        .from('user_channel_stats')
-        .select('channel_id, channel_name, voice_seconds')
+        .from('voice_sessions')
+        .select('channel_id, channel_name, duration_seconds')
         .eq('guild_id', guildId)
-        .eq('channel_type', 'voice')
-        .gt('voice_seconds', 0)
+        .eq('is_active', false)
+        .not('channel_id', 'is', null)
+        .gte('joined_at', startDate.toISOString())
     ]);
 
     const dailyStats = dailyStatsRes.data || [];
@@ -237,7 +238,7 @@ export async function GET(
       };
     });
 
-    // Aggregate top voice channels
+    // Aggregate top voice channels from voice_sessions (more accurate channel names)
     interface VoiceChannelTotal {
       channel_id: string;
       channel_name: string;
@@ -246,22 +247,53 @@ export async function GET(
       unique_users: number;
     }
     
-    const topVoiceChannels = topVoiceChannelsRaw.reduce((acc: VoiceChannelTotal[], ch: any) => {
-      const existing = acc.find((a: VoiceChannelTotal) => a.channel_id === ch.channel_id);
+    // First, build a map of unique users per channel
+    const channelUserMap = new Map<string, Set<string>>();
+    const channelNameMap = new Map<string, string>();
+    
+    voiceSessions.forEach((session: any) => {
+      if (!session.channel_id) return;
+      
+      // Track unique users per channel
+      if (!channelUserMap.has(session.channel_id)) {
+        channelUserMap.set(session.channel_id, new Set());
+      }
+      if (session.user_id) {
+        channelUserMap.get(session.channel_id)!.add(session.user_id);
+      }
+      
+      // Track channel names (prefer non-null names)
+      if (session.channel_name && (!channelNameMap.has(session.channel_id) || channelNameMap.get(session.channel_id) === 'Unknown Channel')) {
+        channelNameMap.set(session.channel_id, session.channel_name);
+      }
+    });
+    
+    // Aggregate by channel
+    const topVoiceChannelsMap = new Map<string, VoiceChannelTotal>();
+    
+    topVoiceChannelsRaw.forEach((session: any) => {
+      if (!session.channel_id || !session.duration_seconds) return;
+      
+      const existing = topVoiceChannelsMap.get(session.channel_id);
       if (existing) {
-        existing.total_seconds += ch.voice_seconds || 0;
+        existing.total_seconds += session.duration_seconds || 0;
         existing.total_hours = (existing.total_seconds / 3600).toFixed(2);
       } else {
-        acc.push({
-          channel_id: ch.channel_id,
-          channel_name: ch.channel_name || 'Unknown Channel',
-          total_seconds: ch.voice_seconds || 0,
-          total_hours: ((ch.voice_seconds || 0) / 3600).toFixed(2),
-          unique_users: 1
+        topVoiceChannelsMap.set(session.channel_id, {
+          channel_id: session.channel_id,
+          channel_name: channelNameMap.get(session.channel_id) || session.channel_name || 'Unknown Channel',
+          total_seconds: session.duration_seconds || 0,
+          total_hours: ((session.duration_seconds || 0) / 3600).toFixed(2),
+          unique_users: 0
         });
       }
-      return acc;
-    }, []).sort((a, b) => b.total_seconds - a.total_seconds).slice(0, 10);
+    });
+    
+    // Add unique users count and convert to array
+    const topVoiceChannels = Array.from(topVoiceChannelsMap.values()).map(ch => ({
+      ...ch,
+      unique_users: channelUserMap.get(ch.channel_id)?.size || 0
+    })).sort((a, b) => b.total_seconds - a.total_seconds).slice(0, 10);
 
     // Get user stats with voice data for top voice users
     const topVoiceUsersWithStats = await Promise.all(
