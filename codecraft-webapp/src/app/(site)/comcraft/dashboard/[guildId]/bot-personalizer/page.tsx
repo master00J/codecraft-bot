@@ -26,6 +26,7 @@ export default function BotPersonalizer() {
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(1);
   const [presenceSaving, setPresenceSaving] = useState(false);
+  const [presenceText, setPresenceText] = useState('');
 
   useEffect(() => {
     if (guildId) {
@@ -59,6 +60,10 @@ export default function BotPersonalizer() {
       if (data.botConfig) {
         setBotConfig(data.botConfig);
         setStep(data.botConfig.setup_completed ? 4 : 1);
+        // Update local presence text state when config is fetched
+        if (data.botConfig.bot_presence_text !== undefined) {
+          setPresenceText(data.botConfig.bot_presence_text);
+        }
       }
     } catch (error) {
       console.error('Error fetching bot config:', error);
@@ -637,10 +642,13 @@ export default function BotPersonalizer() {
                   <Label htmlFor="presenceText">Status Text</Label>
                   <Input
                     id="presenceText"
-                    value={botConfig?.bot_presence_text || 'codecraft-solutions.com | /help'}
-                    onChange={async (e) => {
+                    value={presenceText || botConfig?.bot_presence_text || 'codecraft-solutions.com | /help'}
+                    onChange={(e) => {
                       const value = e.target.value;
-                      // Debounce: wait 1 second after user stops typing
+                      // Update local state immediately for responsive UI
+                      setPresenceText(value);
+                      
+                      // Debounce: wait 1 second after user stops typing before saving
                       if (presenceSaving) return;
                       clearTimeout((window as any).presenceUpdateTimeout);
                       (window as any).presenceUpdateTimeout = setTimeout(async () => {
@@ -653,12 +661,20 @@ export default function BotPersonalizer() {
                           });
                           const result = await response.json();
                           if (result.success) {
-                            fetchBotConfig();
+                            // Update botConfig with new value
+                            setBotConfig((prev: any) => ({
+                              ...prev,
+                              bot_presence_text: value
+                            }));
                           } else {
                             alert(`❌ Error: ${result.error}\n${result.message || ''}`);
+                            // Revert to original value on error
+                            setPresenceText(botConfig?.bot_presence_text || 'codecraft-solutions.com | /help');
                           }
                         } catch (error) {
                           alert('❌ Error updating presence');
+                          // Revert to original value on error
+                          setPresenceText(botConfig?.bot_presence_text || 'codecraft-solutions.com | /help');
                         } finally {
                           setPresenceSaving(false);
                         }
