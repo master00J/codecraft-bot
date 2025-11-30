@@ -15,8 +15,10 @@ class VoiceMoveHandlers {
    */
   async handleVoiceMove(interaction) {
     try {
+      console.log('🔍 [Voice Move] handleVoiceMove called');
       // Check permissions
       if (!interaction.member.permissions.has(PermissionFlagsBits.MoveMembers)) {
+        console.log('❌ [Voice Move] User lacks MoveMembers permission');
         return interaction.reply({
           content: '❌ Je hebt geen toestemming om gebruikers te verplaatsen.',
           ephemeral: true
@@ -24,6 +26,7 @@ class VoiceMoveHandlers {
       }
 
       const subcommand = interaction.options.getSubcommand();
+      console.log(`🔍 [Voice Move] Subcommand: ${subcommand}`);
 
     switch (subcommand) {
       case 'all':

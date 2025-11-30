@@ -2238,12 +2238,15 @@ client.on('interactionCreate', async (interaction) => {
 
       // ============ VOICE MOVE COMMANDS ============
       case 'voicemove':
+        console.log('🔍 [Voice Move] Command received');
         if (!global.voiceMoveHandlers) {
+          console.error('❌ [Voice Move] Handler not initialized');
           return interaction.reply({ 
             content: '❌ Voice move system not initialized', 
             ephemeral: true 
           });
         }
+        console.log('✅ [Voice Move] Handler found, processing...');
         await global.voiceMoveHandlers.handleVoiceMove(interaction);
         break;
 
