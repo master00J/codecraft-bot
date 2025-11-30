@@ -121,6 +121,7 @@ export default function GuildAiPage() {
     allowQuestions: true,
     allowModeration: false,
     defaultProvider: 'gemini',
+    aiModel: null,
     chatEnabled: false,
     chatChannelId: null,
     allowedChannelIds: [],
