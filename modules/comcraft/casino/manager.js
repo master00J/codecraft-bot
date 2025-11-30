@@ -281,7 +281,8 @@ class CasinoManager {
       );
     }
 
-    if (config.roulette_enabled) {
+    // Roulette is enabled by default if not set (for backward compatibility)
+    if (config.roulette_enabled !== false) {
       row.addComponents(
         new ButtonBuilder()
           .setCustomId(`casino_roulette_${userId}`)
