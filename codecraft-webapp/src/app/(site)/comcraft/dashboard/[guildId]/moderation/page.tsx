@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Save, Shield, Brain, Zap, Users, Ban } from 'lucide-react';
+import { Loader2, Save, Shield, Brain, Zap, Users, Ban, Hash, Plus, Trash2 } from 'lucide-react';
 
 interface ModerationConfig {
   automod_enabled: boolean;
@@ -59,6 +59,8 @@ export default function ModerationPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [badWordsInput, setBadWordsInput] = useState('');
+  const [channelRules, setChannelRules] = useState<any[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<string>('');
 
   useEffect(() => {
     fetchData();
@@ -67,16 +69,18 @@ export default function ModerationPage() {
   async function fetchData() {
     setLoading(true);
     try {
-      const [configRes, channelsRes, rolesRes] = await Promise.all([
+      const [configRes, channelsRes, rolesRes, channelRulesRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/moderation`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/channels`),
-        fetch(`/api/comcraft/guilds/${guildId}/discord/roles`)
+        fetch(`/api/comcraft/guilds/${guildId}/discord/roles`),
+        fetch(`/api/comcraft/guilds/${guildId}/moderation/channels`)
       ]);
 
-      const [configData, channelsData, rolesData] = await Promise.all([
+      const [configData, channelsData, rolesData, channelRulesData] = await Promise.all([
         configRes.json(),
         channelsRes.json(),
-        rolesRes.json()
+        rolesRes.json(),
+        channelRulesRes.json()
       ]);
 
       if (configData.config) {
@@ -86,6 +90,7 @@ export default function ModerationPage() {
 
       setChannels(channelsData.channels?.text || []);
       setRoles(rolesData.roles || []);
+      setChannelRules(channelRulesData.rules || []);
     } catch (error: any) {
       console.error('Error loading moderation config:', error);
       toast({
@@ -95,6 +100,30 @@ export default function ModerationPage() {
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveChannelRule(rule: any) {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/channels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rule)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChannelRules(channelRules.map(r => r.id === rule.id ? data.rule : r));
+        toast({
+          title: 'Success',
+          description: 'Channel rule updated',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update rule',
+        variant: 'destructive'
+      });
     }
   }
 
@@ -248,10 +277,14 @@ export default function ModerationPage() {
 
         {/* Configuration Tabs */}
         <Tabs defaultValue="filters" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 bg-muted/50 p-2">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 bg-muted/50 p-2">
             <TabsTrigger value="filters">
               <Shield className="mr-2 h-4 w-4" />
               Filters
+            </TabsTrigger>
+            <TabsTrigger value="channels">
+              <Hash className="mr-2 h-4 w-4" />
+              Channels
             </TabsTrigger>
             <TabsTrigger value="ai">
               <Brain className="mr-2 h-4 w-4" />
@@ -481,6 +514,261 @@ export default function ModerationPage() {
                     Comma-separated list of words to filter. Case-insensitive.
                   </p>
                 </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* CHANNEL-SPECIFIC RULES TAB */}
+          <TabsContent value="channels" className="space-y-6">
+            <Card className="border-2 shadow-xl p-6">
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Channel-Specific Rules</h2>
+                  <p className="text-muted-foreground">
+                    Configure different moderation settings per channel. Override general settings for specific channels.
+                  </p>
+                </div>
+
+                {/* Add New Rule */}
+                <Card className="border-2 p-4 bg-muted/20">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 space-y-2">
+                        <Label>Select Channel</Label>
+                        <Select value={selectedChannel} onValueChange={setSelectedChannel}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a channel..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {channels
+                              .filter(ch => !channelRules.some(r => r.channel_id === ch.id))
+                              .map(ch => (
+                                <SelectItem key={ch.id} value={ch.id}>
+                                  #{ch.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        onClick={async () => {
+                          if (!selectedChannel) {
+                            toast({
+                              title: 'Error',
+                              description: 'Please select a channel',
+                              variant: 'destructive'
+                            });
+                            return;
+                          }
+                          const channel = channels.find(ch => ch.id === selectedChannel);
+                          const newRule = {
+                            channel_id: selectedChannel,
+                            channel_name: channel?.name || '',
+                            enabled: true,
+                            images_only: false,
+                            text_only: false,
+                            links_only: false,
+                            no_links: false,
+                            filter_spam: null,
+                            filter_links: null,
+                            filter_invites: null,
+                            filter_caps: null,
+                            filter_mention_spam: null,
+                            filter_emoji_spam: null,
+                            filter_duplicates: null,
+                            filter_words: null
+                          };
+                          
+                          try {
+                            const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/channels`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(newRule)
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setChannelRules([...channelRules, data.rule]);
+                              setSelectedChannel('');
+                              toast({
+                                title: 'Success',
+                                description: 'Channel rule created',
+                              });
+                            }
+                          } catch (error) {
+                            toast({
+                              title: 'Error',
+                              description: 'Failed to create rule',
+                              variant: 'destructive'
+                            });
+                          }
+                        }}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Rule
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Existing Rules */}
+                {channelRules.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Hash className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No channel-specific rules configured</p>
+                    <p className="text-sm mt-2">Add a rule above to get started</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {channelRules.map((rule) => {
+                      const channel = channels.find(ch => ch.id === rule.channel_id);
+                      return (
+                        <Card key={rule.id} className="border-2 p-4">
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <h3 className="font-semibold text-lg">
+                                #{channel?.name || rule.channel_name || 'Unknown Channel'}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">Channel-specific moderation rules</p>
+                            </div>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(
+                                    `/api/comcraft/guilds/${guildId}/moderation/channels?channel_id=${rule.channel_id}`,
+                                    { method: 'DELETE' }
+                                  );
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setChannelRules(channelRules.filter(r => r.id !== rule.id));
+                                    toast({
+                                      title: 'Success',
+                                      description: 'Channel rule deleted',
+                                    });
+                                  }
+                                } catch (error) {
+                                  toast({
+                                    title: 'Error',
+                                    description: 'Failed to delete rule',
+                                    variant: 'destructive'
+                                  });
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="space-y-4">
+                            {/* Content Restrictions */}
+                            <div>
+                              <Label className="text-base font-semibold mb-2 block">Content Restrictions</Label>
+                              <div className="grid md:grid-cols-2 gap-3">
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                  <div>
+                                    <div className="font-medium">Images Only</div>
+                                    <p className="text-xs text-muted-foreground">Only allow images, block text</p>
+                                  </div>
+                                  <Switch
+                                    checked={rule.images_only || false}
+                                    onCheckedChange={async (checked) => {
+                                      const updated = { ...rule, images_only: checked };
+                                      await saveChannelRule(updated);
+                                    }}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                  <div>
+                                    <div className="font-medium">Text Only</div>
+                                    <p className="text-xs text-muted-foreground">Only allow text, block images</p>
+                                  </div>
+                                  <Switch
+                                    checked={rule.text_only || false}
+                                    onCheckedChange={async (checked) => {
+                                      const updated = { ...rule, text_only: checked };
+                                      await saveChannelRule(updated);
+                                    }}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                  <div>
+                                    <div className="font-medium">Links Only</div>
+                                    <p className="text-xs text-muted-foreground">Only allow messages with links</p>
+                                  </div>
+                                  <Switch
+                                    checked={rule.links_only || false}
+                                    onCheckedChange={async (checked) => {
+                                      const updated = { ...rule, links_only: checked };
+                                      await saveChannelRule(updated);
+                                    }}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                  <div>
+                                    <div className="font-medium">No Links</div>
+                                    <p className="text-xs text-muted-foreground">Block all links</p>
+                                  </div>
+                                  <Switch
+                                    checked={rule.no_links || false}
+                                    onCheckedChange={async (checked) => {
+                                      const updated = { ...rule, no_links: checked };
+                                      await saveChannelRule(updated);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Filter Overrides */}
+                            <div>
+                              <Label className="text-base font-semibold mb-2 block">Filter Overrides (null = use general)</Label>
+                              <div className="grid md:grid-cols-2 gap-3">
+                                {[
+                                  { key: 'filter_spam', label: 'Spam Filter', desc: 'Override spam detection' },
+                                  { key: 'filter_links', label: 'Links Filter', desc: 'Override link blocking' },
+                                  { key: 'filter_invites', label: 'Invites Filter', desc: 'Override invite blocking' },
+                                  { key: 'filter_caps', label: 'Caps Filter', desc: 'Override caps detection' },
+                                  { key: 'filter_mention_spam', label: 'Mention Spam', desc: 'Override mention spam' },
+                                  { key: 'filter_emoji_spam', label: 'Emoji Spam', desc: 'Override emoji spam' },
+                                  { key: 'filter_duplicates', label: 'Duplicates', desc: 'Override duplicate detection' },
+                                  { key: 'filter_words', label: 'Word Filter', desc: 'Override word filter' }
+                                ].map(({ key, label, desc }) => {
+                                  const value = rule[key];
+                                  return (
+                                    <div key={key} className="p-3 border rounded-lg">
+                                      <div className="font-medium text-sm mb-1">{label}</div>
+                                      <p className="text-xs text-muted-foreground mb-2">{desc}</p>
+                                      <Select
+                                        value={value === null ? 'inherit' : value ? 'enabled' : 'disabled'}
+                                        onValueChange={async (newValue) => {
+                                          const updated = {
+                                            ...rule,
+                                            [key]: newValue === 'inherit' ? null : newValue === 'enabled'
+                                          };
+                                          await saveChannelRule(updated);
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-8">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="inherit">Use General</SelectItem>
+                                          <SelectItem value="enabled">Enabled</SelectItem>
+                                          <SelectItem value="disabled">Disabled</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </Card>
           </TabsContent>
