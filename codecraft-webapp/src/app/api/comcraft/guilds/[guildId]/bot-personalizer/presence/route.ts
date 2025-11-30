@@ -92,9 +92,41 @@ export async function PATCH(
         message: `Bot presence updated: ${presenceType || 'unchanged'} - ${presenceText || 'unchanged'}`
       });
 
+    // Try to trigger immediate presence update via bot's internal API
+    // This works for both local custom bots and Pterodactyl-deployed bots
+    try {
+      const botApiUrl = process.env.COMCRAFT_BOT_API_URL || process.env.BOT_API_URL || 'http://localhost:3002';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      
+      // Fire and forget - don't block the response
+      fetch(`${botApiUrl}/api/bot/${params.guildId}/update-presence`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
+        },
+        body: JSON.stringify({
+          presenceType: presenceType || 'unchanged',
+          presenceText: presenceText || 'unchanged'
+        }),
+        signal: controller.signal
+      })
+        .then(() => clearTimeout(timeoutId))
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          // Silently handle errors - bot might be offline or on different server
+          if (error.name !== 'AbortError') {
+            console.log(`ℹ️ Could not trigger immediate presence update for guild ${params.guildId} (bot will update within 5 seconds)`);
+          }
+        });
+    } catch (error) {
+      // Silently ignore - bot might be offline or API might not be accessible
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Bot presence updated successfully',
+      message: 'Bot presence updated successfully. Changes will appear in Discord within a few seconds.',
       presence: {
         type: presenceType || 'unchanged',
         text: presenceText || 'unchanged'

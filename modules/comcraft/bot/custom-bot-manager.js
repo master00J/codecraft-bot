@@ -319,9 +319,8 @@ class CustomBotManager {
             }
           }
 
-          // Set up periodic presence update check (every 30 seconds)
-          // This allows presence to be updated without bot restart
-          setInterval(async () => {
+          // Helper function to update presence from database
+          const updatePresenceFromDatabase = async () => {
             if (this.supabase && client.user) {
               try {
                 const { data: botConfig } = await this.supabase
@@ -348,13 +347,24 @@ class CustomBotManager {
                       currentActivity.type !== activityType) {
                     client.user.setActivity(botConfig.bot_presence_text, { type: activityType });
                     console.log(`🔄 Updated custom bot presence: ${botConfig.bot_presence_type} - ${botConfig.bot_presence_text}`);
+                    return true;
                   }
                 }
               } catch (error) {
                 // Silently ignore - bot might be offline or config might not exist yet
               }
             }
-          }, 30000); // Check every 30 seconds
+            return false;
+          };
+
+          // Store update function in client for direct API access
+          client.updatePresence = updatePresenceFromDatabase;
+
+          // Set up periodic presence update check (every 5 seconds for faster updates)
+          // This allows presence to be updated without bot restart
+          setInterval(async () => {
+            await updatePresenceFromDatabase();
+          }, 5000); // Check every 5 seconds instead of 30
           
           // Update bot status and is_active in database
           await this.updateBotStatus(guildId, true, client.guilds.cache.size);

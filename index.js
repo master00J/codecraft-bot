@@ -10720,4 +10720,48 @@ app.post('/webhook/topgg', async (req, res) => {
   }
 });
 
+// Update bot presence endpoint (for custom bots that run in this instance)
+app.post('/api/bot/:guildId/update-presence', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const secret = req.headers['x-internal-secret'];
+    
+    // Verify internal secret
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    // Check if this is a custom bot for this guild
+    let botClient = client;
+    if (customBotManager) {
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+      }
+    }
+
+    // If we have a client for this guild, update presence immediately
+    if (botClient && botClient.user && botClient.updatePresence) {
+      // Call the direct update function if available
+      await botClient.updatePresence();
+      return res.json({ 
+        success: true, 
+        message: 'Presence updated immediately' 
+      });
+    } else {
+      // Bot might be on a different server (Pterodactyl), that's okay
+      return res.json({ 
+        success: true, 
+        message: 'Bot not found in this instance (may be on different server)' 
+      });
+    }
+  } catch (error) {
+    console.error('Error updating bot presence:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 module.exports = client;
