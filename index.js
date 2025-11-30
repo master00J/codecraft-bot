@@ -7125,6 +7125,16 @@ async function registerCommands(clientInstance) {
 
     console.log('✅ Global commands registered');
 
+    // Post commands to discordbotlist.com
+    if (global.topggManager) {
+      try {
+        await global.topggManager.postCommandsToDiscordBotList(commands);
+      } catch (error) {
+        console.warn('⚠️  [Commands] Failed to post to discordbotlist.com:', error.message);
+        // Don't fail command registration if this fails
+      }
+    }
+
     if (clientInstance) {
       const guilds = clientInstance.guilds.cache.map((guild) => guild.id);
       for (const guildId of guilds) {

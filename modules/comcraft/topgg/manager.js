@@ -12,6 +12,7 @@ class TopGGManager {
     this.customBotManager = customBotManager;
     this.topggToken = process.env.TOPGG_TOKEN;
     this.topggWebhookAuth = process.env.TOPGG_WEBHOOK_AUTH;
+    this.discordBotListToken = process.env.DISCORDBOTLIST_TOKEN;
     this.supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -436,6 +437,47 @@ class TopGGManager {
     } catch (error) {
       console.error('❌ [Top.gg] Error getting vote stats:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Post commands list to discordbotlist.com
+   * @param {Array} commands - Array of command JSON objects
+   */
+  async postCommandsToDiscordBotList(commands) {
+    if (!this.discordBotListToken) {
+      console.log('⚠️  [DiscordBotList] No DISCORDBOTLIST_TOKEN found, skipping command posting');
+      return false;
+    }
+
+    if (!this.client || !this.client.user) {
+      console.warn('⚠️  [DiscordBotList] Client or user not available, skipping command posting');
+      return false;
+    }
+
+    const botId = this.client.user.id;
+
+    try {
+      const response = await fetch(`https://discordbotlist.com/api/v1/bots/${botId}/commands`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bot ${this.discordBotListToken}`
+        },
+        body: JSON.stringify(commands)
+      });
+
+      if (response.ok) {
+        console.log(`✅ [DiscordBotList] Successfully posted ${commands.length} commands to discordbotlist.com`);
+        return true;
+      } else {
+        const errorText = await response.text();
+        console.error(`❌ [DiscordBotList] Failed to post commands: ${response.status} - ${errorText}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ [DiscordBotList] Error posting commands:', error.message);
+      return false;
     }
   }
 
