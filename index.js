@@ -8392,7 +8392,9 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
   if (!reaction.message.guildId || !(await ensureGuildLicense(reaction.message.guildId))) return;
 
-  await autoRolesManager.handleReaction(reaction, user, 'add');
+  if (autoRolesManager && typeof autoRolesManager.handleReaction === 'function') {
+    await autoRolesManager.handleReaction(reaction, user, 'add');
+  }
 });
 
 client.on('messageReactionRemove', async (reaction, user) => {
@@ -8408,7 +8410,9 @@ client.on('messageReactionRemove', async (reaction, user) => {
 
   if (!reaction.message.guildId || !(await ensureGuildLicense(reaction.message.guildId))) return;
 
-  await autoRolesManager.handleReaction(reaction, user, 'remove');
+  if (autoRolesManager && typeof autoRolesManager.handleReaction === 'function') {
+    await autoRolesManager.handleReaction(reaction, user, 'remove');
+  }
 });
 
 // ================================================================
