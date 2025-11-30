@@ -128,19 +128,25 @@ class AutoMod {
     }
 
     // Check AI content moderation (if enabled)
+    console.log('[AutoMod] 🤖 AI moderation check - enabled:', config.ai_moderation_enabled, 'AI service enabled:', aiService.config.isAiEnabled());
+    
     if (config.ai_moderation_enabled) {
-      console.log('[AutoMod] 🤖 AI moderation enabled, checking...');
+      console.log('[AutoMod] 🤖 AI moderation enabled in config, checking...');
       
       if (!aiService.config.isAiEnabled()) {
         console.log('[AutoMod] 🤖 AI moderation enabled in config but AI service is disabled (check AI_ENABLED env var)');
       } else {
+        console.log('[AutoMod] 🤖 Calling AI moderation check for content:', message.content.substring(0, 100));
         const aiViolation = await this.checkAiModeration(message.content, message.guild.id);
         if (aiViolation) {
+          console.log('[AutoMod] 🤖 AI flagged violation:', aiViolation);
           violations.push(`ai_${aiViolation}`);
+        } else {
+          console.log('[AutoMod] 🤖 AI moderation: no violations detected');
         }
       }
     } else {
-      console.log('[AutoMod] 🤖 AI moderation disabled in config');
+      console.log('[AutoMod] 🤖 AI moderation disabled in config (ai_moderation_enabled:', config.ai_moderation_enabled, ')');
     }
 
     if (violations.length > 0) {
