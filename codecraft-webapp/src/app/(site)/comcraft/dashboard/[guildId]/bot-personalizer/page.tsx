@@ -72,11 +72,7 @@ export default function BotPersonalizer() {
       if (data.botConfig) {
         setBotConfig(data.botConfig);
         setStep(data.botConfig.setup_completed ? 4 : 1);
-        // Only update local presence text state if not currently being edited
-        // and if skipPresenceTextUpdate is false (to prevent overwriting user input)
-        if (!skipPresenceTextUpdate && data.botConfig.bot_presence_text !== undefined) {
-          setPresenceText(data.botConfig.bot_presence_text);
-        }
+        // Don't update presenceText here - it's only initialized once via useEffect
       }
     } catch (error) {
       console.error('Error fetching bot config:', error);
