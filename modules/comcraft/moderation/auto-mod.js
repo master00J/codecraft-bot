@@ -24,10 +24,13 @@ class AutoMod {
     }
 
     const config = await configManager.getModerationConfig(message.guild.id);
+    const channelRules = await configManager.getChannelModerationRules(message.guild.id, message.channel.id);
+    
     console.log('[AutoMod] Config for', message.guild.id, ':', {
       automod_enabled: config?.automod_enabled,
       filter_spam: config?.filter_spam,
-      filter_words: config?.filter_words?.length || 0
+      filter_words: config?.filter_words?.length || 0,
+      has_channel_rules: !!channelRules
     });
 
     if (!config || !config.automod_enabled) {
@@ -35,57 +38,96 @@ class AutoMod {
       return null;
     }
 
+    // Merge channel rules with general config (channel rules override general)
+    const effectiveConfig = this.mergeChannelRules(config, channelRules);
+
     const violations = [];
     console.log('[AutoMod] Checking message from', message.author.tag, ':', message.content.substring(0, 50));
 
-    // Check spam
-    if (config.filter_spam && this.isSpam(message, config)) {
-      violations.push('spam');
-    }
+    // Check channel-specific content restrictions first (these are strict rules)
+    if (channelRules) {
+      // Images only - block text-only messages
+      if (channelRules.images_only && !message.attachments.size && !message.embeds.length) {
+        violations.push('images_only_required');
+      }
 
-    // Check links
-    if (config.filter_links && this.hasLinks(message.content)) {
-      violations.push('links');
-    }
+      // Text only - block images/attachments
+      if (channelRules.text_only && (message.attachments.size > 0 || message.embeds.length > 0)) {
+        violations.push('text_only_required');
+      }
 
-    // Check invites
-    if (config.filter_invites && this.hasDiscordInvite(message.content)) {
-      violations.push('discord_invite');
-    }
+      // Links only - block messages without links
+      if (channelRules.links_only && !this.hasLinks(message.content) && !message.embeds.some(e => e.url)) {
+        violations.push('links_only_required');
+      }
 
-    // Check caps
-    if (config.filter_caps && this.hasExcessiveCaps(message.content, config)) {
-      violations.push('caps');
-    }
-
-    // Check bad words
-    if (config.filter_words && config.filter_words.length > 0) {
-      if (this.hasBadWords(message.content, config.filter_words)) {
-        violations.push('bad_words');
+      // No links - explicitly block links
+      if (channelRules.no_links && this.hasLinks(message.content)) {
+        violations.push('links_not_allowed');
       }
     }
 
-    // Check mention spam
-    if (config.filter_mention_spam && this.hasMentionSpam(message, config)) {
+    // Check spam (use effective config)
+    if (effectiveConfig.filter_spam && this.isSpam(message, effectiveConfig)) {
+      violations.push('spam');
+    }
+
+    // Check links (unless channel rules override)
+    if (effectiveConfig.filter_links && !channelRules?.no_links && this.hasLinks(message.content)) {
+      violations.push('links');
+    }
+
+    // Check invites (use effective config)
+    if (effectiveConfig.filter_invites && this.hasDiscordInvite(message.content)) {
+      violations.push('discord_invite');
+    }
+
+    // Check caps (use effective config)
+    if (effectiveConfig.filter_caps && this.hasExcessiveCaps(message.content, effectiveConfig)) {
+      violations.push('caps');
+    }
+
+    // Check bad words (only if channel rules allow it)
+    if (effectiveConfig.filter_words && effectiveConfig.filter_words.length > 0) {
+      if (channelRules?.filter_words === false) {
+        // Channel explicitly disables word filter
+      } else if (channelRules?.filter_words === true || channelRules?.filter_words === null || !channelRules) {
+        // Use general word filter
+        if (this.hasBadWords(message.content, config.filter_words)) {
+          violations.push('bad_words');
+        }
+      }
+    }
+
+    // Check mention spam (use effective config)
+    if (effectiveConfig.filter_mention_spam && this.hasMentionSpam(message, effectiveConfig)) {
       violations.push('mention_spam');
     }
 
-    // Check emoji spam
-    if (config.filter_emoji_spam && this.hasEmojiSpam(message.content, config)) {
+    // Check emoji spam (use effective config)
+    if (effectiveConfig.filter_emoji_spam && this.hasEmojiSpam(message.content, effectiveConfig)) {
       violations.push('emoji_spam');
     }
 
-    // Check duplicate messages
-    if (config.filter_duplicates && this.isDuplicate(message, config)) {
+    // Check duplicate messages (use effective config)
+    if (effectiveConfig.filter_duplicates && this.isDuplicate(message, effectiveConfig)) {
       violations.push('duplicate_message');
     }
 
     // Check AI content moderation (if enabled)
-    if (config.ai_moderation_enabled && aiService.config.isAiEnabled()) {
-      const aiViolation = await this.checkAiModeration(message.content, message.guild.id);
-      if (aiViolation) {
-        violations.push(`ai_${aiViolation}`);
+    if (config.ai_moderation_enabled) {
+      console.log('[AutoMod] 🤖 AI moderation enabled, checking...');
+      
+      if (!aiService.config.isAiEnabled()) {
+        console.log('[AutoMod] 🤖 AI moderation enabled in config but AI service is disabled (check AI_ENABLED env var)');
+      } else {
+        const aiViolation = await this.checkAiModeration(message.content, message.guild.id);
+        if (aiViolation) {
+          violations.push(`ai_${aiViolation}`);
+        }
       }
+    } else {
+      console.log('[AutoMod] 🤖 AI moderation disabled in config');
     }
 
     if (violations.length > 0) {
@@ -93,6 +135,63 @@ class AutoMod {
     }
 
     return violations.length > 0 ? violations : null;
+  }
+
+  /**
+   * Merge channel-specific rules with general config
+   */
+  mergeChannelRules(generalConfig, channelRules) {
+    if (!channelRules) return generalConfig;
+
+    const merged = { ...generalConfig };
+
+    // Override filter settings (null = use general, true/false = override)
+    if (channelRules.filter_spam !== null && channelRules.filter_spam !== undefined) {
+      merged.filter_spam = channelRules.filter_spam;
+    }
+    if (channelRules.filter_links !== null && channelRules.filter_links !== undefined) {
+      merged.filter_links = channelRules.filter_links;
+    }
+    if (channelRules.filter_invites !== null && channelRules.filter_invites !== undefined) {
+      merged.filter_invites = channelRules.filter_invites;
+    }
+    if (channelRules.filter_caps !== null && channelRules.filter_caps !== undefined) {
+      merged.filter_caps = channelRules.filter_caps;
+    }
+    if (channelRules.filter_mention_spam !== null && channelRules.filter_mention_spam !== undefined) {
+      merged.filter_mention_spam = channelRules.filter_mention_spam;
+    }
+    if (channelRules.filter_emoji_spam !== null && channelRules.filter_emoji_spam !== undefined) {
+      merged.filter_emoji_spam = channelRules.filter_emoji_spam;
+    }
+    if (channelRules.filter_duplicates !== null && channelRules.filter_duplicates !== undefined) {
+      merged.filter_duplicates = channelRules.filter_duplicates;
+    }
+
+    // Override thresholds
+    if (channelRules.spam_messages !== null && channelRules.spam_messages !== undefined) {
+      merged.spam_messages = channelRules.spam_messages;
+    }
+    if (channelRules.spam_interval !== null && channelRules.spam_interval !== undefined) {
+      merged.spam_interval = channelRules.spam_interval;
+    }
+    if (channelRules.caps_threshold !== null && channelRules.caps_threshold !== undefined) {
+      merged.caps_threshold = channelRules.caps_threshold;
+    }
+    if (channelRules.caps_min_length !== null && channelRules.caps_min_length !== undefined) {
+      merged.caps_min_length = channelRules.caps_min_length;
+    }
+    if (channelRules.max_mentions !== null && channelRules.max_mentions !== undefined) {
+      merged.max_mentions = channelRules.max_mentions;
+    }
+    if (channelRules.max_emojis !== null && channelRules.max_emojis !== undefined) {
+      merged.max_emojis = channelRules.max_emojis;
+    }
+    if (channelRules.duplicate_time_window !== null && channelRules.duplicate_time_window !== undefined) {
+      merged.duplicate_time_window = channelRules.duplicate_time_window;
+    }
+
+    return merged;
   }
 
   /**
@@ -266,18 +365,30 @@ class AutoMod {
    */
   async checkAiModeration(content, guildId) {
     try {
+      console.log('[AutoMod] 🤖 Running AI moderation check for content:', content.substring(0, 100));
+      
       const result = await aiService.runTask('moderate', { content }, {
         meta: { guildId, source: 'automod' }
       });
       
-      if (result.flagged && Array.isArray(result.categories) && result.categories.length > 0) {
+      console.log('[AutoMod] 🤖 AI moderation result:', {
+        flagged: result?.flagged,
+        categories: result?.categories,
+        provider: result?.provider
+      });
+      
+      if (result && result.flagged && Array.isArray(result.categories) && result.categories.length > 0) {
         // Return first flagged category
-        return result.categories[0];
+        const category = result.categories[0];
+        console.log('[AutoMod] 🤖 AI flagged content with category:', category);
+        return category;
       }
       
+      console.log('[AutoMod] 🤖 AI moderation: content not flagged');
       return null;
     } catch (error) {
-      console.error('AI moderation error:', error);
+      console.error('[AutoMod] 🤖 AI moderation error:', error);
+      console.error('[AutoMod] 🤖 Error stack:', error.stack);
       return null; // Don't block message if AI fails
     }
   }
@@ -314,12 +425,16 @@ class AutoMod {
     const texts = {
       spam: '🔴 Spam detected',
       links: '🔗 Unauthorized links',
+      links_not_allowed: '🔗 Links not allowed in this channel',
       discord_invite: '📨 Discord invite',
       caps: '🔠 Excessive caps',
       bad_words: '🚫 Inappropriate language',
       mention_spam: '📢 Mention spam',
       emoji_spam: '😀 Emoji spam',
       duplicate_message: '📋 Duplicate message',
+      images_only_required: '🖼️ Only images/attachments allowed in this channel',
+      text_only_required: '📝 Only text allowed in this channel (no images)',
+      links_only_required: '🔗 Only messages with links allowed in this channel',
       ai_toxicity: '🤖 Toxic content (AI)',
       ai_hate: '🤖 Hate speech (AI)',
       ai_harassment: '🤖 Harassment (AI)',

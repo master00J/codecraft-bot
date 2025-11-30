@@ -37,16 +37,41 @@ function buildMessages({ system, context = '', conversation = [], userPrompt }) 
 }
 
 function buildModerationPrompt(content) {
-  return `You are an automated moderation classifier. Analyse the following message and respond ONLY with JSON.
-Return the fields:
+  return `You are an automated content moderation system for Discord. Analyze the following message for inappropriate content.
+
+CRITICAL: You must respond with ONLY valid JSON, no other text.
+
+Rules to detect:
+- toxicity: Toxic, offensive, or hostile language
+- hate: Hate speech, racism, discrimination
+- harassment: Bullying, personal attacks, threatening language
+- violence: Threats of violence, graphic violence descriptions
+- sexual: Sexual content, explicit sexual language, requests for sexual content
+- spam: Spam patterns (but prioritize other violations first)
+
+Return JSON in this EXACT format:
 {
-  "flagged": boolean,
-  "categories": string[] // list of rule categories violated or empty
+  "flagged": true or false,
+  "categories": ["category1", "category2"] or []
 }
 
-Message:
-${content}
-`;
+Examples:
+Message: "Hello everyone!"
+Response: {"flagged": false, "categories": []}
+
+Message: "fuck you"
+Response: {"flagged": true, "categories": ["toxicity"]}
+
+Message: "white people suck"
+Response: {"flagged": true, "categories": ["hate", "toxicity"]}
+
+Message: "show me your boobs"
+Response: {"flagged": true, "categories": ["sexual", "harassment"]}
+
+Message to analyze:
+"${content}"
+
+Respond with ONLY the JSON object, nothing else:`;
 }
 
 function buildKnowledgeContext(entries = [], limit = 10) {
