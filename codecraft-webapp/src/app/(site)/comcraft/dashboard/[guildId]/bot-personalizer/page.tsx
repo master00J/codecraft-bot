@@ -5,7 +5,7 @@
  * Let customers use their own Discord bot application
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Link } from '@/navigation';
 import { Card } from '@/components/ui/card';
@@ -27,6 +27,8 @@ export default function BotPersonalizer() {
   const [step, setStep] = useState(1);
   const [presenceSaving, setPresenceSaving] = useState(false);
   const [presenceText, setPresenceText] = useState('');
+  const presenceTextInputRef = useRef<string>(''); // Track if user is actively typing
+  const presenceUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (guildId) {
@@ -36,8 +38,17 @@ export default function BotPersonalizer() {
 
   // Initialize presenceText from botConfig when it first loads (but not on subsequent updates)
   useEffect(() => {
-    if (botConfig?.bot_presence_text !== undefined && presenceText === '') {
-      setPresenceText(botConfig.bot_presence_text);
+    // Only update if user is not actively typing and presenceText is empty or matches the old value
+    if (botConfig?.bot_presence_text !== undefined) {
+      const configText = botConfig.bot_presence_text;
+      // Only update if:
+      // 1. presenceText is empty (initial load), OR
+      // 2. User is not actively typing (inputRef is empty) AND presenceText matches config (meaning it hasn't been changed)
+      if (presenceText === '' || 
+          (presenceTextInputRef.current === '' && presenceText === configText)) {
+        setPresenceText(configText);
+        presenceTextInputRef.current = '';
+      }
     }
   }, [botConfig?.bot_presence_text]);
 
@@ -650,16 +661,27 @@ export default function BotPersonalizer() {
                   <Label htmlFor="presenceText">Status Text</Label>
                   <Input
                     id="presenceText"
-                    value={presenceText !== '' ? presenceText : (botConfig?.bot_presence_text || 'codecraft-solutions.com | /help')}
+                    value={presenceText || botConfig?.bot_presence_text || 'codecraft-solutions.com | /help'}
                     onChange={(e) => {
                       const value = e.target.value;
+                      // Mark that user is actively typing
+                      presenceTextInputRef.current = value;
+                      
                       // Update local state immediately for responsive UI
                       setPresenceText(value);
                       
                       // Debounce: wait 1 second after user stops typing before saving
                       if (presenceSaving) return;
-                      clearTimeout((window as any).presenceUpdateTimeout);
-                      (window as any).presenceUpdateTimeout = setTimeout(async () => {
+                      
+                      // Clear existing timeout
+                      if (presenceUpdateTimeoutRef.current) {
+                        clearTimeout(presenceUpdateTimeoutRef.current);
+                      }
+                      
+                      presenceUpdateTimeoutRef.current = setTimeout(async () => {
+                        // Clear the "actively typing" flag when user stops typing
+                        presenceTextInputRef.current = '';
+                        
                         setPresenceSaving(true);
                         try {
                           const response = await fetch(`/api/comcraft/guilds/${guildId}/bot-personalizer/presence`, {
@@ -678,12 +700,16 @@ export default function BotPersonalizer() {
                           } else {
                             alert(`❌ Error: ${result.error}\n${result.message || ''}`);
                             // Revert to saved value on error
-                            setPresenceText(botConfig?.bot_presence_text || 'codecraft-solutions.com | /help');
+                            const savedValue = botConfig?.bot_presence_text || 'codecraft-solutions.com | /help';
+                            setPresenceText(savedValue);
+                            presenceTextInputRef.current = '';
                           }
                         } catch (error) {
                           alert('❌ Error updating presence');
                           // Revert to saved value on error
-                          setPresenceText(botConfig?.bot_presence_text || 'codecraft-solutions.com | /help');
+                          const savedValue = botConfig?.bot_presence_text || 'codecraft-solutions.com | /help';
+                          setPresenceText(savedValue);
+                          presenceTextInputRef.current = '';
                         } finally {
                           setPresenceSaving(false);
                         }
