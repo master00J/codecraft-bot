@@ -267,8 +267,8 @@ export default function GuildDashboardLayout({
         .concat(defaultNavigation.filter(item => !menuOrder.includes(item.name)))
     : defaultNavigation;
 
-  // Sortable Nav Item Component
-  function SortableNavItem({ item, isActiveItem, onItemClick }: { item: NavItem; isActiveItem: boolean; onItemClick: (e: React.MouseEvent<HTMLAnchorElement>) => void }) {
+  // Sortable Nav Item Component (only used in reorder mode)
+  function SortableNavItem({ item }: { item: NavItem }) {
     const {
       attributes,
       listeners,
@@ -285,46 +285,6 @@ export default function GuildDashboardLayout({
     };
 
     const Icon = item.icon;
-
-    if (!isReorderMode) {
-      return (
-        <Link
-          ref={setNodeRef}
-          href={item.href}
-          onClick={onItemClick}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-            isActiveItem
-              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-          )}
-        >
-          <Icon className="h-5 w-5 flex-shrink-0" />
-          <span className="flex-1">{item.name}</span>
-          <div className="flex items-center gap-1.5">
-            {item.tier && (
-              <span className={cn(
-                "px-2 py-0.5 text-xs font-semibold rounded-full border",
-                item.tier === 'Free' 
-                  ? "bg-gray-500/20 text-gray-300 border-gray-500/30"
-                  : item.tier === 'Basic'
-                  ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
-                  : item.tier === 'Premium'
-                  ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
-                  : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
-              )}>
-                {item.tier}
-              </span>
-            )}
-            {item.badge && (
-              <span className="px-2 py-0.5 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
-                {item.badge}
-              </span>
-            )}
-          </div>
-        </Link>
-      );
-    }
 
     return (
       <div
@@ -460,27 +420,14 @@ export default function GuildDashboardLayout({
                 items={navigation.map(item => item.name)}
                 strategy={verticalListSortingStrategy}
               >
-                {navigation.map((item) => {
-                  const active = isActive(item.href);
-                  
-                  // Handle click for hash anchors to navigate to overview page first
-                  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-                    e.preventDefault();
-                  };
-                  
-                  return (
-                    <SortableNavItem
-                      key={item.name}
-                      item={item}
-                      isActiveItem={active}
-                      onItemClick={handleClick}
-                    />
-                  );
-                })}
+                {navigation.map((item) => (
+                  <SortableNavItem key={item.name} item={item} />
+                ))}
               </SortableContext>
             </DndContext>
           ) : (
             navigation.map((item) => {
+              const Icon = item.icon;
               const active = isActive(item.href);
               
               // Handle click for hash anchors to navigate to overview page first
@@ -505,12 +452,41 @@ export default function GuildDashboardLayout({
               };
               
               return (
-                <SortableNavItem
+                <Link
                   key={item.name}
-                  item={item}
-                  isActiveItem={active}
-                  onItemClick={handleClick}
-                />
+                  href={item.href}
+                  onClick={handleClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                    active
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  )}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  <span className="flex-1">{item.name}</span>
+                  <div className="flex items-center gap-1.5">
+                    {item.tier && (
+                      <span className={cn(
+                        "px-2 py-0.5 text-xs font-semibold rounded-full border",
+                        item.tier === 'Free' 
+                          ? "bg-gray-500/20 text-gray-300 border-gray-500/30"
+                          : item.tier === 'Basic'
+                          ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                          : item.tier === 'Premium'
+                          ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                          : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
+                      )}>
+                        {item.tier}
+                      </span>
+                    )}
+                    {item.badge && (
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                </Link>
               );
             })
           )}
