@@ -71,6 +71,7 @@ const createFeedbackHandlers = require('./modules/comcraft/bot/interactions/feed
 const createEventHandlers = require('./modules/comcraft/bot/interactions/events');
 const TopGGManager = require('./modules/comcraft/topgg/manager');
 const VoteRewardsScheduler = require('./modules/comcraft/vote-rewards/scheduler');
+const DiscordStatsManager = require('./modules/comcraft/stats/discord-stats-manager');
 // Music commands removed - now handled by separate music-bot
 // const MusicManager = require('./modules/comcraft/music/manager');
 // const MusicCommands = require('./modules/comcraft/music/commands');
@@ -844,6 +845,15 @@ client.once('ready', async () => {
     console.log('🎁 Vote Rewards Scheduler initialized');
   } catch (error) {
     console.error('❌ Failed to initialize Vote Rewards Scheduler:', error.message);
+  }
+
+  // Initialize Discord Stats Manager (for support server stats display)
+  try {
+    const discordStatsManager = new DiscordStatsManager(client);
+    await discordStatsManager.initialize();
+    global.discordStatsManager = discordStatsManager;
+  } catch (error) {
+    console.error('❌ Failed to initialize Discord Stats Manager:', error.message);
   }
 
   // Initialize Voice XP Scheduler
