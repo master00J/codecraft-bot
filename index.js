@@ -1515,8 +1515,8 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.isStringSelectMenu()) {
     // Handle roulette bet type selection
+    // IMPORTANT: Show modal IMMEDIATELY (no deferReply before modal!)
     if (interaction.customId.startsWith('roulette_bettype_')) {
-      await interaction.deferReply({ ephemeral: false });
       const userId = interaction.customId.split('_')[2];
       const selectedValue = interaction.values[0];
       
