@@ -798,7 +798,7 @@ export default function GuildAiPage() {
                         <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
                       )}
                       {settingsForm.defaultProvider === 'claude' && (
-                        <SelectItem value="claude-4-5-haiku-latest">Claude 4.5 Haiku</SelectItem>
+                        <SelectItem value="claude-3-5-haiku-latest">Claude 3.5 Haiku</SelectItem>
                       )}
                       {settingsForm.defaultProvider === 'deepseek' && (
                         <>
