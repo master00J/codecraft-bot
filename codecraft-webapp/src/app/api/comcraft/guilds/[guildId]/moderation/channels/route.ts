@@ -3,23 +3,49 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const supabase = supabaseAdmin;
 
 async function getGuildAccess(guildId: string, discordId: string) {
-  const { data: guild } = await supabase
+  const { data: guild, error: guildError } = await supabase
     .from('guild_configs')
-    .select('owner_discord_id, mod_role_id')
+    .select('owner_discord_id')
     .eq('guild_id', guildId)
-    .single();
+    .maybeSingle();
 
-  if (!guild) {
+  if (guildError || !guild) {
+    console.error('Guild lookup error:', guildError);
     return { allowed: false, reason: 'Guild not found' };
   }
 
   if (guild.owner_discord_id === discordId) {
-    return { allowed: true, reason: 'Owner' };
+    return { allowed: true };
   }
 
+  const { data: authorized } = await supabase
+    .from('authorized_users')
+    .select('user_id')
+    .eq('guild_id', guildId)
+    .eq('user_id', discordId)
+    .maybeSingle();
+
+  if (authorized) {
+    return { allowed: true };
+  }
+
+  // Check if user is platform admin
+  const { data: user } = await supabase
+    .from('users')
+    .select('is_admin')
+    .eq('discord_id', discordId)
+    .maybeSingle();
+
+  if (user?.is_admin) {
+    return { allowed: true };
+  }
+
+  console.log('Access denied for user', discordId, 'to guild', guildId);
   return { allowed: false, reason: 'Access denied' };
 }
 
