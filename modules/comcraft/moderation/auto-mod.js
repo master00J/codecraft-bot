@@ -18,8 +18,20 @@ class AutoMod {
    * Check message against all filters
    */
   async checkMessage(message) {
-    if (!message.guild || message.author.bot) return null;
-    if (message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+    console.log('[AutoMod] 🔍 Checking message from', message.author?.tag || 'unknown', 'in guild', message.guild?.id || 'none');
+    
+    if (!message.guild) {
+      console.log('[AutoMod] ⏭️ Skipping: No guild');
+      return null;
+    }
+    
+    if (message.author.bot) {
+      console.log('[AutoMod] ⏭️ Skipping: Bot message');
+      return null;
+    }
+    
+    if (message.member?.permissions?.has(PermissionFlagsBits.ManageMessages)) {
+      console.log('[AutoMod] ⏭️ Skipping: User has ManageMessages permission');
       return null; // Don't auto-mod moderators
     }
 
@@ -30,7 +42,8 @@ class AutoMod {
       automod_enabled: config?.automod_enabled,
       filter_spam: config?.filter_spam,
       filter_words: config?.filter_words?.length || 0,
-      has_channel_rules: !!channelRules
+      has_channel_rules: !!channelRules,
+      ai_moderation_enabled: config?.ai_moderation_enabled
     });
 
     if (!config || !config.automod_enabled) {
