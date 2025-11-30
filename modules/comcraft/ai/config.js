@@ -25,7 +25,7 @@ module.exports = {
   getClaudeConfig() {
     return {
       apiKey: process.env.ANTHROPIC_API_KEY || '',
-      model: process.env.CLAUDE_MODEL || 'claude-3-5-haiku-latest',
+      model: process.env.CLAUDE_MODEL || 'claude-4-5-haiku-latest',
     };
   },
 

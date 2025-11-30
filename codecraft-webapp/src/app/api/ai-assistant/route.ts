@@ -1100,7 +1100,7 @@ export async function POST(request: NextRequest) {
 
     // Call Claude API
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-4-5-haiku-latest',
       max_tokens: 1024,
       system: SYSTEM_PROMPT + tiersInfo + contextInfo,
       messages: [

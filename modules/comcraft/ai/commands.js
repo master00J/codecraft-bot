@@ -34,7 +34,7 @@ function getAiModelCommands() {
                 // Gemini models
                 { name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
                 // Claude models
-                { name: 'Claude 3.5 Haiku', value: 'claude-3-5-haiku-latest' },
+                { name: 'Claude 4.5 Haiku', value: 'claude-4-5-haiku-latest' },
                 // DeepSeek models
                 { name: 'DeepSeek Chat (V3.2)', value: 'deepseek-chat' },
                 { name: 'DeepSeek Reasoner (V3.2)', value: 'deepseek-reasoner' }
