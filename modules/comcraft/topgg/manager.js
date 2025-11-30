@@ -462,7 +462,7 @@ class TopGGManager {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bot ${this.discordBotListToken}`
+          'Authorization': this.discordBotListToken
         },
         body: JSON.stringify(commands)
       });
