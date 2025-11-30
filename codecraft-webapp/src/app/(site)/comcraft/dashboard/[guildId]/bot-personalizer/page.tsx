@@ -38,9 +38,11 @@ export default function BotPersonalizer() {
 
   // Initialize presenceText from botConfig only once on initial load
   const hasInitializedPresenceText = useRef(false);
+  const isUserControllingInput = useRef(false); // Track if user has interacted with input
+  
   useEffect(() => {
-    // Only initialize once when botConfig first loads
-    if (botConfig?.bot_presence_text !== undefined && !hasInitializedPresenceText.current) {
+    // Only initialize once when botConfig first loads AND user hasn't touched the input
+    if (botConfig?.bot_presence_text !== undefined && !hasInitializedPresenceText.current && !isUserControllingInput.current) {
       setPresenceText(botConfig.bot_presence_text);
       hasInitializedPresenceText.current = true;
     }
@@ -651,9 +653,11 @@ export default function BotPersonalizer() {
                   <Label htmlFor="presenceText">Status Text</Label>
                   <Input
                     id="presenceText"
-                    value={presenceText || botConfig?.bot_presence_text || 'codecraft-solutions.com | /help'}
+                    value={hasInitializedPresenceText.current ? presenceText : (botConfig?.bot_presence_text || 'codecraft-solutions.com | /help')}
                     onChange={(e) => {
                       const value = e.target.value;
+                      // Mark that user is now controlling the input
+                      isUserControllingInput.current = true;
                       // Mark that user is actively typing
                       presenceTextInputRef.current = value;
                       
