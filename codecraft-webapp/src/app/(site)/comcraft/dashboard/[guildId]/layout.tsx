@@ -32,8 +32,28 @@ import {
   Clock,
   Vote,
   Video,
-  Target
+  Target,
+  GripVertical,
+  Check,
+  X
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface NavItem {
   name: string;
@@ -54,6 +74,16 @@ export default function GuildDashboardLayout({
   const guildId = params.guildId as string;
   const [currentHash, setCurrentHash] = useState<string>('');
   const [featureTiers, setFeatureTiers] = useState<Record<string, string>>({});
+  const [menuOrder, setMenuOrder] = useState<string[] | null>(null);
+  const [isReorderMode, setIsReorderMode] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Track hash changes for active state
   useEffect(() => {
@@ -141,7 +171,65 @@ export default function GuildDashboardLayout({
     fetchFeatureTiers();
   }, []);
 
-  const navigation: NavItem[] = [
+  // Fetch menu order
+  useEffect(() => {
+    async function fetchMenuOrder() {
+      try {
+        const response = await fetch(`/api/comcraft/guilds/${guildId}/menu-order`);
+        const data = await response.json();
+        if (data.menuOrder) {
+          setMenuOrder(data.menuOrder);
+        }
+      } catch (error) {
+        console.error('Error fetching menu order:', error);
+      }
+    }
+
+    if (guildId) {
+      fetchMenuOrder();
+    }
+  }, [guildId]);
+
+  // Save menu order
+  const saveMenuOrder = async (newOrder: string[]) => {
+    setSavingOrder(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/menu-order`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menuOrder: newOrder }),
+      });
+
+      if (response.ok) {
+        setMenuOrder(newOrder);
+        setIsReorderMode(false);
+      } else {
+        console.error('Failed to save menu order');
+      }
+    } catch (error) {
+      console.error('Error saving menu order:', error);
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  // Handle drag end
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const currentOrder = menuOrder || navigation.map(item => item.name);
+      const oldIndex = currentOrder.indexOf(active.id as string);
+      const newIndex = currentOrder.indexOf(over.id as string);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+        setMenuOrder(newOrder);
+      }
+    }
+  };
+
+  const defaultNavigation: NavItem[] = [
     { name: 'Overview', href: `/comcraft/dashboard/${guildId}`, icon: LayoutDashboard },
     { name: 'Leveling', href: `/comcraft/dashboard/${guildId}#leveling`, icon: TrendingUp, tier: featureTiers['Leveling'] },
     { name: 'Moderation', href: `/comcraft/dashboard/${guildId}#moderation`, icon: Shield, tier: featureTiers['Moderation'] },
@@ -170,6 +258,107 @@ export default function GuildDashboardLayout({
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
   ];
+
+  // Apply menu order if available
+  const navigation = menuOrder && menuOrder.length > 0
+    ? menuOrder
+        .map(name => defaultNavigation.find(item => item.name === name))
+        .filter((item): item is NavItem => item !== undefined)
+        .concat(defaultNavigation.filter(item => !menuOrder.includes(item.name)))
+    : defaultNavigation;
+
+  // Sortable Nav Item Component
+  function SortableNavItem({ item, isActiveItem, onItemClick }: { item: NavItem; isActiveItem: boolean; onItemClick: (e: React.MouseEvent<HTMLAnchorElement>) => void }) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: item.name });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    const Icon = item.icon;
+
+    if (!isReorderMode) {
+      return (
+        <Link
+          ref={setNodeRef}
+          href={item.href}
+          onClick={onItemClick}
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+            isActiveItem
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+          )}
+        >
+          <Icon className="h-5 w-5 flex-shrink-0" />
+          <span className="flex-1">{item.name}</span>
+          <div className="flex items-center gap-1.5">
+            {item.tier && (
+              <span className={cn(
+                "px-2 py-0.5 text-xs font-semibold rounded-full border",
+                item.tier === 'Free' 
+                  ? "bg-gray-500/20 text-gray-300 border-gray-500/30"
+                  : item.tier === 'Basic'
+                  ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                  : item.tier === 'Premium'
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                  : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
+              )}>
+                {item.tier}
+              </span>
+            )}
+            {item.badge && (
+              <span className="px-2 py-0.5 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                {item.badge}
+              </span>
+            )}
+          </div>
+        </Link>
+      );
+    }
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-grab active:cursor-grabbing',
+          isDragging ? 'bg-blue-600/20' : 'bg-gray-800/50 hover:bg-gray-800'
+        )}
+      >
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+          <GripVertical className="h-4 w-4 text-gray-500" />
+        </div>
+        <Icon className="h-5 w-5 flex-shrink-0 text-gray-400" />
+        <span className="flex-1 text-gray-300">{item.name}</span>
+        <div className="flex items-center gap-1.5">
+          {item.tier && (
+            <span className={cn(
+              "px-2 py-0.5 text-xs font-semibold rounded-full border",
+              item.tier === 'Free' 
+                ? "bg-gray-500/20 text-gray-300 border-gray-500/30"
+                : item.tier === 'Basic'
+                ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                : item.tier === 'Premium'
+                ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
+            )}>
+              {item.tier}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const isActive = (href: string) => {
     if (!pathname) return false;
@@ -204,7 +393,7 @@ export default function GuildDashboardLayout({
       <aside className="fixed left-0 top-0 h-screen w-64 bg-[#1a1f2e] border-r border-gray-800 overflow-y-auto flex flex-col z-50">
         {/* Header */}
         <div className="p-4 border-b border-gray-800">
-          <Link href="/comcraft/dashboard" className="flex items-center gap-3 group">
+          <Link href="/comcraft/dashboard" className="flex items-center gap-3 group mb-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
               <Bot className="h-6 w-6 text-white" />
             </div>
@@ -215,73 +404,116 @@ export default function GuildDashboardLayout({
               <div className="text-xs text-gray-400">Dashboard</div>
             </div>
           </Link>
+          {!isReorderMode ? (
+            <button
+              onClick={() => {
+                setIsReorderMode(true);
+                if (!menuOrder) {
+                  setMenuOrder(navigation.map(item => item.name));
+                }
+              }}
+              className="w-full px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2 justify-center"
+            >
+              <GripVertical className="h-3 w-3" />
+              Reorder Menu
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (menuOrder) {
+                    saveMenuOrder(menuOrder);
+                  }
+                }}
+                disabled={savingOrder}
+                className="flex-1 px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2 justify-center disabled:opacity-50"
+              >
+                <Check className="h-3 w-3" />
+                {savingOrder ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={() => {
+                  setIsReorderMode(false);
+                  // Reload original order
+                  fetch(`/api/comcraft/guilds/${guildId}/menu-order`)
+                    .then(res => res.json())
+                    .then(data => setMenuOrder(data.menuOrder || null))
+                    .catch(() => setMenuOrder(null));
+                }}
+                className="px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center justify-center"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-0.5">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            
-            // Handle click for hash anchors to navigate to overview page first
-            const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-              const [path, hash] = item.href.split('#');
-              if (hash) {
-                e.preventDefault();
-                
-                // Check if we're already on the overview page
-                const isOnOverviewPage = pathname === `/comcraft/dashboard/${guildId}`;
-                
-                if (isOnOverviewPage) {
-                  // If already on overview page, just update the hash directly
-                  // This will trigger the hashchange event which the page component listens to
-                  window.location.hash = hash;
-                } else {
-                  // If not on overview page, navigate to it with the hash
-                  router.push(`/comcraft/dashboard/${guildId}#${hash}`);
-                }
-              }
-              // For regular links, let the Link component handle navigation
-            };
-            
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={handleClick}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                  active
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                )}
+          {isReorderMode ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={navigation.map(item => item.name)}
+                strategy={verticalListSortingStrategy}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                <span className="flex-1">{item.name}</span>
-                <div className="flex items-center gap-1.5">
-                  {item.tier && (
-                    <span className={cn(
-                      "px-2 py-0.5 text-xs font-semibold rounded-full border",
-                      item.tier === 'Free' 
-                        ? "bg-gray-500/20 text-gray-300 border-gray-500/30"
-                        : item.tier === 'Basic'
-                        ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
-                        : item.tier === 'Premium'
-                        ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
-                        : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
-                    )}>
-                      {item.tier}
-                    </span>
-                  )}
-                  {item.badge && (
-                    <span className="px-2 py-0.5 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+                {navigation.map((item) => {
+                  const active = isActive(item.href);
+                  
+                  // Handle click for hash anchors to navigate to overview page first
+                  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+                    e.preventDefault();
+                  };
+                  
+                  return (
+                    <SortableNavItem
+                      key={item.name}
+                      item={item}
+                      isActiveItem={active}
+                      onItemClick={handleClick}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            navigation.map((item) => {
+              const active = isActive(item.href);
+              
+              // Handle click for hash anchors to navigate to overview page first
+              const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+                const [path, hash] = item.href.split('#');
+                if (hash) {
+                  e.preventDefault();
+                  
+                  // Check if we're already on the overview page
+                  const isOnOverviewPage = pathname === `/comcraft/dashboard/${guildId}`;
+                  
+                  if (isOnOverviewPage) {
+                    // If already on overview page, just update the hash directly
+                    // This will trigger the hashchange event which the page component listens to
+                    window.location.hash = hash;
+                  } else {
+                    // If not on overview page, navigate to it with the hash
+                    router.push(`/comcraft/dashboard/${guildId}#${hash}`);
+                  }
+                }
+                // For regular links, let the Link component handle navigation
+              };
+              
+              return (
+                <SortableNavItem
+                  key={item.name}
+                  item={item}
+                  isActiveItem={active}
+                  onItemClick={handleClick}
+                />
+              );
+            })
+          )}
         </nav>
 
         {/* Footer */}
