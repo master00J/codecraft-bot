@@ -61,6 +61,15 @@ try {
   console.warn('⚠️ SlotsGifGenerator not available:', error.message);
 }
 
+// Import RouletteGenerator for animated roulette
+let RouletteGenerator;
+try {
+  RouletteGenerator = require('./roulette-generator');
+  console.log('✓ RouletteGenerator imported successfully');
+} catch (error) {
+  console.warn('⚠️ RouletteGenerator not available:', error.message);
+}
+
 class CasinoManager {
   constructor() {
     if (!process.env.SUPABASE_URL) {
@@ -116,6 +125,19 @@ class CasinoManager {
         });
         console.log('✓ SlotsGifGenerator initialized (3x3 grid)');
       }
+      
+      // Initialize roulette generator for animated roulette wheel
+      if (RouletteGenerator) {
+        this.rouletteGenerator = new RouletteGenerator({
+          width: 400,
+          height: 400,
+          frameDelay: 50,
+          spinFrames: 60,
+          decelerationFrames: 30,
+          resultFrames: 20,
+        });
+        console.log('✓ RouletteGenerator initialized');
+      }
     } catch (error) {
       console.error('Error creating CasinoManager:', error);
       throw error;
@@ -145,7 +167,7 @@ class CasinoManager {
           slots_enabled: true,
           coinflip_enabled: true,
           blackjack_enabled: true,
-          roulette_enabled: false,
+          roulette_enabled: true,
           house_edge: 5.0,
           game_cooldown: 0,
         })
@@ -255,6 +277,15 @@ class CasinoManager {
         new ButtonBuilder()
           .setCustomId(`casino_blackjack_${userId}`)
           .setLabel('🃏 Blackjack')
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+
+    if (config.roulette_enabled) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`casino_roulette_${userId}`)
+          .setLabel('🎡 Roulette')
           .setStyle(ButtonStyle.Primary)
       );
     }
@@ -1264,6 +1295,163 @@ class CasinoManager {
     modal.addComponents(new ActionRowBuilder().addComponents(betInput));
 
     return modal;
+  }
+
+  /**
+   * Get number color for roulette
+   */
+  getRouletteNumberColor(number) {
+    if (number === 0) return 'green';
+    const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+    return redNumbers.includes(number) ? 'red' : 'black';
+  }
+
+  /**
+   * Play roulette game
+   */
+  async playRoulette(guildId, userId, username, betAmount, betType, betValue) {
+    const config = await this.getCasinoConfig(guildId);
+    if (!config || !config.roulette_enabled) {
+      return { success: false, error: 'Roulette is disabled' };
+    }
+
+    if (betAmount < config.min_bet || betAmount > config.max_bet) {
+      return {
+        success: false,
+        error: `Bet must be between ${config.min_bet.toLocaleString()} and ${config.max_bet.toLocaleString()} coins`,
+      };
+    }
+
+    const userEconomy = await this.economyManager.getUserEconomy(guildId, userId, username);
+    if (!userEconomy || BigInt(userEconomy.balance) < BigInt(betAmount)) {
+      return { success: false, error: 'Insufficient balance' };
+    }
+
+    // Generate winning number (0-36)
+    const winningNumber = Math.floor(Math.random() * 37);
+    const winningColor = this.getRouletteNumberColor(winningNumber);
+    const winningOddEven = winningNumber === 0 ? null : (winningNumber % 2 === 1 ? 'odd' : 'even');
+    const winningHighLow = winningNumber === 0 ? null : (winningNumber <= 18 ? 'low' : 'high');
+
+    // Calculate if bet won
+    let won = false;
+    let payoutMultiplier = 0;
+
+    switch (betType) {
+      case 'straight':
+        // Bet on specific number (0-36) - 35:1 payout
+        won = parseInt(betValue) === winningNumber;
+        payoutMultiplier = won ? 35 : 0;
+        break;
+      case 'color':
+        // Bet on red or black - 1:1 payout
+        won = betValue === winningColor;
+        payoutMultiplier = won ? 1 : 0;
+        break;
+      case 'odd_even':
+        // Bet on odd or even - 1:1 payout
+        won = betValue === winningOddEven;
+        payoutMultiplier = won ? 1 : 0;
+        break;
+      case 'high_low':
+        // Bet on 1-18 (low) or 19-36 (high) - 1:1 payout
+        won = betValue === winningHighLow;
+        payoutMultiplier = won ? 1 : 0;
+        break;
+      case 'dozen':
+        // Bet on 1-12, 13-24, or 25-36 - 2:1 payout
+        const dozen = parseInt(betValue);
+        if (dozen === 1) won = winningNumber >= 1 && winningNumber <= 12;
+        else if (dozen === 2) won = winningNumber >= 13 && winningNumber <= 24;
+        else if (dozen === 3) won = winningNumber >= 25 && winningNumber <= 36;
+        payoutMultiplier = won ? 2 : 0;
+        break;
+      case 'column':
+        // Bet on column (1st, 2nd, or 3rd column) - 2:1 payout
+        const column = parseInt(betValue);
+        const column1 = [1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34];
+        const column2 = [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35];
+        const column3 = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36];
+        if (column === 1) won = column1.includes(winningNumber);
+        else if (column === 2) won = column2.includes(winningNumber);
+        else if (column === 3) won = column3.includes(winningNumber);
+        payoutMultiplier = won ? 2 : 0;
+        break;
+      default:
+        return { success: false, error: 'Invalid bet type' };
+    }
+
+    // Calculate win amount
+    let winAmount = 0;
+    let result = 'loss';
+    if (won) {
+      winAmount = Math.floor(betAmount * (payoutMultiplier + 1) * (1 - config.house_edge / 100));
+      result = 'win';
+      const netWin = winAmount - betAmount;
+      await this.economyManager.addCoins(
+        guildId,
+        userId,
+        netWin,
+        'casino_win',
+        `Roulette: ${betType} bet on ${betValue} - Won ${winningNumber}`,
+        { game_type: 'roulette', winningNumber, betType, betValue, payoutMultiplier }
+      );
+    } else {
+      await this.economyManager.removeCoins(
+        guildId,
+        userId,
+        betAmount,
+        'casino_loss',
+        `Roulette: ${betType} bet on ${betValue} - Lost (${winningNumber})`,
+        { game_type: 'roulette', winningNumber, betType, betValue }
+      );
+    }
+
+    // Log game
+    await this.logGame(guildId, userId, username, 'roulette', betAmount, winAmount, result, {
+      winningNumber,
+      betType,
+      betValue,
+      payoutMultiplier,
+    });
+
+    // Update stats
+    await this.updateStats(guildId, userId, 'roulette', betAmount, winAmount, result);
+
+    // Generate animated roulette GIF
+    let gifBuffer = null;
+    if (this.rouletteGenerator) {
+      try {
+        const gifResult = await this.rouletteGenerator.spin({
+          winningNumber,
+          betAmount,
+          betType,
+          playerName: username,
+        });
+        gifBuffer = gifResult.buffer;
+        console.log(`✅ RouletteGenerator: Created GIF buffer of ${gifBuffer.length} bytes`);
+      } catch (gifError) {
+        console.warn('⚠️ Failed to generate roulette GIF:', gifError.message);
+      }
+    } else {
+      console.warn('⚠️ RouletteGenerator not initialized');
+    }
+
+    return {
+      success: true,
+      result,
+      winningNumber,
+      winningColor,
+      winningOddEven,
+      winningHighLow,
+      betType,
+      betValue,
+      betAmount,
+      winAmount,
+      payoutMultiplier,
+      netResult: result === 'win' ? winAmount - betAmount : -betAmount,
+      gifBuffer, // Animated roulette GIF
+    };
   }
 }
 

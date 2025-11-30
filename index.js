@@ -1314,6 +1314,11 @@ client.on('interactionCreate', async (interaction) => {
     await handleCasinoBetModal(interaction);
     return;
   }
+  
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('roulette_bet_')) {
+    await handleRouletteBetModal(interaction);
+    return;
+  }
 
   const allowedCommands = ['help'];
   if (!(await ensureInteractionLicense(interaction, { allowedCommands }))) {
@@ -1509,6 +1514,67 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
+    // Handle roulette bet type selection
+    if (interaction.customId.startsWith('roulette_bettype_')) {
+      await interaction.deferReply({ ephemeral: false });
+      const userId = interaction.customId.split('_')[2];
+      const selectedValue = interaction.values[0];
+      
+      // Parse bet type and value
+      const [betType, ...betValueParts] = selectedValue.split('_');
+      const betValue = betValueParts.join('_');
+      
+      // Show bet amount modal for straight bets, or bet amount modal for others
+      if (betType === 'straight') {
+        // For straight bets, need number selection
+        const modal = new ModalBuilder()
+          .setCustomId(`roulette_bet_straight_${userId}_${betValue}`)
+          .setTitle('🎡 Roulette - Straight Bet');
+        
+        const numberInput = new TextInputBuilder()
+          .setCustomId('number')
+          .setLabel('Number (0-36)')
+          .setPlaceholder('Enter number to bet on (0-36)...')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMinLength(1)
+          .setMaxLength(2);
+        
+        const betInput = new TextInputBuilder()
+          .setCustomId('bet_amount')
+          .setLabel('Bet Amount')
+          .setPlaceholder('Enter amount to bet...')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMinLength(1)
+          .setMaxLength(10);
+        
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(numberInput),
+          new ActionRowBuilder().addComponents(betInput)
+        );
+        
+        return interaction.showModal(modal);
+      } else {
+        // For other bets, just need bet amount
+        const modal = new ModalBuilder()
+          .setCustomId(`roulette_bet_${betType}_${userId}_${betValue}`)
+          .setTitle(`🎡 Roulette - ${betType.charAt(0).toUpperCase() + betType.slice(1)} Bet`);
+        
+        const betInput = new TextInputBuilder()
+          .setCustomId('bet_amount')
+          .setLabel('Bet Amount')
+          .setPlaceholder('Enter amount to bet...')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMinLength(1)
+          .setMaxLength(10);
+        
+        modal.addComponents(new ActionRowBuilder().addComponents(betInput));
+        return interaction.showModal(modal);
+      }
+    }
+    
     // Handle shop item selection
     if (interaction.customId.startsWith('shop_select_')) {
       return await handleShopItemSelect(interaction);
@@ -4513,6 +4579,140 @@ async function handleCasinoButton(interaction, featureGate) {
     return interaction.editReply({ embeds: [embed], components: [row] });
   }
 
+  // Roulette button - show bet type selection
+  if (customId.startsWith('casino_roulette_')) {
+    const userId = customId.split('_')[2];
+    if (interaction.user.id !== userId) {
+      return interaction.reply({
+        content: '❌ This is not your roulette game!',
+        ephemeral: true
+      });
+    }
+    
+    const hasFeature = await featureGate.checkFeature(interaction.guild.id, 'casino');
+    if (!hasFeature) {
+      return interaction.reply({
+        content: '❌ Casino is a Premium feature. Upgrade to access this feature!',
+        ephemeral: true
+      });
+    }
+    
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🎡 Roulette - Choose Bet Type')
+      .setDescription('Select what you want to bet on:')
+      .addFields(
+        {
+          name: '🎯 Straight Up',
+          value: 'Bet on a specific number (0-36)\nPayout: **35:1**',
+          inline: false
+        },
+        {
+          name: '🔴⚫ Color',
+          value: 'Bet on Red or Black\nPayout: **1:1**',
+          inline: false
+        },
+        {
+          name: '⚪⚫ Odd/Even',
+          value: 'Bet on Odd or Even numbers\nPayout: **1:1**',
+          inline: false
+        },
+        {
+          name: '📊 High/Low',
+          value: 'Bet on 1-18 (Low) or 19-36 (High)\nPayout: **1:1**',
+          inline: false
+        },
+        {
+          name: '📦 Dozen',
+          value: 'Bet on 1st (1-12), 2nd (13-24), or 3rd (25-36) dozen\nPayout: **2:1**',
+          inline: false
+        },
+        {
+          name: '📋 Column',
+          value: 'Bet on 1st, 2nd, or 3rd column\nPayout: **2:1**',
+          inline: false
+        }
+      )
+      .setFooter({ text: 'European Roulette (0-36)' })
+      .setTimestamp();
+    
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`roulette_bettype_${userId}`)
+        .setPlaceholder('Select your bet type...')
+        .addOptions(
+          {
+            label: '🎯 Straight Up (35:1)',
+            description: 'Bet on a specific number',
+            value: 'straight'
+          },
+          {
+            label: '🔴 Red (1:1)',
+            description: 'Bet on red numbers',
+            value: 'color_red'
+          },
+          {
+            label: '⚫ Black (1:1)',
+            description: 'Bet on black numbers',
+            value: 'color_black'
+          },
+          {
+            label: '⚪ Odd (1:1)',
+            description: 'Bet on odd numbers',
+            value: 'odd_even_odd'
+          },
+          {
+            label: '⚫ Even (1:1)',
+            description: 'Bet on even numbers',
+            value: 'odd_even_even'
+          },
+          {
+            label: '📊 Low 1-18 (1:1)',
+            description: 'Bet on numbers 1-18',
+            value: 'high_low_low'
+          },
+          {
+            label: '📊 High 19-36 (1:1)',
+            description: 'Bet on numbers 19-36',
+            value: 'high_low_high'
+          },
+          {
+            label: '📦 1st Dozen 1-12 (2:1)',
+            description: 'Bet on first dozen',
+            value: 'dozen_1'
+          },
+          {
+            label: '📦 2nd Dozen 13-24 (2:1)',
+            description: 'Bet on second dozen',
+            value: 'dozen_2'
+          },
+          {
+            label: '📦 3rd Dozen 25-36 (2:1)',
+            description: 'Bet on third dozen',
+            value: 'dozen_3'
+          },
+          {
+            label: '📋 1st Column (2:1)',
+            description: 'Bet on first column',
+            value: 'column_1'
+          },
+          {
+            label: '📋 2nd Column (2:1)',
+            description: 'Bet on second column',
+            value: 'column_2'
+          },
+          {
+            label: '📋 3rd Column (2:1)',
+            description: 'Bet on third column',
+            value: 'column_3'
+          }
+        )
+    );
+    
+    await interaction.deferReply({ ephemeral: false });
+    return interaction.editReply({ embeds: [embed], components: [row] });
+  }
+
   // Game selection buttons - show bet modal IMMEDIATELY (no async operations before modal!)
   // Feature check will be done in the modal submit handler
   // Note: Exclude blackjack hit/stand actions (they have gameId in customId)
@@ -6276,6 +6476,200 @@ async function handleCasinoBetModal(interaction) {
 
     return interaction.editReply({ embeds: [embed], components: [row] });
   }
+}
+
+async function handleRouletteBetModal(interaction) {
+  if (!casinoManager || !economyManager) {
+    return interaction.reply({
+      content: '❌ Casino system is not available.',
+      ephemeral: true,
+    }).catch(() => {});
+  }
+
+  const customId = interaction.customId;
+  const parts = customId.split('_');
+  const betType = parts[2]; // straight, color, odd_even, etc.
+  const userId = parts[3];
+  const betValue = parts.slice(4).join('_'); // For straight bets, this might be empty
+
+  if (interaction.user.id !== userId) {
+    return interaction.reply({
+      content: '❌ This is not your roulette bet!',
+      ephemeral: true
+    });
+  }
+
+  await interaction.deferReply({ ephemeral: false });
+
+  const guildId = interaction.guild.id;
+  const username = interaction.user.username;
+
+  let betAmount;
+  let actualBetValue = betValue || '';
+
+  try {
+    if (betType === 'straight') {
+      const numberInput = interaction.fields.getTextInputValue('number');
+      const betAmountInput = interaction.fields.getTextInputValue('bet_amount');
+      
+      const number = parseInt(numberInput);
+      if (isNaN(number) || number < 0 || number > 36) {
+        return interaction.editReply({
+          content: '❌ Invalid number! Please enter a number between 0 and 36.',
+        });
+      }
+      
+      actualBetValue = number.toString();
+      betAmount = parseInt(betAmountInput.replace(/[,\s]/g, ''));
+    } else {
+      betAmount = parseInt(interaction.fields.getTextInputValue('bet_amount').replace(/[,\s]/g, ''));
+      
+      // Normalize bet value based on bet type
+      if (betType === 'color') {
+        actualBetValue = betValue; // 'red' or 'black'
+      } else if (betType === 'odd_even') {
+        actualBetValue = betValue; // 'odd' or 'even'
+      } else if (betType === 'high_low') {
+        actualBetValue = betValue; // 'low' or 'high'
+      } else if (betType === 'dozen') {
+        actualBetValue = betValue; // '1', '2', or '3'
+      } else if (betType === 'column') {
+        actualBetValue = betValue; // '1', '2', or '3'
+      }
+    }
+
+    if (isNaN(betAmount) || betAmount <= 0) {
+      return interaction.editReply({
+        content: '❌ Invalid bet amount! Please enter a valid number.',
+      });
+    }
+  } catch (error) {
+    return interaction.editReply({
+      content: '❌ Invalid input! Please check your bet amount and try again.',
+    });
+  }
+
+  // Play roulette
+  const result = await casinoManager.playRoulette(
+    guildId,
+    userId,
+    username,
+    betAmount,
+    betType,
+    actualBetValue
+  );
+
+  if (!result.success) {
+    return interaction.editReply({
+      content: `❌ ${result.error}`,
+    });
+  }
+
+  // STEP 1: Show spinning animation (if GIF available)
+  if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+    const rouletteGif = new AttachmentBuilder(result.gifBuffer, { name: 'roulette-spin.gif' });
+    const gifDuration = 110 * 50; // Approximate duration in ms (frames * delay)
+
+    const spinningEmbed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🎡 Roulette - Spinning...')
+      .setDescription('The wheel is spinning...')
+      .setImage('attachment://roulette-spin.gif')
+      .setTimestamp();
+
+    await interaction.editReply({
+      content: null,
+      embeds: [spinningEmbed],
+      files: [rouletteGif],
+      components: [],
+    });
+
+    // Wait for GIF to play
+    await new Promise(resolve => setTimeout(resolve, gifDuration));
+  }
+
+  // STEP 2: Show result embed
+  const colorEmoji = result.winningColor === 'red' ? '🔴' : result.winningColor === 'black' ? '⚫' : '🟢';
+  
+  let betDescription = '';
+  switch (betType) {
+    case 'straight':
+      betDescription = `Number **${actualBetValue}**`;
+      break;
+    case 'color':
+      betDescription = `**${actualBetValue.charAt(0).toUpperCase() + actualBetValue.slice(1)}**`;
+      break;
+    case 'odd_even':
+      betDescription = `**${actualBetValue.charAt(0).toUpperCase() + actualBetValue.slice(1)}**`;
+      break;
+    case 'high_low':
+      betDescription = `**${actualBetValue.charAt(0).toUpperCase() + actualBetValue.slice(1)}** (${actualBetValue === 'low' ? '1-18' : '19-36'})`;
+      break;
+    case 'dozen':
+      betDescription = `**${actualBetValue}${actualBetValue === '1' ? 'st' : actualBetValue === '2' ? 'nd' : 'rd'} Dozen** (${actualBetValue === '1' ? '1-12' : actualBetValue === '2' ? '13-24' : '25-36'})`;
+      break;
+    case 'column':
+      betDescription = `**${actualBetValue}${actualBetValue === '1' ? 'st' : actualBetValue === '2' ? 'nd' : 'rd'} Column**`;
+      break;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(result.result === 'win' ? '#22C55E' : '#EF4444')
+    .setTitle(
+      result.result === 'win'
+        ? '🎉 You Won!'
+        : '😢 You Lost'
+    )
+    .setDescription(
+      `\`\`\`\n` +
+      `🎡 ROULETTE 🎡\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `\n` +
+      `  WINNING NUMBER\n` +
+      `  ${colorEmoji} **${result.winningNumber}** ${colorEmoji}\n` +
+      `  ${result.winningColor.toUpperCase()} • ${result.winningOddEven ? result.winningOddEven.toUpperCase() : 'N/A'}\n` +
+      `\n` +
+      `  YOUR BET\n` +
+      `  ${betDescription}\n` +
+      `\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `\`\`\``
+    )
+    .addFields(
+      {
+        name: '💰 Bet Amount',
+        value: `${economyManager.formatCoins(betAmount)} coins`,
+        inline: true,
+      },
+      {
+        name: result.result === 'win' ? '🎁 Win Amount' : '💸 Loss',
+        value: result.result === 'win'
+          ? `+${economyManager.formatCoins(result.netResult)} coins`
+          : `-${economyManager.formatCoins(Math.abs(result.netResult))} coins`,
+        inline: true,
+      },
+      {
+        name: '📊 Payout',
+        value: `${result.payoutMultiplier}:1`,
+        inline: true,
+      }
+    )
+    .setFooter({ text: 'European Roulette (0-36)' })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`casino_roulette_${userId}`)
+      .setLabel('🎡 Play Again')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return interaction.editReply({
+    content: null,
+    embeds: [embed],
+    components: [row],
+    files: [], // Clear files for result embed
+  });
 }
 
 // ================================================================
