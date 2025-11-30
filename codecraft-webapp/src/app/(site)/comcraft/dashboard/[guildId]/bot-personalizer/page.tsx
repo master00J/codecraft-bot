@@ -36,22 +36,15 @@ export default function BotPersonalizer() {
     }
   }, [guildId]);
 
-  // Initialize presenceText from botConfig when it first loads (but not on subsequent updates)
+  // Initialize presenceText from botConfig only once on initial load
+  const hasInitializedPresenceText = useRef(false);
   useEffect(() => {
-    // Only update if user is not actively typing
-    if (botConfig?.bot_presence_text !== undefined) {
-      const configText = botConfig.bot_presence_text;
-      // Only update if:
-      // 1. presenceText is empty (initial load), OR
-      // 2. User is not actively typing (inputRef is empty string means not typing)
-      //    AND the current presenceText doesn't match the config (meaning it hasn't been manually set)
-      const isUserTyping = presenceTextInputRef.current !== '';
-      
-      if (!isUserTyping && (presenceText === '' || presenceText === configText)) {
-        setPresenceText(configText);
-      }
+    // Only initialize once when botConfig first loads
+    if (botConfig?.bot_presence_text !== undefined && !hasInitializedPresenceText.current) {
+      setPresenceText(botConfig.bot_presence_text);
+      hasInitializedPresenceText.current = true;
     }
-  }, [botConfig?.bot_presence_text, presenceText]);
+  }, [botConfig]);
 
   // Auto-refresh bot status if bot is offline/installing/starting
   useEffect(() => {
