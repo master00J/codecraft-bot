@@ -91,7 +91,10 @@ function createAiHandlers({
         tools: webSearchTools || undefined,
       };
 
-      const options = providerToUse ? { provider: providerToUse } : {};
+      const guildModel = settings?.ai_model || null;
+      const options = providerToUse 
+        ? { provider: providerToUse, model: guildModel } 
+        : { model: guildModel };
 
       const quotaCheck = await aiUsageService.ensureWithinQuota(guildId);
       if (!quotaCheck.allowed) {

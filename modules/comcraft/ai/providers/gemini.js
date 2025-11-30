@@ -215,7 +215,7 @@ class GeminiProvider extends BaseProvider {
     return normalizeModelName(model);
   }
 
-  async generate(payload) {
+  async generate(payload, guildModel = null) {
     await this.ensureClient();
 
     const {
@@ -257,9 +257,10 @@ class GeminiProvider extends BaseProvider {
       const text = extractTextFromResponse(response);
       const usage = mapUsage(response?.usageMetadata);
 
+      const modelName = guildModel || this.getModelName();
       return {
         provider: this.name,
-        model: this.getModelName(),
+        model: modelName,
         text: text.trim(),
         usage,
         raw: response,
@@ -270,7 +271,7 @@ class GeminiProvider extends BaseProvider {
     }
   }
 
-  async generateStream(payload, { onStream } = {}) {
+  async generateStream(payload, { onStream } = {}, guildModel = null) {
     await this.ensureClient();
 
     const {
@@ -291,7 +292,7 @@ class GeminiProvider extends BaseProvider {
 
     const { systemInstruction, contents } = splitSystemAndMessages(messages);
 
-    const modelName = this.getModelName();
+    const modelName = guildModel || this.getModelName();
     let collected = '';
 
     try {

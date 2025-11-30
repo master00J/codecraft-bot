@@ -5,9 +5,11 @@ const usageTracker = require('./usage-tracker');
 
 const geminiProvider = require('./providers/gemini');
 const claudeProvider = require('./providers/claude');
+const deepseekProvider = require('./providers/deepseek');
 
 registry.register('gemini', geminiProvider);
 registry.register('claude', claudeProvider);
+registry.register('deepseek', deepseekProvider);
 
 const listeners = {
   queue: [],
@@ -63,10 +65,11 @@ async function runTask(type, payload, options = {}) {
 
     switch (type) {
       case 'generate':
+        const guildModel = options.model || null;
         if (onStream && provider.supportsStreaming()) {
-          result = await provider.generateStream(payload, { onStream: runOnStream });
+          result = await provider.generateStream(payload, { onStream: runOnStream }, guildModel);
         } else {
-          result = await provider.generate(payload);
+          result = await provider.generate(payload, guildModel);
           if (onStream && result?.text) {
             runOnStream('', { done: true, text: result.text });
           }

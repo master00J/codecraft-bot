@@ -1714,6 +1714,10 @@ client.on('interactionCreate', async (interaction) => {
         await handleAskAiCommand(interaction);
         break;
 
+      case 'aimodel':
+        await require('./modules/comcraft/ai/commands.js').handleAiModelCommand(interaction, aiStore);
+        break;
+
       // ============ TICKET SYSTEM ============
       case 'ticket': {
         const allowed = await featureGate.checkFeature(interaction.guild.id, SUPPORT_TICKETS_FEATURE);
@@ -6743,6 +6747,9 @@ async function registerCommands(clientInstance) {
           .setDescription('Your question for the AI')
           .setRequired(true)
       ),
+
+    // AI Model Management
+    ...(require('./modules/comcraft/ai/commands.js').getAiModelCommands()),
 
     // ============ ECONOMY COMMANDS ============
     new SlashCommandBuilder()

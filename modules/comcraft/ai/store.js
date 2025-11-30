@@ -31,6 +31,17 @@ class AiStore {
     this.cache.set(key, { value, timestamp: Date.now() });
   }
 
+  clearCache(guildId) {
+    // Clear all cache entries for this guild
+    const keysToDelete = [];
+    for (const key of this.cache.keys()) {
+      if (key.includes(`:${guildId}`)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach(key => this.cache.delete(key));
+  }
+
   async getPersona(guildId) {
     const cacheKey = this.getCacheKey('persona', guildId);
     const cached = this.getFromCache(cacheKey);
@@ -75,6 +86,7 @@ class AiStore {
       allow_question_command: true,
       allow_moderation: false,
       default_provider: 'gemini',
+      ai_model: null,
       chat_enabled: false,
       chat_channel_id: null,
       allowed_channel_ids: [],

@@ -29,6 +29,13 @@ module.exports = {
     };
   },
 
+  getDeepSeekConfig() {
+    return {
+      apiKey: process.env.DEEPSEEK_API_KEY || '',
+      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    };
+  },
+
   getQueueConfig() {
     return {
       concurrency: Number(process.env.AI_QUEUE_CONCURRENCY || 3),
@@ -53,6 +60,10 @@ module.exports = {
       claude: {
         input: Number(process.env.AI_COST_CLAUDE_INPUT_PER_1K || 0),
         output: Number(process.env.AI_COST_CLAUDE_OUTPUT_PER_1K || 0),
+      },
+      deepseek: {
+        input: Number(process.env.AI_COST_DEEPSEEK_INPUT_PER_1K || 0),
+        output: Number(process.env.AI_COST_DEEPSEEK_OUTPUT_PER_1K || 0),
       },
     };
 

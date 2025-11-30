@@ -229,13 +229,18 @@ export async function PATCH(
     // Validate and accept default_provider if provided
     if (settings.default_provider !== undefined) {
       const provider = String(settings.default_provider || '').toLowerCase();
-      if (provider && provider !== 'gemini' && provider !== 'claude') {
-        return NextResponse.json({ error: 'Invalid default_provider. Use "gemini" or "claude".' }, { status: 400 });
+      if (provider && provider !== 'gemini' && provider !== 'claude' && provider !== 'deepseek') {
+        return NextResponse.json({ error: 'Invalid default_provider. Use "gemini", "claude", or "deepseek".' }, { status: 400 });
       }
       settingsPayload.default_provider = provider || null;
       if (provider && provider !== 'claude') {
         settingsPayload.web_search_enabled = false;
       }
+    }
+
+    // Validate and accept ai_model if provided
+    if (settings.ai_model !== undefined) {
+      settingsPayload.ai_model = settings.ai_model || null;
     }
 
     if (
@@ -264,6 +269,7 @@ export async function PATCH(
       memory_max_entries: settingsPayload.memory_max_entries ?? 200,
       memory_retention_days: settingsPayload.memory_retention_days ?? 90,
       web_search_enabled: settingsPayload.web_search_enabled ?? false,
+      ai_model: settingsPayload.ai_model ?? null,
     };
 
     const { data: savedSettings, error: upsertError } = await supabase

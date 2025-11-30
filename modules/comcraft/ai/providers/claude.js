@@ -103,7 +103,7 @@ class ClaudeProvider extends BaseProvider {
     return config.getClaudeConfig().model;
   }
 
-  async generate(payload) {
+  async generate(payload, guildModel = null) {
     this.ensureClient();
     const {
       system,
@@ -126,8 +126,9 @@ class ClaudeProvider extends BaseProvider {
     const systemPrompt = messages.find((msg) => msg.role === 'system')?.content;
     const filteredMessages = toClaudeMessages(messages);
 
+    const modelName = guildModel || this.getModelName();
     const requestPayload = {
-      model: this.getModelName(),
+      model: modelName,
       max_tokens: maxOutputTokens,
       temperature,
       system: systemPrompt,
@@ -142,9 +143,10 @@ class ClaudeProvider extends BaseProvider {
       const result = await this.client.messages.create(requestPayload);
 
       const text = extractTextFromContent(result?.content) || result?.content?.[0]?.text || '';
+      const modelName = guildModel || this.getModelName();
       return {
         provider: this.name,
-        model: this.getModelName(),
+        model: modelName,
         text: text.trim(),
         usage: mapUsage(result?.usage),
         raw: result,
@@ -155,10 +157,10 @@ class ClaudeProvider extends BaseProvider {
     }
   }
 
-  async generateStream(payload, { onStream } = {}) {
+  async generateStream(payload, { onStream } = {}, guildModel = null) {
     if (Array.isArray(payload?.tools) && payload.tools.length > 0) {
       // Claude streaming met tools wordt nog niet ondersteund; val terug op non-streaming.
-      return this.generate(payload);
+      return this.generate(payload, guildModel);
     }
     this.ensureClient();
     const {
@@ -179,7 +181,7 @@ class ClaudeProvider extends BaseProvider {
 
     const systemPrompt = messages.find((msg) => msg.role === 'system')?.content;
     const filteredMessages = toClaudeMessages(messages);
-    const modelName = this.getModelName();
+    const modelName = guildModel || this.getModelName();
 
     const safeOnStream = (chunk, meta) => {
       if (typeof onStream !== 'function') return;

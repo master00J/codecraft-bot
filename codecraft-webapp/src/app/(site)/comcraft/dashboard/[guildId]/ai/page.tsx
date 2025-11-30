@@ -25,7 +25,8 @@ interface PersonaFormState {
 interface SettingsFormState {
   allowQuestions: boolean;
   allowModeration: boolean;
-  defaultProvider: 'gemini' | 'claude';
+  defaultProvider: 'gemini' | 'claude' | 'deepseek';
+  aiModel: string | null;
   chatEnabled: boolean;
   chatChannelId: string | null;
   allowedChannelIds: string[]; // Array of channel IDs where AI is allowed
@@ -37,11 +38,12 @@ interface SettingsFormState {
 }
 
 function mapSettingsToForm(raw: any): SettingsFormState {
-  const provider = raw?.default_provider === 'claude' ? 'claude' : 'gemini';
+  const provider = raw?.default_provider === 'claude' ? 'claude' : raw?.default_provider === 'deepseek' ? 'deepseek' : 'gemini';
   return {
     allowQuestions: raw?.allow_question_command !== false,
     allowModeration: Boolean(raw?.allow_moderation),
     defaultProvider: provider,
+    aiModel: raw?.ai_model || null,
     chatEnabled: Boolean(raw?.chat_enabled),
     chatChannelId: raw?.chat_channel_id || null,
     allowedChannelIds: Array.isArray(raw?.allowed_channel_ids) ? raw.allowed_channel_ids : [],
@@ -262,6 +264,7 @@ export default function GuildAiPage() {
             allow_question_command: settingsForm.allowQuestions,
             allow_moderation: settingsForm.allowModeration,
             default_provider: settingsForm.defaultProvider,
+            ai_model: settingsForm.aiModel,
             chat_enabled: settingsForm.chatEnabled,
             chat_channel_id: settingsForm.chatChannelId,
             allowed_channel_ids: settingsForm.allowedChannelIds,
@@ -302,6 +305,7 @@ export default function GuildAiPage() {
             allow_question_command: settingsForm.allowQuestions,
             allow_moderation: settingsForm.allowModeration,
             default_provider: settingsForm.defaultProvider,
+            ai_model: settingsForm.aiModel,
             chat_enabled: settingsForm.chatEnabled,
             chat_channel_id: settingsForm.chatChannelId,
             allowed_channel_ids: settingsForm.allowedChannelIds,
@@ -756,7 +760,7 @@ export default function GuildAiPage() {
                 <Select
                   value={settingsForm.defaultProvider}
                   onValueChange={(value) =>
-                    setSettingsForm((current) => ({ ...current, defaultProvider: (value as 'gemini' | 'claude') }))
+                    setSettingsForm((current) => ({ ...current, defaultProvider: (value as 'gemini' | 'claude' | 'deepseek') }))
                   }
                   disabled={isAiFeatureDisabled}
                 >
@@ -766,8 +770,51 @@ export default function GuildAiPage() {
                   <SelectContent>
                     <SelectItem value="gemini">Gemini</SelectItem>
                     <SelectItem value="claude">Claude</SelectItem>
+                    <SelectItem value="deepseek">DeepSeek</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-3 border rounded-lg p-4">
+                <div>
+                  <Label htmlFor="ai-model">AI Model (Optional)</Label>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Select a specific model. Leave empty to use provider default.
+                  </p>
+                  <Select
+                    value={settingsForm.aiModel || 'default'}
+                    onValueChange={(value) =>
+                      setSettingsForm((current) => ({ ...current, aiModel: value === 'default' ? null : value }))
+                    }
+                    disabled={isAiFeatureDisabled}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Provider Default</SelectItem>
+                      {settingsForm.defaultProvider === 'gemini' && (
+                        <>
+                          <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
+                          <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
+                        </>
+                      )}
+                      {settingsForm.defaultProvider === 'claude' && (
+                        <>
+                          <SelectItem value="claude-3-5-haiku-latest">Claude 3.5 Haiku</SelectItem>
+                          <SelectItem value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</SelectItem>
+                          <SelectItem value="claude-3-opus-20240229">Claude 3 Opus</SelectItem>
+                        </>
+                      )}
+                      {settingsForm.defaultProvider === 'deepseek' && (
+                        <>
+                          <SelectItem value="deepseek-chat">DeepSeek Chat (V3.2)</SelectItem>
+                          <SelectItem value="deepseek-reasoner">DeepSeek Reasoner (V3.2)</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-3 border rounded-lg p-4">
