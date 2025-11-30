@@ -1,18 +1,19 @@
-const { EmbedBuilder } = require('discord.js');
+const { ChannelType } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
 
 /**
  * Discord Stats Manager
- * Displays bot statistics (servers, members) in a Discord channel
+ * Displays bot statistics (servers, members) as voice channel names
  */
 class DiscordStatsManager {
   constructor(client) {
     this.client = client;
     this.supportServerId = process.env.DISCORD_SUPPORT_SERVER_ID || '1435653730799190058';
-    this.statsChannelId = process.env.DISCORD_STATS_CHANNEL_ID || null;
+    this.statsCategoryId = process.env.DISCORD_STATS_CATEGORY_ID || null;
     this.updateInterval = null;
     this.updateIntervalMs = 5 * 60 * 1000; // Update every 5 minutes
-    this.lastMessageId = null;
+    this.serversChannelId = null;
+    this.usersChannelId = null;
     
     // Initialize Supabase client
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -35,53 +36,113 @@ class DiscordStatsManager {
       return;
     }
 
-    // Find or use stats channel
-    if (!this.statsChannelId) {
-      // Try to find a channel named "stats" or "bot-stats" in support server
-      try {
-        const guild = await this.client.guilds.fetch(this.supportServerId).catch(() => null);
-        if (!guild) {
-          console.error(`❌ [DiscordStats] Support server ${this.supportServerId} not found`);
-          return;
-        }
-
-        const channels = guild.channels.cache.filter(
-          ch => ch.isTextBased() && 
-          (ch.name.toLowerCase().includes('stats') || ch.name.toLowerCase().includes('bot-stats'))
-        );
-
-        if (channels.size > 0) {
-          this.statsChannelId = channels.first().id;
-          console.log(`✅ [DiscordStats] Found stats channel: #${channels.first().name} (${this.statsChannelId})`);
-        } else {
-          console.log('ℹ️ [DiscordStats] No stats channel found. Please set DISCORD_STATS_CHANNEL_ID or create a channel named "stats" or "bot-stats"');
-          return;
-        }
-      } catch (error) {
-        console.error('❌ [DiscordStats] Error finding stats channel:', error);
+    try {
+      const guild = await this.client.guilds.fetch(this.supportServerId).catch(() => null);
+      if (!guild) {
+        console.error(`❌ [DiscordStats] Support server ${this.supportServerId} not found`);
         return;
       }
+
+      // Check bot permissions
+      const botMember = await guild.members.fetch(this.client.user.id).catch(() => null);
+      if (!botMember) {
+        console.error(`❌ [DiscordStats] Bot not found in support server`);
+        return;
+      }
+
+      if (!botMember.permissions.has(['ManageChannels', 'ViewChannel'])) {
+        console.error(`❌ [DiscordStats] Bot missing required permissions (ManageChannels, ViewChannel)`);
+        return;
+      }
+
+      // Find or create stats category
+      let statsCategory = null;
+      if (this.statsCategoryId) {
+        statsCategory = await guild.channels.fetch(this.statsCategoryId).catch(() => null);
+      }
+
+      if (!statsCategory) {
+        // Try to find existing category with "stats" in name
+        const existingCategories = guild.channels.cache.filter(
+          ch => ch.type === ChannelType.GuildCategory && 
+          (ch.name.toLowerCase().includes('stats') || ch.name.toLowerCase().includes('statistics'))
+        );
+
+        if (existingCategories.size > 0) {
+          statsCategory = existingCategories.first();
+          console.log(`✅ [DiscordStats] Found stats category: ${statsCategory.name}`);
+        } else {
+          // Create new category
+          statsCategory = await guild.channels.create({
+            name: '📊 Bot Statistics',
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: [
+              {
+                id: guild.id,
+                deny: ['Connect', 'Speak'], // Everyone can see but not join
+              }
+            ]
+          });
+          console.log(`✅ [DiscordStats] Created stats category: ${statsCategory.name}`);
+        }
+      }
+
+      // Find or create "Servers" voice channel
+      let serversChannel = guild.channels.cache.find(
+        ch => ch.type === ChannelType.GuildVoice && 
+        ch.parentId === statsCategory.id && 
+        ch.name.toLowerCase().startsWith('servers')
+      );
+
+      if (!serversChannel) {
+        serversChannel = await guild.channels.create({
+          name: 'Servers: Loading...',
+          type: ChannelType.GuildVoice,
+          parent: statsCategory.id,
+          permissionOverwrites: [
+            {
+              id: guild.id,
+              deny: ['Connect', 'Speak'],
+            }
+          ]
+        });
+        console.log(`✅ [DiscordStats] Created "Servers" voice channel`);
+      }
+      this.serversChannelId = serversChannel.id;
+
+      // Find or create "Users" voice channel
+      let usersChannel = guild.channels.cache.find(
+        ch => ch.type === ChannelType.GuildVoice && 
+        ch.parentId === statsCategory.id && 
+        ch.name.toLowerCase().startsWith('users')
+      );
+
+      if (!usersChannel) {
+        usersChannel = await guild.channels.create({
+          name: 'Users: Loading...',
+          type: ChannelType.GuildVoice,
+          parent: statsCategory.id,
+          permissionOverwrites: [
+            {
+              id: guild.id,
+              deny: ['Connect', 'Speak'],
+            }
+          ]
+        });
+        console.log(`✅ [DiscordStats] Created "Users" voice channel`);
+      }
+      this.usersChannelId = usersChannel.id;
+
+      console.log(`✅ [DiscordStats] Initialized for server ${guild.name}`);
+
+      // Update stats immediately
+      await this.updateStats();
+
+      // Schedule periodic updates
+      this.startAutoUpdate();
+    } catch (error) {
+      console.error('❌ [DiscordStats] Error initializing:', error);
     }
-
-    // Verify channel exists and bot has permissions
-    const channel = await this.client.channels.fetch(this.statsChannelId).catch(() => null);
-    if (!channel) {
-      console.error(`❌ [DiscordStats] Channel ${this.statsChannelId} not found or inaccessible`);
-      return;
-    }
-
-    if (!channel.permissionsFor(this.client.user).has(['SendMessages', 'EmbedLinks', 'ManageMessages'])) {
-      console.error(`❌ [DiscordStats] Missing permissions in channel ${this.statsChannelId}`);
-      return;
-    }
-
-    console.log(`✅ [DiscordStats] Initialized for channel ${channel.name} (${this.statsChannelId}) in server ${channel.guild.name}`);
-
-    // Post initial stats
-    await this.updateStats();
-
-    // Schedule periodic updates
-    this.startAutoUpdate();
   }
 
   /**
@@ -163,82 +224,37 @@ class DiscordStatsManager {
   }
 
   /**
-   * Update stats in Discord channel
+   * Update stats in Discord voice channels
    */
   async updateStats() {
-    if (!this.statsChannelId) {
+    if (!this.serversChannelId || !this.usersChannelId) {
       return;
     }
 
     try {
-      const channel = await this.client.channels.fetch(this.statsChannelId).catch(() => null);
-      if (!channel) {
-        console.error(`❌ [DiscordStats] Channel ${this.statsChannelId} not found`);
-        return;
-      }
-
       const stats = await this.fetchStats();
 
-      const embed = new EmbedBuilder()
-        .setTitle('📊 ComCraft Bot Statistics')
-        .setColor(0x5865F2) // Discord blurple
-        .setDescription('Real-time statistics about the ComCraft bot')
-        .addFields(
-          {
-            name: '🖥️ Active Servers',
-            value: `${stats.activeServers.toLocaleString()}`,
-            inline: true
-          },
-          {
-            name: '👥 Total Members',
-            value: `${stats.totalMembers.toLocaleString()}`,
-            inline: true
-          },
-          {
-            name: '⭐ Premium Servers',
-            value: `${stats.premiumServers.toLocaleString()}`,
-            inline: true
-          }
-        )
-        .setFooter({ 
-          text: `Last updated: ${stats.lastUpdated.toLocaleTimeString()} • Updated every 5 minutes` 
-        })
-        .setTimestamp();
-
-      // Try to edit existing message, otherwise send new one
-      if (this.lastMessageId) {
-        try {
-          const message = await channel.messages.fetch(this.lastMessageId);
-          await message.edit({ embeds: [embed] });
-          return;
-        } catch (error) {
-          // Message might have been deleted, continue to send new one
-          this.lastMessageId = null;
+      // Update "Servers" voice channel name
+      const serversChannel = await this.client.channels.fetch(this.serversChannelId).catch(() => null);
+      if (serversChannel) {
+        const newName = `Servers: ${stats.activeServers.toLocaleString()}`;
+        if (serversChannel.name !== newName) {
+          await serversChannel.setName(newName);
+          console.log(`✅ [DiscordStats] Updated servers channel: ${newName}`);
         }
       }
 
-      // Send new message
-      const message = await channel.send({ embeds: [embed] });
-      this.lastMessageId = message.id;
-
-      // Clean up old messages (keep only the last 5)
-      try {
-        const messages = await channel.messages.fetch({ limit: 10 });
-        const botMessages = messages.filter(msg => 
-          msg.author.id === this.client.user.id && msg.id !== message.id
-        );
-        
-        if (botMessages.size > 4) {
-          const messagesToDelete = Array.from(botMessages.values()).slice(4);
-          for (const msg of messagesToDelete) {
-            await msg.delete().catch(() => {});
-          }
+      // Update "Users" voice channel name
+      const usersChannel = await this.client.channels.fetch(this.usersChannelId).catch(() => null);
+      if (usersChannel) {
+        const newName = `Users: ${stats.totalMembers.toLocaleString()}`;
+        if (usersChannel.name !== newName) {
+          await usersChannel.setName(newName);
+          console.log(`✅ [DiscordStats] Updated users channel: ${newName}`);
         }
-      } catch (error) {
-        // Ignore cleanup errors
       }
 
-      console.log(`✅ [DiscordStats] Stats updated in channel ${this.statsChannelId}`);
+      console.log(`✅ [DiscordStats] Stats updated successfully`);
     } catch (error) {
       console.error('❌ [DiscordStats] Error updating stats:', error);
     }
@@ -251,6 +267,8 @@ class DiscordStatsManager {
     await this.updateStats();
   }
 }
+
+module.exports = DiscordStatsManager;
 
 module.exports = DiscordStatsManager;
 
