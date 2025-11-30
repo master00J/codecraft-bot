@@ -194,7 +194,7 @@ export default function Analytics() {
         </div>
 
         {/* Key Metrics */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        <div className="grid md:grid-cols-4 gap-4 mb-4">
           <Card className="p-6">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Total Messages
@@ -226,6 +226,43 @@ export default function Analytics() {
           </Card>
         </div>
 
+        {/* Voice Metrics */}
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          <Card className="p-6">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+              Total Voice Time
+            </div>
+            <div className="text-3xl font-bold text-purple-600">{data.totals.voiceHours || '0'}h</div>
+            <div className="text-sm text-gray-500 mt-1">
+              {data.totals.voiceMinutes || 0} minutes
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+              Unique Voice Users
+            </div>
+            <div className="text-3xl font-bold text-blue-600">{data.totals.uniqueVoiceUsers || 0}</div>
+            <div className="text-sm text-gray-500 mt-1">
+              Users who used voice
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+              Average Session Length
+            </div>
+            <div className="text-3xl font-bold text-indigo-600">
+              {data.totals.uniqueVoiceUsers > 0 
+                ? Math.floor((data.totals.voiceSeconds || 0) / data.totals.uniqueVoiceUsers / 60) 
+                : 0} min
+            </div>
+            <div className="text-sm text-gray-500 mt-1">
+              Per user average
+            </div>
+          </Card>
+        </div>
+
         {/* Daily Activity Chart */}
         <Card className="p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">📈 Daily Activity</h2>
@@ -244,6 +281,7 @@ export default function Analytics() {
                 <Legend />
                 <Area type="monotone" dataKey="total_messages" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} name="Messages" />
                 <Area type="monotone" dataKey="unique_active_users" stroke="#10B981" fill="#10B981" fillOpacity={0.4} name="Active Users" />
+                <Area type="monotone" dataKey="voice_minutes" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.4} name="Voice Minutes" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -281,7 +319,7 @@ export default function Analytics() {
         <div className="grid md:grid-cols-2 gap-8 mb-8">
           {/* Top Channels */}
           <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4">🔥 Top Channels (Last 7 Days)</h2>
+            <h2 className="text-xl font-bold mb-4">🔥 Top Text Channels (Last 7 Days)</h2>
             {data.topChannels.length > 0 ? (
               <div className="space-y-3">
                 {data.topChannels.map((channel: any, index: number) => (
@@ -331,6 +369,125 @@ export default function Analytics() {
             )}
           </Card>
         </div>
+
+        {/* Voice Activity Chart */}
+        <Card className="p-6 mb-8">
+          <h2 className="text-xl font-bold mb-4">🔊 Voice Activity Over Time</h2>
+          {data.dailyStats.length > 0 && data.dailyStats.some((day: any) => day.voice_minutes > 0) ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={data.dailyStats}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="date" 
+                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                />
+                <YAxis />
+                <Tooltip 
+                  labelFormatter={(value) => new Date(value).toLocaleDateString('en-US')}
+                  formatter={(value: any, name: string) => {
+                    if (name === 'Voice Minutes') return [value, 'Minutes'];
+                    if (name === 'Voice Users') return [value, 'Users'];
+                    return [value, name];
+                  }}
+                />
+                <Legend />
+                <Area type="monotone" dataKey="voice_minutes" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.6} name="Voice Minutes" />
+                <Area type="monotone" dataKey="unique_voice_users" stroke="#A855F7" fill="#A855F7" fillOpacity={0.4} name="Voice Users" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="text-center py-12 text-gray-600">
+              <p>No voice activity registered yet</p>
+              <p className="text-sm mt-2">Voice statistics will appear here once members join voice channels</p>
+            </div>
+          )}
+        </Card>
+
+        {/* Voice Statistics */}
+        <div className="grid md:grid-cols-2 gap-8 mb-8">
+          {/* Top Voice Channels */}
+          <Card className="p-6">
+            <h2 className="text-xl font-bold mb-4">🎤 Top Voice Channels</h2>
+            {data.topVoiceChannels && data.topVoiceChannels.length > 0 ? (
+              <div className="space-y-3">
+                {data.topVoiceChannels.map((channel: any, index: number) => (
+                  <div key={channel.channel_id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl font-bold text-gray-400">#{index + 1}</div>
+                      <div>
+                        <div className="font-semibold">🎤 {channel.channel_name}</div>
+                        <div className="text-sm text-gray-600">
+                          {channel.unique_users || 0} users
+                        </div>
+                      </div>
+                    </div>
+                    <Badge className="bg-purple-600">{channel.total_hours}h</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-600">No voice channel data yet</div>
+            )}
+          </Card>
+
+          {/* Top Voice Users */}
+          <Card className="p-6">
+            <h2 className="text-xl font-bold mb-4">🎙️ Top Voice Users</h2>
+            {data.topVoiceUsers && data.topVoiceUsers.length > 0 ? (
+              <div className="space-y-3">
+                {data.topVoiceUsers.slice(0, 10).map((user: any, index: number) => (
+                  <div key={user.user_id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">
+                        {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                      </div>
+                      <div>
+                        <div className="font-semibold">{user.username || 'Unknown User'}</div>
+                        <div className="text-sm text-gray-600">
+                          Voice Level {user.voice_level || 0} • {user.total_voice_hours}h total
+                        </div>
+                      </div>
+                    </div>
+                    <Badge className="bg-purple-600">{user.total_voice_hours}h</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-600">No voice user data yet</div>
+            )}
+          </Card>
+        </div>
+
+        {/* Voice Activity Heatmap */}
+        {data.voiceHourlyHeatmap && data.voiceHourlyHeatmap.length > 0 && (
+          <Card className="p-6 mb-8">
+            <h2 className="text-xl font-bold mb-4">🕐 Voice Activity by Hour (Average)</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              When do members use voice channels the most?
+            </p>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data.voiceHourlyHeatmap}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="hour" 
+                  tickFormatter={(value) => `${value}:00`}
+                />
+                <YAxis />
+                <Tooltip 
+                  labelFormatter={(value) => `${value}:00`}
+                  formatter={(value: any, name: string) => {
+                    if (name === 'minutes') return [value, 'Minutes'];
+                    if (name === 'unique_users') return [value, 'Unique Users'];
+                    if (name === 'sessions') return [value, 'Sessions'];
+                    return [value, name];
+                  }}
+                />
+                <Legend />
+                <Bar dataKey="minutes" fill="#8B5CF6" name="Voice Minutes per Hour" />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
 
         {/* Retention Metrics */}
         <Card className="p-6 mb-8">

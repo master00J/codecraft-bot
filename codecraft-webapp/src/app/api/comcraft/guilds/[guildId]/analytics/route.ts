@@ -68,7 +68,10 @@ export async function GET(
       topChannelsRes,
       retentionRes,
       hourlyActivityRes,
-      topUsersRes
+      topUsersRes,
+      voiceSessionsRes,
+      topVoiceUsersRes,
+      topVoiceChannelsRes
     ] = await Promise.all([
       // Daily stats (messages, joins, leaves)
       supabase
@@ -108,7 +111,32 @@ export async function GET(
         .select('*')
         .eq('guild_id', guildId)
         .order('xp', { ascending: false })
-        .limit(10)
+        .limit(10),
+      
+      // Voice sessions (for voice stats)
+      supabase
+        .from('voice_sessions')
+        .select('*')
+        .eq('guild_id', guildId)
+        .gte('joined_at', startDate.toISOString())
+        .eq('is_active', false),
+      
+      // Top voice users
+      supabase
+        .from('user_stats')
+        .select('user_id, total_voice_seconds, last_voice_at')
+        .eq('guild_id', guildId)
+        .gt('total_voice_seconds', 0)
+        .order('total_voice_seconds', { ascending: false })
+        .limit(10),
+      
+      // Top voice channels (from user_channel_stats)
+      supabase
+        .from('user_channel_stats')
+        .select('channel_id, channel_name, voice_seconds')
+        .eq('guild_id', guildId)
+        .eq('channel_type', 'voice')
+        .gt('voice_seconds', 0)
     ]);
 
     const dailyStats = dailyStatsRes.data || [];
@@ -116,6 +144,9 @@ export async function GET(
     const retention = retentionRes.data || [];
     const hourlyActivity = hourlyActivityRes.data || [];
     const topUsers = topUsersRes.data || [];
+    const voiceSessions = voiceSessionsRes.data || [];
+    const topVoiceUsers = topVoiceUsersRes.data || [];
+    const topVoiceChannelsRaw = topVoiceChannelsRes.data || [];
 
     // Calculate retention rates
     const totalJoined = retention.length;
@@ -174,9 +205,116 @@ export async function GET(
     const totalJoins = dailyStats.reduce((sum, day) => sum + (day.new_joins || 0), 0);
     const totalLeaves = dailyStats.reduce((sum, day) => sum + (day.leaves || 0), 0);
 
+    // Calculate voice statistics
+    const totalVoiceSeconds = voiceSessions.reduce((sum, session) => sum + (session.duration_seconds || 0), 0);
+    const totalVoiceMinutes = Math.floor(totalVoiceSeconds / 60);
+    const totalVoiceHours = (totalVoiceSeconds / 3600).toFixed(1);
+    const uniqueVoiceUsers = new Set(voiceSessions.map(s => s.user_id)).size;
+    
+    // Group voice sessions by date for daily chart
+    const voiceByDate = voiceSessions.reduce((acc: any, session: any) => {
+      if (!session.joined_at) return acc;
+      const date = new Date(session.joined_at).toISOString().split('T')[0];
+      if (!acc[date]) {
+        acc[date] = { seconds: 0, users: new Set(), sessions: 0 };
+      }
+      acc[date].seconds += session.duration_seconds || 0;
+      acc[date].users.add(session.user_id);
+      acc[date].sessions += 1;
+      return acc;
+    }, {});
+
+    // Merge voice data into dailyStats
+    const dailyStatsWithVoice = dailyStats.map((day: any) => {
+      const dateStr = day.date.split('T')[0];
+      const voiceData = voiceByDate[dateStr] || { seconds: 0, users: new Set(), sessions: 0 };
+      return {
+        ...day,
+        voice_minutes: Math.floor(voiceData.seconds / 60),
+        voice_hours: (voiceData.seconds / 3600).toFixed(2),
+        unique_voice_users: voiceData.users.size || 0,
+        voice_sessions: voiceData.sessions || 0
+      };
+    });
+
+    // Aggregate top voice channels
+    interface VoiceChannelTotal {
+      channel_id: string;
+      channel_name: string;
+      total_seconds: number;
+      total_hours: string;
+      unique_users: number;
+    }
+    
+    const topVoiceChannels = topVoiceChannelsRaw.reduce((acc: VoiceChannelTotal[], ch: any) => {
+      const existing = acc.find((a: VoiceChannelTotal) => a.channel_id === ch.channel_id);
+      if (existing) {
+        existing.total_seconds += ch.voice_seconds || 0;
+        existing.total_hours = (existing.total_seconds / 3600).toFixed(2);
+      } else {
+        acc.push({
+          channel_id: ch.channel_id,
+          channel_name: ch.channel_name || 'Unknown Channel',
+          total_seconds: ch.voice_seconds || 0,
+          total_hours: ((ch.voice_seconds || 0) / 3600).toFixed(2),
+          unique_users: 1
+        });
+      }
+      return acc;
+    }, []).sort((a, b) => b.total_seconds - a.total_seconds).slice(0, 10);
+
+    // Get user stats with voice data for top voice users
+    const topVoiceUsersWithStats = await Promise.all(
+      topVoiceUsers.map(async (user: any) => {
+        const { data: userLevel } = await supabase
+          .from('user_levels')
+          .select('username, voice_level, voice_xp')
+          .eq('guild_id', guildId)
+          .eq('user_id', user.user_id)
+          .single();
+        
+        return {
+          user_id: user.user_id,
+          total_voice_seconds: user.total_voice_seconds,
+          total_voice_hours: (user.total_voice_seconds / 3600).toFixed(1),
+          total_voice_minutes: Math.floor(user.total_voice_seconds / 60),
+          username: userLevel?.username || 'Unknown User',
+          voice_level: userLevel?.voice_level || 0,
+          voice_xp: userLevel?.voice_xp || 0
+        };
+      })
+    );
+
+    // Group voice sessions by hour for voice heatmap
+    const voiceByHour: Record<number, { seconds: number; users: Set<string>; sessions: number }> = {};
+    for (let hour = 0; hour < 24; hour++) {
+      voiceByHour[hour] = { seconds: 0, users: new Set(), sessions: 0 };
+    }
+    
+    voiceSessions.forEach((session: any) => {
+      if (!session.joined_at) return;
+      const hour = new Date(session.joined_at).getHours();
+      voiceByHour[hour].seconds += session.duration_seconds || 0;
+      voiceByHour[hour].users.add(session.user_id);
+      voiceByHour[hour].sessions += 1;
+    });
+
+    // Calculate average voice activity per hour (over the selected time range)
+    const voiceHourlyHeatmap = Object.entries(voiceByHour).map(([hour, data]) => {
+      const daysInRange = days;
+      const avgSecondsPerDay = daysInRange > 0 ? data.seconds / daysInRange : 0;
+      const avgMinutesPerDay = avgSecondsPerDay / 60;
+      return {
+        hour: parseInt(hour),
+        minutes: Math.round(avgMinutesPerDay),
+        unique_users: Math.round(data.users.size / (daysInRange || 1)),
+        sessions: Math.round(data.sessions / (daysInRange || 1))
+      };
+    });
+
     return NextResponse.json({
       // Daily trends
-      dailyStats,
+      dailyStats: dailyStatsWithVoice,
       
       // Totals
       totals: {
@@ -184,12 +322,18 @@ export async function GET(
         joins: totalJoins,
         leaves: totalLeaves,
         netGrowth: totalJoins - totalLeaves,
-        users: topUsers.length
+        users: topUsers.length,
+        voiceMinutes: totalVoiceMinutes,
+        voiceHours: totalVoiceHours,
+        voiceSeconds: totalVoiceSeconds,
+        uniqueVoiceUsers
       },
       
       // Top performers
       topChannels: channelTotals.slice(0, 10),
       topUsers,
+      topVoiceChannels,
+      topVoiceUsers: topVoiceUsersWithStats,
       
       // Retention
       retention: {
@@ -206,7 +350,8 @@ export async function GET(
       },
       
       // Activity heatmap
-      hourlyHeatmap: heatmapData
+      hourlyHeatmap: heatmapData,
+      voiceHourlyHeatmap
     });
   } catch (error) {
     console.error('Error in analytics API:', error);
