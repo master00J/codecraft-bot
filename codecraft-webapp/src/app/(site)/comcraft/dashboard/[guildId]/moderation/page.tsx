@@ -800,7 +800,36 @@ export default function ModerationPage() {
                   </div>
                   <Switch
                     checked={config.ai_moderation_enabled}
-                    onCheckedChange={(checked) => setConfig({ ...config, ai_moderation_enabled: checked })}
+                    onCheckedChange={async (checked) => {
+                      const newConfig = { ...config, ai_moderation_enabled: checked };
+                      setConfig(newConfig);
+                      // Auto-save when toggled
+                      try {
+                        const response = await fetch(`/api/comcraft/guilds/${guildId}/moderation`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            ...newConfig,
+                            filter_words: badWordsInput.split(',').map(w => w.trim()).filter(Boolean)
+                          })
+                        });
+                        if (response.ok) {
+                          toast({
+                            title: 'Success',
+                            description: 'AI moderation setting saved'
+                          });
+                        }
+                      } catch (error: any) {
+                        console.error('Error saving AI moderation setting:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to save AI moderation setting',
+                          variant: 'destructive'
+                        });
+                        // Revert on error
+                        setConfig(config);
+                      }
+                    }}
                     disabled={!config.automod_enabled}
                   />
                 </div>
