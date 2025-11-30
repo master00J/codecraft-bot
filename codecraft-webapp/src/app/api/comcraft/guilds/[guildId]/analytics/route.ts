@@ -70,8 +70,7 @@ export async function GET(
       hourlyActivityRes,
       topUsersRes,
       voiceSessionsRes,
-      topVoiceUsersRes,
-      topVoiceChannelsRes
+      topVoiceUsersRes
     ] = await Promise.all([
       // Daily stats (messages, joins, leaves)
       supabase
