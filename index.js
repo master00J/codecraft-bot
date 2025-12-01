@@ -9996,24 +9996,141 @@ app.post('/api/twitch/subscriber', async (req, res) => {
     console.log(`   Is Gift: ${data.is_gift}`);
 
     // Get guild from main bot or custom bots
-    let guild = client.guilds.cache.get(data.guild_id);
-    let botClient = client;
+    // Convert guild_id to string to ensure proper comparison
+    const guildIdStr = String(data.guild_id);
+    let guild = null;
+    let botClient = null;
     
-    // If not found in main bot, check custom bots
-    if (!guild && customBotManager) {
-      // customBots.get() returns the Discord client directly
-      const customBotClient = customBotManager.customBots.get(data.guild_id);
-      if (customBotClient && customBotClient.isReady && customBotClient.isReady()) {
-        guild = customBotClient.guilds.cache.get(data.guild_id);
-        botClient = customBotClient;
-        console.log(`   ✅ Using custom bot for guild ${data.guild_id}`);
+    console.log(`🔍 Looking for guild ${guildIdStr}:`);
+    console.log(`  Main bot is ready: ${client.isReady()}`);
+    
+    // First check main bot if it's ready
+    if (client.isReady()) {
+      guild = client.guilds.cache.get(guildIdStr);
+      console.log(`  Main bot has guild: ${!!guild}`);
+      if (guild) {
+        botClient = client;
       }
     }
     
-    if (!guild) {
-      console.error('   ❌ Guild not found:', data.guild_id);
+    // If not found in main bot, check custom bots
+    if (!guild && customBotManager) {
+      const customBotClient = customBotManager.customBots.get(guildIdStr);
+      console.log(`  Custom bot exists: ${!!customBotClient}`);
+      
+      if (customBotClient) {
+        const isReady = customBotClient.isReady && customBotClient.isReady();
+        console.log(`  Custom bot is ready: ${isReady}`);
+        
+        if (isReady) {
+          guild = customBotClient.guilds.cache.get(guildIdStr);
+          console.log(`  Custom bot has guild: ${!!guild}`);
+          if (guild) {
+            botClient = customBotClient;
+          }
+        }
+      }
+    }
+    
+    if (!guild || !botClient) {
+      console.log(`❌ Guild ${guildIdStr} not found in any bot`);
+      console.log(`  Main bot ready: ${client.isReady()}`);
+      console.log(`  Main bot guilds: ${client.isReady() ? Array.from(client.guilds.cache.keys()).join(', ') : 'N/A (not ready)'}`);
+      console.log(`  Available custom bots: ${customBotManager ? Array.from(customBotManager.customBots.keys()).join(', ') : 'none'}`);
+      
+      // Check if this guild has a custom bot running in a Docker container
+      // If so, proxy the request to the container
+      try {
+        if (configManager && configManager.supabase) {
+          const { data: customBot } = await configManager.supabase
+            .from('custom_bot_tokens')
+            .select('runs_on_pterodactyl, bot_username, bot_online, bot_webhook_url')
+            .eq('guild_id', guildIdStr)
+            .single();
+          
+          if (customBot && customBot.runs_on_pterodactyl && customBot.bot_webhook_url) {
+            console.log(`🔗 Guild uses custom bot in Docker container, proxying request to: ${customBot.bot_webhook_url}`);
+            
+            // Proxy the request to the custom bot container
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+              
+              const containerResponse = await fetch(`${customBot.bot_webhook_url}/api/twitch/subscriber`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
+                },
+                body: JSON.stringify({
+                  data: data
+                }),
+                signal: controller.signal
+              });
+              
+              clearTimeout(timeoutId);
+              
+              if (containerResponse.ok) {
+                const containerData = await containerResponse.json();
+                console.log(`✅ Subscriber notification sent successfully to custom bot container`);
+                return res.json(containerData);
+              } else {
+                const containerError = await containerResponse.json().catch(() => ({ error: 'Unknown error' }));
+                console.error(`❌ Custom bot container returned error:`, containerError);
+                return res.status(containerResponse.status).json({
+                  success: false,
+                  error: containerError.error || 'Custom bot container returned an error',
+                  details: containerError
+                });
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              console.error(`❌ Error proxying to custom bot container:`, fetchError.message);
+              
+              // Check if it's a timeout error
+              if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
+                return res.status(503).json({
+                  success: false,
+                  error: `Custom bot container did not respond in time. The container may be offline or slow.`,
+                  details: {
+                    webhook_url: customBot.bot_webhook_url,
+                    bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                    error: 'Request timeout'
+                  }
+                });
+              }
+              
+              return res.status(503).json({
+                success: false,
+                error: `Could not connect to custom bot container. The container may be offline or not accessible.`,
+                details: {
+                  webhook_url: customBot.bot_webhook_url,
+                  bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                  error: fetchError.message
+                }
+              });
+            }
+          } else if (customBot && customBot.runs_on_pterodactyl) {
+            // Custom bot exists but no webhook URL configured
+            console.warn(`⚠️  Custom bot container exists but webhook URL not configured for guild ${guildIdStr}`);
+            return res.status(404).json({
+              success: false,
+              error: `This guild uses a custom bot running in a Docker container, but the webhook URL is not configured. Bot status: ${customBot.bot_online ? 'Online' : 'Offline'}`,
+              hint: 'The container webhook URL needs to be set in the database. Use /api/admin/custom-bots/update-webhook-urls to update.'
+            });
+          }
+        }
+      } catch (dbError) {
+        // Ignore database errors, continue with default error
+        console.log(`  Could not check custom bot status: ${dbError.message}`);
+      }
+      
+      // Default error if no custom bot found or other issues
+      console.error('   ❌ Guild not found:', guildIdStr);
       return res.status(404).json({ success: false, error: 'Guild not found' });
     }
+    
+    console.log(`✅ Found guild in ${botClient === client ? 'main' : 'custom'} bot`);
 
     // Use subscriber_channel_id if set, otherwise fall back to channel_id
     const channelId = data.subscriber_channel_id || data.channel_id;
@@ -10154,23 +10271,141 @@ app.post('/api/twitch/gifted-subscriber', async (req, res) => {
     console.log(`   Is anonymous: ${data.is_anonymous}`);
 
     // Get guild from main bot or custom bots
-    let guild = client.guilds.cache.get(data.guild_id);
-    let botClient = client;
+    // Convert guild_id to string to ensure proper comparison
+    const guildIdStr = String(data.guild_id);
+    let guild = null;
+    let botClient = null;
     
-    // If not found in main bot, check custom bots
-    if (!guild && customBotManager) {
-      const customBotClient = customBotManager.customBots.get(data.guild_id);
-      if (customBotClient && customBotClient.isReady && customBotClient.isReady()) {
-        guild = customBotClient.guilds.cache.get(data.guild_id);
-        botClient = customBotClient;
-        console.log(`   ✅ Using custom bot for guild ${data.guild_id}`);
+    console.log(`🔍 Looking for guild ${guildIdStr}:`);
+    console.log(`  Main bot is ready: ${client.isReady()}`);
+    
+    // First check main bot if it's ready
+    if (client.isReady()) {
+      guild = client.guilds.cache.get(guildIdStr);
+      console.log(`  Main bot has guild: ${!!guild}`);
+      if (guild) {
+        botClient = client;
       }
     }
     
-    if (!guild) {
-      console.error('   ❌ Guild not found:', data.guild_id);
+    // If not found in main bot, check custom bots
+    if (!guild && customBotManager) {
+      const customBotClient = customBotManager.customBots.get(guildIdStr);
+      console.log(`  Custom bot exists: ${!!customBotClient}`);
+      
+      if (customBotClient) {
+        const isReady = customBotClient.isReady && customBotClient.isReady();
+        console.log(`  Custom bot is ready: ${isReady}`);
+        
+        if (isReady) {
+          guild = customBotClient.guilds.cache.get(guildIdStr);
+          console.log(`  Custom bot has guild: ${!!guild}`);
+          if (guild) {
+            botClient = customBotClient;
+          }
+        }
+      }
+    }
+    
+    if (!guild || !botClient) {
+      console.log(`❌ Guild ${guildIdStr} not found in any bot`);
+      console.log(`  Main bot ready: ${client.isReady()}`);
+      console.log(`  Main bot guilds: ${client.isReady() ? Array.from(client.guilds.cache.keys()).join(', ') : 'N/A (not ready)'}`);
+      console.log(`  Available custom bots: ${customBotManager ? Array.from(customBotManager.customBots.keys()).join(', ') : 'none'}`);
+      
+      // Check if this guild has a custom bot running in a Docker container
+      // If so, proxy the request to the container
+      try {
+        if (configManager && configManager.supabase) {
+          const { data: customBot } = await configManager.supabase
+            .from('custom_bot_tokens')
+            .select('runs_on_pterodactyl, bot_username, bot_online, bot_webhook_url')
+            .eq('guild_id', guildIdStr)
+            .single();
+          
+          if (customBot && customBot.runs_on_pterodactyl && customBot.bot_webhook_url) {
+            console.log(`🔗 Guild uses custom bot in Docker container, proxying request to: ${customBot.bot_webhook_url}`);
+            
+            // Proxy the request to the custom bot container
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+              
+              const containerResponse = await fetch(`${customBot.bot_webhook_url}/api/twitch/gifted-subscriber`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
+                },
+                body: JSON.stringify({
+                  data: data
+                }),
+                signal: controller.signal
+              });
+              
+              clearTimeout(timeoutId);
+              
+              if (containerResponse.ok) {
+                const containerData = await containerResponse.json();
+                console.log(`✅ Gifted sub notification sent successfully to custom bot container`);
+                return res.json(containerData);
+              } else {
+                const containerError = await containerResponse.json().catch(() => ({ error: 'Unknown error' }));
+                console.error(`❌ Custom bot container returned error:`, containerError);
+                return res.status(containerResponse.status).json({
+                  success: false,
+                  error: containerError.error || 'Custom bot container returned an error',
+                  details: containerError
+                });
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              console.error(`❌ Error proxying to custom bot container:`, fetchError.message);
+              
+              // Check if it's a timeout error
+              if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
+                return res.status(503).json({
+                  success: false,
+                  error: `Custom bot container did not respond in time. The container may be offline or slow.`,
+                  details: {
+                    webhook_url: customBot.bot_webhook_url,
+                    bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                    error: 'Request timeout'
+                  }
+                });
+              }
+              
+              return res.status(503).json({
+                success: false,
+                error: `Could not connect to custom bot container. The container may be offline or not accessible.`,
+                details: {
+                  webhook_url: customBot.bot_webhook_url,
+                  bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                  error: fetchError.message
+                }
+              });
+            }
+          } else if (customBot && customBot.runs_on_pterodactyl) {
+            // Custom bot exists but no webhook URL configured
+            console.warn(`⚠️  Custom bot container exists but webhook URL not configured for guild ${guildIdStr}`);
+            return res.status(404).json({
+              success: false,
+              error: `This guild uses a custom bot running in a Docker container, but the webhook URL is not configured. Bot status: ${customBot.bot_online ? 'Online' : 'Offline'}`,
+              hint: 'The container webhook URL needs to be set in the database. Use /api/admin/custom-bots/update-webhook-urls to update.'
+            });
+          }
+        }
+      } catch (dbError) {
+        // Ignore database errors, continue with default error
+        console.log(`  Could not check custom bot status: ${dbError.message}`);
+      }
+      
+      // Default error if no custom bot found or other issues
+      console.error('   ❌ Guild not found:', guildIdStr);
       return res.status(404).json({ success: false, error: 'Guild not found' });
     }
+    
+    console.log(`✅ Found guild in ${botClient === client ? 'main' : 'custom'} bot`);
 
     // Use subscriber_channel_id if set, otherwise fall back to channel_id
     const channelId = data.subscriber_channel_id || data.channel_id;
