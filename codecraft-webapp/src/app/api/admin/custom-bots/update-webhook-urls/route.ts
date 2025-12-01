@@ -165,11 +165,43 @@ export async function POST(request: NextRequest) {
           allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
           allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
         } else if (serverDetails.allocation) {
-          // Single allocation object
+          // serverDetails.allocation might be an ID (number) or an object
           const allocation = serverDetails.allocation;
-          console.log(`   Found allocation in serverDetails.allocation`);
-          allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
-          allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
+          console.log(`   Found allocation in serverDetails.allocation:`, typeof allocation === 'object' ? JSON.stringify(allocation).substring(0, 200) : allocation);
+          
+          // If it's an object, try to get IP:Port directly
+          if (typeof allocation === 'object') {
+            allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
+            allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
+          } else if (typeof allocation === 'number' && serverDetails.node) {
+            // If it's just an ID, we need to fetch allocation details from the node
+            console.log(`   Allocation is an ID (${allocation}), fetching details from node ${serverDetails.node}`);
+            try {
+              const clientAny = client as any;
+              const nodeAllocationsResponse = await clientAny.request(
+                `/nodes/${serverDetails.node}/allocations`,
+                { method: 'GET' },
+                'application'
+              ) as any;
+              
+              const nodeAllocations = nodeAllocationsResponse.data || [];
+              const foundAllocation = nodeAllocations.find((a: any) => {
+                const allocId = a.attributes?.id || a.id;
+                return allocId === allocation;
+              });
+              
+              if (foundAllocation) {
+                const allocData = foundAllocation.attributes || foundAllocation;
+                allocationIp = allocData.ip || allocData.ip_alias;
+                allocationPort = allocData.port || allocData.port_alias;
+                console.log(`   ✅ Found allocation details via node: ${allocationIp}:${allocationPort}`);
+              } else {
+                console.warn(`   Could not find allocation ID ${allocation} in node ${serverDetails.node} allocations`);
+              }
+            } catch (nodeError: any) {
+              console.warn(`   Could not fetch node allocations: ${nodeError.message}`);
+            }
+          }
         } else if (serverDetails.relationships?.allocations) {
           // Try relationships.allocations directly (without .data)
           const allocations = serverDetails.relationships.allocations;
