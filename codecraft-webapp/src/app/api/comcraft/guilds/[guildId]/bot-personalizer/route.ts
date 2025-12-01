@@ -393,6 +393,68 @@ export async function POST(
       const serverType = apiMode === 'splitter' ? 'sub-server' : 'standalone server';
       console.log(`✅ Pterodactyl ${serverType} created: ${pterodactylServer.identifier} (${pterodactylServer.uuid})`);
 
+      // Get server details to retrieve allocation (IP:Port) for webhook URL
+      let botWebhookUrl: string | null = null;
+      try {
+        // Wait a bit for server to be fully created
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        const serverDetails = await client.getServer(pterodactylServer.uuid);
+        console.log(`📋 Server details retrieved for ${pterodactylServer.uuid}`);
+        
+        // Get allocation (IP:Port) from server details
+        // Allocation can be in different formats depending on API mode
+        let allocationIp: string | null = null;
+        let allocationPort: number | null = null;
+        
+        // Try different possible structures for allocation data
+        if (serverDetails.relationships?.allocations?.data?.[0]) {
+          // Application API format with relationships
+          const allocation = serverDetails.relationships.allocations.data[0];
+          allocationIp = allocation.attributes?.ip || allocation.ip || allocation.attributes?.ip_alias || allocation.ip_alias;
+          allocationPort = allocation.attributes?.port || allocation.port || allocation.attributes?.port_alias || allocation.port_alias;
+        } else if (serverDetails.allocations) {
+          // Direct allocations array or object
+          const allocation = Array.isArray(serverDetails.allocations) 
+            ? serverDetails.allocations[0] 
+            : serverDetails.allocations;
+          allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
+          allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
+        } else if (serverDetails.allocation) {
+          // Single allocation object
+          const allocation = serverDetails.allocation;
+          allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
+          allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
+        }
+        
+        if (allocationIp && allocationPort) {
+          // Construct webhook URL using environment variable pattern or default
+          const baseUrlPattern = process.env.CUSTOM_BOT_BASE_URL || 'http://<IP>:<PORT>';
+          botWebhookUrl = baseUrlPattern
+            .replace('<IP>', allocationIp)
+            .replace('<PORT>', allocationPort.toString());
+          
+          console.log(`🔗 Constructed bot webhook URL: ${botWebhookUrl} (from ${allocationIp}:${allocationPort})`);
+        } else {
+          console.warn(`⚠️  Could not determine allocation (IP:Port) for server ${pterodactylServer.uuid}`);
+          console.log(`   Server details keys:`, Object.keys(serverDetails).join(', '));
+          if (serverDetails.relationships) {
+            console.log(`   Relationships keys:`, Object.keys(serverDetails.relationships).join(', '));
+          }
+          // Log a sample of the structure for debugging
+          console.log(`   Sample structure:`, JSON.stringify({
+            hasRelationships: !!serverDetails.relationships,
+            hasAllocations: !!serverDetails.allocations,
+            hasAllocation: !!serverDetails.allocation,
+            relationshipsKeys: serverDetails.relationships ? Object.keys(serverDetails.relationships) : null
+          }, null, 2));
+        }
+      } catch (serverDetailsError: any) {
+        console.warn(`⚠️  Could not get server details for webhook URL:`, serverDetailsError.message);
+        // Don't throw - server is created, we just can't set webhook URL yet
+        // The URL can be set manually later or on server restart
+      }
+
       // Environment variables are already set during server creation via Application API
       // The Install Script will handle downloading files and installing dependencies
       // We just need to wait for the server to be ready and then start it
@@ -438,6 +500,11 @@ export async function POST(
         runs_on_pterodactyl: true, // Important: Tells CustomBotManager to skip this bot
         updated_at: new Date().toISOString()
       };
+      
+      // Add webhook URL if we were able to construct it
+      if (botWebhookUrl) {
+        serverUpdateData.bot_webhook_url = botWebhookUrl;
+      }
 
       // Try to update with server_status
       const { error: updateError } = await supabase
