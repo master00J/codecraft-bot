@@ -10357,28 +10357,47 @@ app.post('/api/twitch/test-subscriber', async (req, res) => {
     };
 
     // Get guild from main bot or custom bots
-    let guild = client.guilds.cache.get(guild_id);
-    let botClient = client;
+    // Convert guild_id to string to ensure proper comparison
+    const guildIdStr = String(guild_id);
+    let guild = null;
+    let botClient = null;
     
-    console.log(`🔍 Looking for guild ${guild_id}:`);
-    console.log(`  Main bot has guild: ${!!guild}`);
+    console.log(`🔍 Looking for guild ${guildIdStr}:`);
+    console.log(`  Main bot is ready: ${client.isReady()}`);
     
-    if (!guild && customBotManager) {
-      // customBots.get() returns the Discord client directly, not an object with a client property
-      const customBotClient = customBotManager.customBots.get(guild_id);
-      console.log(`  Custom bot exists: ${!!customBotClient}`);
-      console.log(`  Custom bot is ready: ${!!(customBotClient && customBotClient.isReady && customBotClient.isReady())}`);
-      
-      if (customBotClient && customBotClient.isReady && customBotClient.isReady()) {
-        guild = customBotClient.guilds.cache.get(guild_id);
-        console.log(`  Custom bot has guild: ${!!guild}`);
-        console.log(`  Custom bot guilds: ${customBotClient.guilds.cache.map(g => g.id).join(', ')}`);
-        botClient = customBotClient;
+    // First check main bot if it's ready
+    if (client.isReady()) {
+      guild = client.guilds.cache.get(guildIdStr);
+      console.log(`  Main bot has guild: ${!!guild}`);
+      if (guild) {
+        botClient = client;
       }
     }
     
-    if (!guild) {
-      console.log(`❌ Guild ${guild_id} not found in any bot`);
+    // If not found in main bot, check custom bots
+    if (!guild && customBotManager) {
+      const customBotClient = customBotManager.customBots.get(guildIdStr);
+      console.log(`  Custom bot exists: ${!!customBotClient}`);
+      
+      if (customBotClient) {
+        const isReady = customBotClient.isReady && customBotClient.isReady();
+        console.log(`  Custom bot is ready: ${isReady}`);
+        
+        if (isReady) {
+          guild = customBotClient.guilds.cache.get(guildIdStr);
+          console.log(`  Custom bot has guild: ${!!guild}`);
+          if (guild) {
+            console.log(`  Custom bot guilds: ${Array.from(customBotClient.guilds.cache.keys()).join(', ')}`);
+            botClient = customBotClient;
+          }
+        }
+      }
+    }
+    
+    if (!guild || !botClient) {
+      console.log(`❌ Guild ${guildIdStr} not found in any bot`);
+      console.log(`  Main bot ready: ${client.isReady()}`);
+      console.log(`  Main bot guilds: ${client.isReady() ? Array.from(client.guilds.cache.keys()).join(', ') : 'N/A (not ready)'}`);
       console.log(`  Available custom bots: ${customBotManager ? Array.from(customBotManager.customBots.keys()).join(', ') : 'none'}`);
       return res.status(404).json({ 
         success: false, 
@@ -10550,26 +10569,47 @@ app.post('/api/twitch/test-gifted-sub', async (req, res) => {
     };
 
     // Get guild from main bot or custom bots
-    let guild = client.guilds.cache.get(guild_id);
-    let botClient = client;
+    // Convert guild_id to string to ensure proper comparison
+    const guildIdStr = String(guild_id);
+    let guild = null;
+    let botClient = null;
     
-    console.log(`🔍 Looking for guild ${guild_id}:`);
-    console.log(`  Main bot has guild: ${!!guild}`);
+    console.log(`🔍 Looking for guild ${guildIdStr}:`);
+    console.log(`  Main bot is ready: ${client.isReady()}`);
     
-    if (!guild && customBotManager) {
-      const customBotClient = customBotManager.customBots.get(guild_id);
-      console.log(`  Custom bot exists: ${!!customBotClient}`);
-      console.log(`  Custom bot is ready: ${!!(customBotClient && customBotClient.isReady && customBotClient.isReady())}`);
-      
-      if (customBotClient && customBotClient.isReady && customBotClient.isReady()) {
-        guild = customBotClient.guilds.cache.get(guild_id);
-        console.log(`  Custom bot has guild: ${!!guild}`);
-        botClient = customBotClient;
+    // First check main bot if it's ready
+    if (client.isReady()) {
+      guild = client.guilds.cache.get(guildIdStr);
+      console.log(`  Main bot has guild: ${!!guild}`);
+      if (guild) {
+        botClient = client;
       }
     }
     
-    if (!guild) {
-      console.log(`❌ Guild ${guild_id} not found in any bot`);
+    // If not found in main bot, check custom bots
+    if (!guild && customBotManager) {
+      const customBotClient = customBotManager.customBots.get(guildIdStr);
+      console.log(`  Custom bot exists: ${!!customBotClient}`);
+      
+      if (customBotClient) {
+        const isReady = customBotClient.isReady && customBotClient.isReady();
+        console.log(`  Custom bot is ready: ${isReady}`);
+        
+        if (isReady) {
+          guild = customBotClient.guilds.cache.get(guildIdStr);
+          console.log(`  Custom bot has guild: ${!!guild}`);
+          if (guild) {
+            botClient = customBotClient;
+          }
+        }
+      }
+    }
+    
+    if (!guild || !botClient) {
+      console.log(`❌ Guild ${guildIdStr} not found in any bot`);
+      console.log(`  Main bot ready: ${client.isReady()}`);
+      console.log(`  Main bot guilds: ${client.isReady() ? Array.from(client.guilds.cache.keys()).join(', ') : 'N/A (not ready)'}`);
+      console.log(`  Available custom bots: ${customBotManager ? Array.from(customBotManager.customBots.keys()).join(', ') : 'none'}`);
       return res.status(404).json({ 
         success: false, 
         error: 'Guild not found. Is the custom bot started and in the server?' 
