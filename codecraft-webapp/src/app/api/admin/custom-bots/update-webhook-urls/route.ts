@@ -186,11 +186,12 @@ export async function POST(request: NextRequest) {
             const serverId = serverDetails.identifier || serverDetails.uuid;
             
             // Use the request method via type assertion (it's a private method but we need it)
-            const allocationsResponse = await (client as any).request<any>(
+            const clientAny = client as any;
+            const allocationsResponse = await clientAny.request(
               `/servers/${serverId}/allocations`,
               { method: 'GET' },
               'application'
-            );
+            ) as any;
             
             // Handle different response formats
             let allocations: any[] = [];
