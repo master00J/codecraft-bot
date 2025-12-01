@@ -428,18 +428,15 @@ export async function POST(
         }
         
         if (allocationIp && allocationPort) {
-          // Use container port (3002) instead of allocation port
-          // The allocation port is forwarded to the container port in Pterodactyl
-          // But we need to use the container port directly for the webhook URL
-          const containerPort = parseInt(process.env.CUSTOM_BOT_CONTAINER_PORT || '3002');
-          
+          // Use allocation port - Pterodactyl forwards this to the container port (3002)
+          // The container listens on port 3002, but external access is via the allocation port
           // Construct webhook URL using environment variable pattern or default
           const baseUrlPattern = process.env.CUSTOM_BOT_BASE_URL || 'http://<IP>:<PORT>';
           botWebhookUrl = baseUrlPattern
             .replace('<IP>', allocationIp)
-            .replace('<PORT>', containerPort.toString());
+            .replace('<PORT>', allocationPort.toString());
           
-          console.log(`🔗 Constructed bot webhook URL: ${botWebhookUrl} (from ${allocationIp}:${allocationPort} -> container port ${containerPort})`);
+          console.log(`🔗 Constructed bot webhook URL: ${botWebhookUrl} (allocation ${allocationIp}:${allocationPort} -> forwarded to container port 3002)`);
         } else {
           console.warn(`⚠️  Could not determine allocation (IP:Port) for server ${pterodactylServer.uuid}`);
           console.log(`   Server details keys:`, Object.keys(serverDetails).join(', '));

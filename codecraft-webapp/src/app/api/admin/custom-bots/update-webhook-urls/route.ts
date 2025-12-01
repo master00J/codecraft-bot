@@ -252,17 +252,14 @@ export async function POST(request: NextRequest) {
         }
 
         if (allocationIp && allocationPort) {
-          // Use container port (3002) instead of allocation port
-          // The allocation port is forwarded to the container port in Pterodactyl
-          // But we need to use the container port directly for the webhook URL
-          const containerPort = parseInt(process.env.CUSTOM_BOT_CONTAINER_PORT || '3002');
-          
+          // Use allocation port - Pterodactyl forwards this to the container port (3002)
+          // The container listens on port 3002, but external access is via the allocation port
           // Construct webhook URL
           const botWebhookUrl = baseUrlPattern
             .replace('<IP>', allocationIp)
-            .replace('<PORT>', containerPort.toString());
+            .replace('<PORT>', allocationPort.toString());
 
-          console.log(`🔗 Constructed webhook URL: ${botWebhookUrl} (from ${allocationIp}:${allocationPort} -> container port ${containerPort})`);
+          console.log(`🔗 Constructed webhook URL: ${botWebhookUrl} (allocation ${allocationIp}:${allocationPort} -> forwarded to container port 3002)`);
 
           // Update database
           const { error: updateError } = await supabase
