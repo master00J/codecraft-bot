@@ -33,9 +33,10 @@ export async function POST(request: NextRequest) {
 
     // Get all custom bots running on Pterodactyl that don't have a webhook URL yet
     // Include bots that have a pterodactyl_server_uuid (even if runs_on_pterodactyl is not explicitly set)
+    // Also get pterodactyl_server_id and server_name for fallback lookup
     const { data: servers, error: dbError } = await supabase
       .from('custom_bot_tokens')
-      .select('guild_id, pterodactyl_server_uuid, bot_username, bot_webhook_url, runs_on_pterodactyl')
+      .select('guild_id, pterodactyl_server_uuid, pterodactyl_server_id, server_name, bot_username, bot_webhook_url, runs_on_pterodactyl')
       .not('pterodactyl_server_uuid', 'is', null)
       .or('runs_on_pterodactyl.eq.true,runs_on_pterodactyl.is.null');
 
@@ -96,8 +97,47 @@ export async function POST(request: NextRequest) {
         }
 
         // Get server details from Pterodactyl
-        const serverDetails = await client.getServer(server.pterodactyl_server_uuid);
-        console.log(`📋 Server details retrieved for ${server.pterodactyl_server_uuid}`);
+        // Try UUID first, then fallback to identifier or name lookup if 404
+        let serverDetails: any = null;
+        let serverLookupError: any = null;
+        
+        try {
+          serverDetails = await client.getServer(server.pterodactyl_server_uuid);
+          console.log(`📋 Server details retrieved for ${server.pterodactyl_server_uuid}`);
+        } catch (uuidError: any) {
+          serverLookupError = uuidError;
+          console.warn(`⚠️  Failed to get server by UUID ${server.pterodactyl_server_uuid}, trying fallback methods...`);
+          
+          // Fallback 1: Try with identifier if available
+          if (server.pterodactyl_server_id) {
+            try {
+              console.log(`   Trying with identifier: ${server.pterodactyl_server_id}`);
+              serverDetails = await client.getServer(server.pterodactyl_server_id);
+              console.log(`✅ Server found by identifier: ${server.pterodactyl_server_id}`);
+            } catch (identifierError: any) {
+              console.warn(`   Identifier lookup also failed: ${identifierError.message}`);
+            }
+          }
+          
+          // Fallback 2: Try to find server by name
+          if (!serverDetails && server.server_name) {
+            try {
+              console.log(`   Trying to find server by name: ${server.server_name}`);
+              const foundServer = await client.getServerByName(server.server_name);
+              if (foundServer) {
+                serverDetails = foundServer;
+                console.log(`✅ Server found by name: ${server.server_name}`);
+              }
+            } catch (nameError: any) {
+              console.warn(`   Name lookup also failed: ${nameError.message}`);
+            }
+          }
+          
+          // If still no server found, throw original error
+          if (!serverDetails) {
+            throw uuidError;
+          }
+        }
 
         // Get allocation (IP:Port) from server details
         let allocationIp: string | null = null;
