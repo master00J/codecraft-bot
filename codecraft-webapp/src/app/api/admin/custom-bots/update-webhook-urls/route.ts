@@ -143,10 +143,17 @@ export async function POST(request: NextRequest) {
         let allocationIp: string | null = null;
         let allocationPort: number | null = null;
 
+        // Debug: Log server details structure
+        console.log(`   Server details keys:`, Object.keys(serverDetails).join(', '));
+        if (serverDetails.relationships) {
+          console.log(`   Relationships keys:`, Object.keys(serverDetails.relationships).join(', '));
+        }
+
         // Try different possible structures for allocation data
         if (serverDetails.relationships?.allocations?.data?.[0]) {
           // Application API format with relationships
           const allocation = serverDetails.relationships.allocations.data[0];
+          console.log(`   Found allocation in relationships.allocations.data[0]`);
           allocationIp = allocation.attributes?.ip || allocation.ip || allocation.attributes?.ip_alias || allocation.ip_alias;
           allocationPort = allocation.attributes?.port || allocation.port || allocation.attributes?.port_alias || allocation.port_alias;
         } else if (serverDetails.allocations) {
@@ -154,13 +161,61 @@ export async function POST(request: NextRequest) {
           const allocation = Array.isArray(serverDetails.allocations) 
             ? serverDetails.allocations[0] 
             : serverDetails.allocations;
+          console.log(`   Found allocation in serverDetails.allocations`);
           allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
           allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
         } else if (serverDetails.allocation) {
           // Single allocation object
           const allocation = serverDetails.allocation;
+          console.log(`   Found allocation in serverDetails.allocation`);
           allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
           allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
+        } else if (serverDetails.relationships?.allocations) {
+          // Try relationships.allocations directly (without .data)
+          const allocations = serverDetails.relationships.allocations;
+          const allocation = Array.isArray(allocations) ? allocations[0] : allocations;
+          console.log(`   Found allocation in relationships.allocations (direct)`);
+          allocationIp = allocation?.attributes?.ip || allocation?.ip || allocation?.attributes?.ip_alias || allocation?.ip_alias;
+          allocationPort = allocation?.attributes?.port || allocation?.port || allocation?.attributes?.port_alias || allocation?.port_alias;
+        }
+
+        // If still no allocation found, try to fetch allocations directly from API
+        if (!allocationIp || !allocationPort) {
+          try {
+            console.log(`   Trying to fetch allocations directly from API for server ${serverDetails.identifier || serverDetails.uuid}`);
+            const serverId = serverDetails.identifier || serverDetails.uuid;
+            
+            // Use the request method via type assertion (it's a private method but we need it)
+            const allocationsResponse = await (client as any).request<any>(
+              `/servers/${serverId}/allocations`,
+              { method: 'GET' },
+              'application'
+            );
+            
+            // Handle different response formats
+            let allocations: any[] = [];
+            if (allocationsResponse.data) {
+              allocations = Array.isArray(allocationsResponse.data) ? allocationsResponse.data : [allocationsResponse.data];
+            } else if (Array.isArray(allocationsResponse)) {
+              allocations = allocationsResponse;
+            } else {
+              allocations = [allocationsResponse];
+            }
+            
+            // Find the primary/default allocation (usually the first one or the one marked as default)
+            const allocation = allocations.find((a: any) => a.attributes?.is_default || a.is_default) || allocations[0];
+            
+            if (allocation) {
+              const allocData = allocation.attributes || allocation;
+              allocationIp = allocData.ip || allocData.ip_alias;
+              allocationPort = allocData.port || allocData.port_alias;
+              console.log(`   ✅ Found allocation via direct API call: ${allocationIp}:${allocationPort}`);
+            } else {
+              console.warn(`   No allocations found in API response`);
+            }
+          } catch (allocError: any) {
+            console.warn(`   Could not fetch allocations directly: ${allocError.message}`);
+          }
         }
 
         if (allocationIp && allocationPort) {
