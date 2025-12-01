@@ -32,11 +32,12 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Starting webhook URL update for existing custom bot containers...');
 
     // Get all custom bots running on Pterodactyl that don't have a webhook URL yet
+    // Include bots that have a pterodactyl_server_uuid (even if runs_on_pterodactyl is not explicitly set)
     const { data: servers, error: dbError } = await supabase
       .from('custom_bot_tokens')
       .select('guild_id, pterodactyl_server_uuid, bot_username, bot_webhook_url, runs_on_pterodactyl')
-      .eq('runs_on_pterodactyl', true)
-      .not('pterodactyl_server_uuid', 'is', null);
+      .not('pterodactyl_server_uuid', 'is', null)
+      .or('runs_on_pterodactyl.eq.true,runs_on_pterodactyl.is.null');
 
     if (dbError) {
       console.error('❌ Error fetching servers from database:', dbError);
@@ -215,11 +216,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get statistics
+    // Include all bots that have a pterodactyl_server_uuid (even if runs_on_pterodactyl is not explicitly set)
     const { data: allServers } = await supabase
       .from('custom_bot_tokens')
       .select('guild_id, bot_webhook_url, runs_on_pterodactyl, pterodactyl_server_uuid')
-      .eq('runs_on_pterodactyl', true)
-      .not('pterodactyl_server_uuid', 'is', null);
+      .not('pterodactyl_server_uuid', 'is', null)
+      .or('runs_on_pterodactyl.eq.true,runs_on_pterodactyl.is.null');
 
     const total = allServers?.length || 0;
     const withUrl = allServers?.filter(s => s.bot_webhook_url).length || 0;
