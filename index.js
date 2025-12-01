@@ -10051,6 +10051,38 @@ app.post('/api/twitch/subscriber', async (req, res) => {
           if (customBot && customBot.runs_on_pterodactyl && customBot.bot_webhook_url) {
             console.log(`🔗 Guild uses custom bot in Docker container, proxying request to: ${customBot.bot_webhook_url}`);
             
+            // First, check if container is reachable via health check
+            try {
+              const healthController = new AbortController();
+              const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 second timeout for health check
+              
+              const healthResponse = await fetch(`${customBot.bot_webhook_url}/health`, {
+                method: 'GET',
+                signal: healthController.signal
+              });
+              
+              clearTimeout(healthTimeout);
+              
+              if (!healthResponse.ok) {
+                console.warn(`⚠️  Container health check failed (status ${healthResponse.status}), but continuing with webhook request...`);
+              } else {
+                console.log(`✅ Container health check passed`);
+              }
+            } catch (healthError) {
+              console.error(`❌ Container health check failed:`, healthError.message);
+              console.error(`   This suggests the container at ${customBot.bot_webhook_url} is offline or unreachable`);
+              return res.status(503).json({
+                success: false,
+                error: `Custom bot container is not reachable. The container may be offline.`,
+                details: {
+                  webhook_url: customBot.bot_webhook_url,
+                  bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                  health_check_error: healthError.message,
+                  hint: 'Please check if the container is running in Pterodactyl panel and if the port forwarding is configured correctly.'
+                }
+              });
+            }
+            
             // Proxy the request to the custom bot container
             try {
               const controller = new AbortController();
@@ -10325,6 +10357,38 @@ app.post('/api/twitch/gifted-subscriber', async (req, res) => {
           
           if (customBot && customBot.runs_on_pterodactyl && customBot.bot_webhook_url) {
             console.log(`🔗 Guild uses custom bot in Docker container, proxying request to: ${customBot.bot_webhook_url}`);
+            
+            // First, check if container is reachable via health check
+            try {
+              const healthController = new AbortController();
+              const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 second timeout for health check
+              
+              const healthResponse = await fetch(`${customBot.bot_webhook_url}/health`, {
+                method: 'GET',
+                signal: healthController.signal
+              });
+              
+              clearTimeout(healthTimeout);
+              
+              if (!healthResponse.ok) {
+                console.warn(`⚠️  Container health check failed (status ${healthResponse.status}), but continuing with webhook request...`);
+              } else {
+                console.log(`✅ Container health check passed`);
+              }
+            } catch (healthError) {
+              console.error(`❌ Container health check failed:`, healthError.message);
+              console.error(`   This suggests the container at ${customBot.bot_webhook_url} is offline or unreachable`);
+              return res.status(503).json({
+                success: false,
+                error: `Custom bot container is not reachable. The container may be offline.`,
+                details: {
+                  webhook_url: customBot.bot_webhook_url,
+                  bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                  health_check_error: healthError.message,
+                  hint: 'Please check if the container is running in Pterodactyl panel and if the port forwarding is configured correctly.'
+                }
+              });
+            }
             
             // Proxy the request to the custom bot container
             try {
@@ -10648,6 +10712,38 @@ app.post('/api/twitch/test-subscriber', async (req, res) => {
           if (customBot && customBot.runs_on_pterodactyl && customBot.bot_webhook_url) {
             console.log(`🔗 Guild uses custom bot in Docker container, proxying request to: ${customBot.bot_webhook_url}`);
             
+            // First, check if container is reachable via health check
+            try {
+              const healthController = new AbortController();
+              const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 second timeout for health check
+              
+              const healthResponse = await fetch(`${customBot.bot_webhook_url}/health`, {
+                method: 'GET',
+                signal: healthController.signal
+              });
+              
+              clearTimeout(healthTimeout);
+              
+              if (!healthResponse.ok) {
+                console.warn(`⚠️  Container health check failed (status ${healthResponse.status}), but continuing with webhook request...`);
+              } else {
+                console.log(`✅ Container health check passed`);
+              }
+            } catch (healthError) {
+              console.error(`❌ Container health check failed:`, healthError.message);
+              console.error(`   This suggests the container at ${customBot.bot_webhook_url} is offline or unreachable`);
+              return res.status(503).json({
+                success: false,
+                error: `Custom bot container is not reachable. The container may be offline.`,
+                details: {
+                  webhook_url: customBot.bot_webhook_url,
+                  bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                  health_check_error: healthError.message,
+                  hint: 'Please check if the container is running in Pterodactyl panel and if the port forwarding is configured correctly.'
+                }
+              });
+            }
+            
             // Proxy the request to the custom bot container
             try {
               const controller = new AbortController();
@@ -10935,6 +11031,38 @@ app.post('/api/twitch/test-gifted-sub', async (req, res) => {
           
           if (customBot && customBot.runs_on_pterodactyl && customBot.bot_webhook_url) {
             console.log(`🔗 Guild uses custom bot in Docker container, proxying request to: ${customBot.bot_webhook_url}`);
+            
+            // First, check if container is reachable via health check
+            try {
+              const healthController = new AbortController();
+              const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 second timeout for health check
+              
+              const healthResponse = await fetch(`${customBot.bot_webhook_url}/health`, {
+                method: 'GET',
+                signal: healthController.signal
+              });
+              
+              clearTimeout(healthTimeout);
+              
+              if (!healthResponse.ok) {
+                console.warn(`⚠️  Container health check failed (status ${healthResponse.status}), but continuing with webhook request...`);
+              } else {
+                console.log(`✅ Container health check passed`);
+              }
+            } catch (healthError) {
+              console.error(`❌ Container health check failed:`, healthError.message);
+              console.error(`   This suggests the container at ${customBot.bot_webhook_url} is offline or unreachable`);
+              return res.status(503).json({
+                success: false,
+                error: `Custom bot container is not reachable. The container may be offline.`,
+                details: {
+                  webhook_url: customBot.bot_webhook_url,
+                  bot_status: customBot.bot_online ? 'Online' : 'Offline',
+                  health_check_error: healthError.message,
+                  hint: 'Please check if the container is running in Pterodactyl panel and if the port forwarding is configured correctly.'
+                }
+              });
+            }
             
             // Proxy the request to the custom bot container
             try {
