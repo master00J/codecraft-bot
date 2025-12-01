@@ -10399,9 +10399,29 @@ app.post('/api/twitch/test-subscriber', async (req, res) => {
       console.log(`  Main bot ready: ${client.isReady()}`);
       console.log(`  Main bot guilds: ${client.isReady() ? Array.from(client.guilds.cache.keys()).join(', ') : 'N/A (not ready)'}`);
       console.log(`  Available custom bots: ${customBotManager ? Array.from(customBotManager.customBots.keys()).join(', ') : 'none'}`);
+      
+      // Check if this guild has a custom bot running in a Docker container
+      let errorMessage = 'Guild not found. Is the custom bot started and in the server?';
+      try {
+        if (configManager && configManager.supabase) {
+          const { data: customBot } = await configManager.supabase
+            .from('custom_bot_tokens')
+            .select('runs_on_pterodactyl, bot_username, bot_online')
+            .eq('guild_id', guildIdStr)
+            .single();
+          
+          if (customBot && customBot.runs_on_pterodactyl) {
+            errorMessage = `This guild uses a custom bot running in a Docker container. The bot must be online and in the server for test notifications to work. Bot status: ${customBot.bot_online ? 'Online' : 'Offline'}`;
+          }
+        }
+      } catch (dbError) {
+        // Ignore database errors, use default message
+        console.log(`  Could not check custom bot status: ${dbError.message}`);
+      }
+      
       return res.status(404).json({ 
         success: false, 
-        error: 'Guild not found. Is the custom bot started and in the server?' 
+        error: errorMessage 
       });
     }
     
@@ -10610,9 +10630,29 @@ app.post('/api/twitch/test-gifted-sub', async (req, res) => {
       console.log(`  Main bot ready: ${client.isReady()}`);
       console.log(`  Main bot guilds: ${client.isReady() ? Array.from(client.guilds.cache.keys()).join(', ') : 'N/A (not ready)'}`);
       console.log(`  Available custom bots: ${customBotManager ? Array.from(customBotManager.customBots.keys()).join(', ') : 'none'}`);
+      
+      // Check if this guild has a custom bot running in a Docker container
+      let errorMessage = 'Guild not found. Is the custom bot started and in the server?';
+      try {
+        if (configManager && configManager.supabase) {
+          const { data: customBot } = await configManager.supabase
+            .from('custom_bot_tokens')
+            .select('runs_on_pterodactyl, bot_username, bot_online')
+            .eq('guild_id', guildIdStr)
+            .single();
+          
+          if (customBot && customBot.runs_on_pterodactyl) {
+            errorMessage = `This guild uses a custom bot running in a Docker container. The bot must be online and in the server for test notifications to work. Bot status: ${customBot.bot_online ? 'Online' : 'Offline'}`;
+          }
+        }
+      } catch (dbError) {
+        // Ignore database errors, use default message
+        console.log(`  Could not check custom bot status: ${dbError.message}`);
+      }
+      
       return res.status(404).json({ 
         success: false, 
-        error: 'Guild not found. Is the custom bot started and in the server?' 
+        error: errorMessage 
       });
     }
     
