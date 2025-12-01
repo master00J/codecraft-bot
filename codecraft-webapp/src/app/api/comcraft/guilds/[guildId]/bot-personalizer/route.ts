@@ -386,6 +386,8 @@ export async function POST(
           TWITCH_CLIENT_ID: process.env.TWITCH_CLIENT_ID || '',
           TWITCH_CLIENT_SECRET: process.env.TWITCH_CLIENT_SECRET || '',
           TWITCH_EVENTSUB_SECRET: process.env.TWITCH_EVENTSUB_SECRET || '',
+          // Internal API secret for webhook authentication
+          INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET || '',
         }
       });
 
