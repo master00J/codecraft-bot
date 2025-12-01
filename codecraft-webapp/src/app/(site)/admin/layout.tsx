@@ -121,6 +121,12 @@ export default function AdminLayout({
               {t('links.deployments')}
             </Button>
           </Link>
+          <Link href="/admin/custom-bots">
+            <Button variant="ghost" className="w-full justify-start gap-2">
+              <Server className="h-4 w-4" />
+              Custom Bots
+            </Button>
+          </Link>
           <Link href="/admin/chat">
             <Button variant="ghost" className="w-full justify-start gap-2">
               <MessageCircle className="h-4 w-4" />
