@@ -4,7 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 class CamOnlyVoiceManager {
   constructor(client) {
@@ -16,6 +16,8 @@ class CamOnlyVoiceManager {
     this.monitoredChannels = new Map(); // channelId -> config
     this.userWarnings = new Map(); // userId -> { channelId, warnings, lastWarning }
     this.userJoinTimes = new Map(); // `${userId}-${channelId}` -> joinTimestamp
+    this.pendingVerifications = new Map(); // `${userId}-${channelId}` -> { messageId, timeout }
+    this.verifiedUsers = new Set(); // `${userId}-${channelId}` -> verified
     this.checkInterval = null;
   }
 
@@ -75,6 +77,9 @@ class CamOnlyVoiceManager {
       grace_period_seconds: 10,
       warning_enabled: true,
       max_warnings: 2,
+      block_screen_sharing: true, // Block screen sharing by default (often used with virtual cameras)
+      verification_enabled: true, // Enable verification by default to prevent OBS Virtual Camera
+      verification_timeout_seconds: 30, // Time to verify before disconnect
       exempt_roles: [],
       exempt_users: [],
       log_channel_id: null,
@@ -122,6 +127,34 @@ class CamOnlyVoiceManager {
     // Check if user has video enabled
     // In Discord.js, we check the video property
     return voiceState.selfVideo === true;
+  }
+
+  /**
+   * Check if user is using screen sharing (often used with virtual cameras)
+   * Note: This is a heuristic - we can't 100% detect virtual cameras
+   */
+  isScreenSharing(voiceState) {
+    return voiceState.streaming === true;
+  }
+
+  /**
+   * Enhanced video check that also blocks screen sharing if configured
+   * @param {VoiceState} voiceState - The voice state to check
+   * @param {Object} config - The channel configuration
+   * @returns {Object} { hasVideo: boolean, reason: string }
+   */
+  checkVideoRequirement(voiceState, config) {
+    // Check if video is enabled
+    if (!this.hasVideoStream(voiceState)) {
+      return { hasVideo: false, reason: 'no_video' };
+    }
+
+    // Check if screen sharing is blocked and user is screen sharing
+    if (config.block_screen_sharing !== false && this.isScreenSharing(voiceState)) {
+      return { hasVideo: false, reason: 'screen_sharing' };
+    }
+
+    return { hasVideo: true, reason: null };
   }
 
   /**
@@ -238,6 +271,162 @@ class CamOnlyVoiceManager {
   }
 
   /**
+   * Send verification message to user
+   */
+  async sendVerificationMessage(member, channelId, config) {
+    const key = `${member.id}-${channelId}`;
+    const verificationTimeout = (config.verification_timeout_seconds || 30) * 1000;
+
+    try {
+      const button = new ButtonBuilder()
+        .setCustomId(`cam_verify_${member.id}_${channelId}`)
+        .setLabel('✅ Verify Camera')
+        .setStyle(ButtonStyle.Success);
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      const embed = new EmbedBuilder()
+        .setColor(0xFFA500)
+        .setTitle('🔐 Camera Verification Required')
+        .setDescription(
+          `You joined a **cam-only voice channel** (<#${channelId}>).\n\n` +
+          `To prevent the use of virtual cameras (like OBS), please verify that you're using a real camera by clicking the button below.\n\n` +
+          `**You have ${config.verification_timeout_seconds || 30} seconds to verify.**\n\n` +
+          `⚠️ If you don't verify in time, you will be automatically disconnected.`
+        )
+        .setTimestamp();
+
+      const message = await member.send({ 
+        embeds: [embed], 
+        components: [row] 
+      });
+
+      // Set timeout to disconnect if not verified
+      const timeout = setTimeout(async () => {
+        const verificationKey = `${member.id}-${channelId}`;
+        if (!this.verifiedUsers.has(verificationKey)) {
+          try {
+            await member.voice.disconnect('Camera verification timeout - please use a real camera');
+            
+            const timeoutEmbed = new EmbedBuilder()
+              .setColor(0xFF0000)
+              .setTitle('⏰ Verification Timeout')
+              .setDescription(
+                `You didn't verify your camera in time and were disconnected from <#${channelId}>.\n\n` +
+                `Please join again and verify immediately to stay in the channel.`
+              )
+              .setTimestamp();
+
+            await member.send({ embeds: [timeoutEmbed] }).catch(() => {});
+            await this.logAction(member, { channelId }, config, 'verification_timeout');
+          } catch (error) {
+            console.error('❌ [Cam-Only Voice] Error handling verification timeout:', error);
+          }
+        }
+        this.pendingVerifications.delete(verificationKey);
+      }, verificationTimeout);
+
+      this.pendingVerifications.set(key, { messageId: message.id, timeout });
+    } catch (error) {
+      console.error('❌ [Cam-Only Voice] Error sending verification message:', error);
+      // If DM fails, try to send in channel
+      try {
+        const channel = await this.client.channels.fetch(channelId).catch(() => null);
+        if (channel) {
+          const embed = new EmbedBuilder()
+            .setColor(0xFFA500)
+            .setDescription(`<@${member.id}> Please check your DMs for camera verification!`)
+            .setTimestamp();
+          
+          const msg = await channel.send({ embeds: [embed] });
+          setTimeout(() => msg.delete().catch(() => {}), 10000);
+        }
+      } catch (err) {
+        console.error('❌ [Cam-Only Voice] Error sending channel notification:', err);
+      }
+    }
+  }
+
+  /**
+   * Handle verification button click
+   */
+  async handleVerificationButton(interaction) {
+    const customId = interaction.customId;
+    const match = customId.match(/^cam_verify_(\d+)_(\d+)$/);
+    
+    if (!match) return false;
+
+    const userId = match[1];
+    const channelId = match[2];
+
+    // Check if this is the correct user
+    if (interaction.user.id !== userId) {
+      await interaction.reply({
+        content: '❌ This verification is not for you.',
+        ephemeral: true
+      });
+      return true;
+    }
+
+    const key = `${userId}-${channelId}`;
+    const member = interaction.member;
+    
+    if (!member) {
+      await interaction.reply({
+        content: '❌ Could not find your member information.',
+        ephemeral: true
+      });
+      return true;
+    }
+
+    // Check if user is still in the channel
+    const voiceState = member.voice;
+    if (!voiceState || voiceState.channelId !== channelId) {
+      await interaction.reply({
+        content: '❌ You are not in the voice channel anymore.',
+        ephemeral: true
+      });
+      return true;
+    }
+
+    // Mark as verified
+    this.verifiedUsers.add(key);
+    
+    // Clear pending verification
+    const pending = this.pendingVerifications.get(key);
+    if (pending) {
+      clearTimeout(pending.timeout);
+      this.pendingVerifications.delete(key);
+    }
+
+    await interaction.reply({
+      content: '✅ Camera verified! You can now stay in the voice channel.',
+      ephemeral: true
+    });
+
+    // Update the original message
+    try {
+      const embed = new EmbedBuilder()
+        .setColor(0x00FF00)
+        .setTitle('✅ Camera Verified')
+        .setDescription(
+          `Your camera has been verified for <#${channelId}>.\n\n` +
+          `You can now stay in the voice channel.`
+        )
+        .setTimestamp();
+
+      await interaction.message.edit({ 
+        embeds: [embed], 
+        components: [] 
+      });
+    } catch (error) {
+      console.error('❌ [Cam-Only Voice] Error updating verification message:', error);
+    }
+
+    return true;
+  }
+
+  /**
    * Handle voice state update
    */
   async handleVoiceStateUpdate(oldState, newState) {
@@ -315,13 +504,45 @@ class CamOnlyVoiceManager {
         }
       }
 
-      // Check if user has video
-      if (!this.hasVideoStream(newState)) {
+      // Check video requirement (includes screen sharing check)
+      const videoCheck = this.checkVideoRequirement(newState, config);
+      
+      // If screen sharing is detected and blocked, disconnect immediately
+      if (videoCheck.reason === 'screen_sharing') {
+        try {
+          await member.voice.disconnect('Screen sharing is not allowed in cam-only voice channels');
+          
+          const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('🚫 Screen Sharing Not Allowed')
+            .setDescription(
+              `Screen sharing is not allowed in <#${newState.channelId}>.\n\n` +
+              `This channel requires a real camera feed. Please disable screen sharing and use your camera instead.`
+            )
+            .setTimestamp();
+
+          await member.send({ embeds: [embed] }).catch(() => {
+            const channel = newState.channel;
+            if (channel) {
+              channel.send({ content: `<@${member.id}>`, embeds: [embed] })
+                .then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000))
+                .catch(() => {});
+            }
+          });
+
+          await this.logAction(member, newState, config, 'screen_sharing_blocked');
+        } catch (error) {
+          console.error('❌ [Cam-Only Voice] Error handling screen sharing block on join:', error);
+        }
+        return;
+      }
+
+      if (!videoCheck.hasVideo) {
         // Record join time for grace period tracking
         const key = `${newState.id}-${newState.channelId}`;
         this.userJoinTimes.set(key, Date.now());
       } else {
-        // User has video - clear join time tracking
+        // User has valid video - clear join time tracking
         const key = `${newState.id}-${newState.channelId}`;
         this.userJoinTimes.delete(key);
       }
@@ -401,18 +622,51 @@ class CamOnlyVoiceManager {
         }
       }
 
-      if (!this.hasVideoStream(newState)) {
+      // Check video requirement (includes screen sharing check)
+      const videoCheck = this.checkVideoRequirement(newState, config);
+      
+      // If screen sharing is detected and blocked, disconnect immediately
+      if (videoCheck.reason === 'screen_sharing') {
+        try {
+          await member.voice.disconnect('Screen sharing is not allowed in cam-only voice channels');
+          
+          const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('🚫 Screen Sharing Not Allowed')
+            .setDescription(
+              `Screen sharing is not allowed in <#${newState.channelId}>.\n\n` +
+              `This channel requires a real camera feed. Please disable screen sharing and use your camera instead.`
+            )
+            .setTimestamp();
+
+          await member.send({ embeds: [embed] }).catch(() => {
+            const channel = newState.channel;
+            if (channel) {
+              channel.send({ content: `<@${member.id}>`, embeds: [embed] })
+                .then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000))
+                .catch(() => {});
+            }
+          });
+
+          await this.logAction(member, newState, config, 'screen_sharing_blocked');
+        } catch (error) {
+          console.error('❌ [Cam-Only Voice] Error handling screen sharing block on switch:', error);
+        }
+        return;
+      }
+
+      if (!videoCheck.hasVideo) {
         // Record join time for grace period tracking
         const key = `${newState.id}-${newState.channelId}`;
         this.userJoinTimes.set(key, Date.now());
       } else {
-        // User has video - clear join time tracking
+        // User has valid video - clear join time tracking
         const key = `${newState.id}-${newState.channelId}`;
         this.userJoinTimes.delete(key);
       }
     }
 
-    // User turned video on/off while in channel
+    // User turned video on/off or started/stopped screen sharing while in channel
     if (oldState.channelId && newState.channelId && oldState.channelId === newState.channelId) {
       const config = this.monitoredChannels.get(newState.channelId);
       if (!config || !config.enabled) return;
@@ -425,11 +679,44 @@ class CamOnlyVoiceManager {
 
       const key = `${newState.id}-${newState.channelId}`;
 
+      // Check video requirement
+      const videoCheck = this.checkVideoRequirement(newState, config);
+      
+      // If screen sharing is detected and blocked, disconnect immediately
+      if (videoCheck.reason === 'screen_sharing') {
+        try {
+          await member.voice.disconnect('Screen sharing is not allowed in cam-only voice channels');
+          
+          const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('🚫 Screen Sharing Not Allowed')
+            .setDescription(
+              `Screen sharing is not allowed in <#${newState.channelId}>.\n\n` +
+              `This channel requires a real camera feed. Please disable screen sharing and use your camera instead.`
+            )
+            .setTimestamp();
+
+          await member.send({ embeds: [embed] }).catch(() => {
+            const channel = newState.channel;
+            if (channel) {
+              channel.send({ content: `<@${member.id}>`, embeds: [embed] })
+                .then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000))
+                .catch(() => {});
+            }
+          });
+
+          await this.logAction(member, newState, config, 'screen_sharing_blocked');
+        } catch (error) {
+          console.error('❌ [Cam-Only Voice] Error handling screen sharing block:', error);
+        }
+        return;
+      }
+
       // Video was on, now off - start grace period
       if (oldState.selfVideo && !newState.selfVideo) {
         this.userJoinTimes.set(key, Date.now()); // Start grace period from now
-      } else if (newState.selfVideo) {
-        // User turned video on - clear join time tracking and warnings
+      } else if (videoCheck.hasVideo) {
+        // User has valid video - clear join time tracking and warnings
         this.userJoinTimes.delete(key);
         this.userWarnings.delete(key);
       }
@@ -442,6 +729,14 @@ class CamOnlyVoiceManager {
         const key = `${oldState.id}-${oldState.channelId}`;
         this.userJoinTimes.delete(key);
         this.userWarnings.delete(key);
+        this.verifiedUsers.delete(key);
+        
+        // Clear pending verification
+        const pending = this.pendingVerifications.get(key);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingVerifications.delete(key);
+        }
       }
     }
   }
@@ -609,9 +904,23 @@ class CamOnlyVoiceManager {
         return;
       }
 
-      const actionText = action === 'warning' 
-        ? `⚠️ Warning ${warningCount}/${config.max_warnings || 2}`
-        : '🚫 Disconnected';
+      let actionText;
+      if (action === 'warning') {
+        actionText = `⚠️ Warning ${warningCount}/${config.max_warnings || 2}`;
+      } else if (action === 'screen_sharing_blocked') {
+        actionText = '🚫 Screen Sharing Blocked';
+      } else {
+        actionText = '🚫 Disconnected';
+      }
+
+      let reason;
+      if (action === 'screen_sharing_blocked') {
+        reason = 'Screen sharing detected (virtual camera likely)';
+      } else if (action === 'verification_timeout' || action === 'verification_missing') {
+        reason = 'Camera verification failed or timeout';
+      } else {
+        reason = 'Camera not enabled';
+      }
 
       const embed = new EmbedBuilder()
         .setColor(action === 'warning' ? 0xFFA500 : 0xFF0000)
@@ -620,7 +929,7 @@ class CamOnlyVoiceManager {
           `**User:** ${member.user.tag} (${member.id})\n` +
           `**Channel:** <#${voiceState.channelId}>\n` +
           `**Action:** ${actionText}\n` +
-          `**Reason:** Camera not enabled`
+          `**Reason:** ${reason}`
         )
         .setTimestamp();
 
@@ -659,7 +968,60 @@ class CamOnlyVoiceManager {
 
             const key = `${memberId}-${channelId}`;
             
-            if (!this.hasVideoStream(voiceState)) {
+            // Check if user is verified (if verification is enabled)
+            if (config.verification_enabled !== false) {
+              if (!this.verifiedUsers.has(key)) {
+                // User hasn't verified yet - check if verification timeout has passed
+                const pending = this.pendingVerifications.get(key);
+                if (!pending) {
+                  // Verification message was never sent or expired - disconnect
+                  try {
+                    await member.voice.disconnect('Camera verification required');
+                    await this.logAction(member, voiceState, config, 'verification_missing');
+                  } catch (error) {
+                    console.error('❌ [Cam-Only Voice] Error disconnecting unverified user:', error);
+                  }
+                  continue;
+                }
+                // If pending verification exists, wait for it (timeout will handle it)
+                continue;
+              }
+            }
+            
+            // Check video requirement (includes screen sharing check)
+            const videoCheck = this.checkVideoRequirement(voiceState, config);
+            
+            // If screen sharing is detected and blocked, disconnect immediately
+            if (videoCheck.reason === 'screen_sharing') {
+              try {
+                await member.voice.disconnect('Screen sharing is not allowed in cam-only voice channels');
+                
+                const embed = new EmbedBuilder()
+                  .setColor(0xFF0000)
+                  .setTitle('🚫 Screen Sharing Not Allowed')
+                  .setDescription(
+                    `Screen sharing is not allowed in <#${channelId}>.\n\n` +
+                    `This channel requires a real camera feed. Please disable screen sharing and use your camera instead.`
+                  )
+                  .setTimestamp();
+
+                await member.send({ embeds: [embed] }).catch(() => {
+                  const channel = voiceState.channel;
+                  if (channel) {
+                    channel.send({ content: `<@${member.id}>`, embeds: [embed] })
+                      .then(msg => setTimeout(() => msg.delete().catch(() => {}), 10000))
+                      .catch(() => {});
+                  }
+                });
+
+                await this.logAction(member, voiceState, config, 'screen_sharing_blocked');
+              } catch (error) {
+                console.error('❌ [Cam-Only Voice] Error handling screen sharing block in periodic check:', error);
+              }
+              continue;
+            }
+            
+            if (!videoCheck.hasVideo) {
               // Check if grace period has passed
               const joinTime = this.userJoinTimes.get(key);
               const gracePeriod = (config.grace_period_seconds || 10) * 1000;
@@ -670,7 +1032,7 @@ class CamOnlyVoiceManager {
               }
               // If grace period hasn't passed yet, do nothing (wait)
             } else {
-              // User has video - clear warnings and join time tracking
+              // User has valid video - clear warnings and join time tracking
               this.userWarnings.delete(key);
               this.userJoinTimes.delete(key);
             }

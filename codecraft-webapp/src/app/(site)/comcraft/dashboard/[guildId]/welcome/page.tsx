@@ -81,6 +81,11 @@ export default function WelcomeDashboard() {
   const [saving, setSaving] = useState(false);
   const [channels, setChannels] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [voiceChatRoleConfig, setVoiceChatRoleConfig] = useState({
+    enabled: false,
+    role_id: null as string | null
+  });
+  const [voiceChatRoleSaving, setVoiceChatRoleSaving] = useState(false);
   const [config, setConfig] = useState<Partial<WelcomeConfig>>({
     welcome_enabled: false,
     welcome_embed_enabled: false,
@@ -118,16 +123,18 @@ export default function WelcomeDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [configRes, channelsRes, rolesRes] = await Promise.all([
+      const [configRes, channelsRes, rolesRes, voiceChatRoleRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/welcome`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/channels`),
-        fetch(`/api/comcraft/guilds/${guildId}/discord/roles`)
+        fetch(`/api/comcraft/guilds/${guildId}/discord/roles`),
+        fetch(`/api/comcraft/guilds/${guildId}/voice-chat-role`)
       ]);
 
-      const [configData, channelsData, rolesData] = await Promise.all([
+      const [configData, channelsData, rolesData, voiceChatRoleData] = await Promise.all([
         configRes.json(),
         channelsRes.json(),
-        rolesRes.json()
+        rolesRes.json(),
+        voiceChatRoleRes.json()
       ]);
 
       if (configData.success && configData.config) {
@@ -147,6 +154,10 @@ export default function WelcomeDashboard() {
 
       if (rolesData.success) {
         setRoles(rolesData.roles || []);
+      }
+
+      if (voiceChatRoleData.success && voiceChatRoleData.config) {
+        setVoiceChatRoleConfig(voiceChatRoleData.config);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -195,6 +206,41 @@ export default function WelcomeDashboard() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveVoiceChatRole = async () => {
+    setVoiceChatRoleSaving(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/voice-chat-role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(voiceChatRoleConfig)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: 'Voice chat role configuration saved successfully!'
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to save configuration.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error saving voice chat role config:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred.',
+        variant: 'destructive'
+      });
+    } finally {
+      setVoiceChatRoleSaving(false);
     }
   };
 
@@ -341,7 +387,7 @@ export default function WelcomeDashboard() {
         </Card>
 
         <Tabs defaultValue="welcome" className="space-y-6">
-          <TabsList className="w-full grid grid-cols-4 bg-muted/50 p-2 rounded-lg">
+          <TabsList className="w-full grid grid-cols-5 bg-muted/50 p-2 rounded-lg">
             <TabsTrigger value="welcome" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               👋 Welcome Message
             </TabsTrigger>
@@ -353,6 +399,9 @@ export default function WelcomeDashboard() {
             </TabsTrigger>
             <TabsTrigger value="autorole" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               🎭 Auto-Roles
+            </TabsTrigger>
+            <TabsTrigger value="voicechatrole" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              🔊 Voice Chat Role
             </TabsTrigger>
           </TabsList>
 
@@ -1122,6 +1171,95 @@ export default function WelcomeDashboard() {
                     </div>
                   </div>
                 </>
+              )}
+            </Card>
+          </TabsContent>
+
+          {/* VOICE CHAT ROLE TAB */}
+          <TabsContent value="voicechatrole" className="space-y-6">
+            <Card className="p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Voice Chat Role</h2>
+                  <p className="text-muted-foreground">
+                    Automatically assign a role to members when they join a voice channel. The role will be removed when they leave.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="voice-chat-role-enabled">Enable Voice Chat Role</Label>
+                  <Switch
+                    id="voice-chat-role-enabled"
+                    checked={voiceChatRoleConfig.enabled || false}
+                    onCheckedChange={(checked) => setVoiceChatRoleConfig({ ...voiceChatRoleConfig, enabled: checked })}
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {voiceChatRoleConfig.enabled && (
+                <>
+                  <div>
+                    <Label htmlFor="voice-chat-role-select">Role to Assign</Label>
+                    <Select
+                      value={voiceChatRoleConfig.role_id || ''}
+                      onValueChange={(value) => setVoiceChatRoleConfig({ ...voiceChatRoleConfig, role_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a role..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            @{role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      This role will be automatically assigned when members join a voice channel and removed when they leave.
+                    </p>
+                  </div>
+
+                  {voiceChatRoleConfig.role_id && (
+                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="text-blue-600 dark:text-blue-400 text-xl">ℹ️</div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">Important Notes</h3>
+                          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+                            <li>The bot must have permission to manage this role</li>
+                            <li>The role must be lower than the bot's highest role</li>
+                            <li>Bots will not receive the role</li>
+                            <li>Muted or deafened members will not receive the role</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-4 border-t">
+                    <Button onClick={handleSaveVoiceChatRole} disabled={voiceChatRoleSaving || !voiceChatRoleConfig.role_id}>
+                      {voiceChatRoleSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save Configuration
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {!voiceChatRoleConfig.enabled && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Enable the feature above to configure voice chat roles.</p>
+                </div>
               )}
             </Card>
           </TabsContent>

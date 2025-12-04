@@ -80,6 +80,7 @@ const VoteKickCommands = require('./modules/comcraft/vote-kick/commands');
 const CamOnlyVoiceManager = require('./modules/comcraft/cam-only-voice/manager');
 const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands');
 const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
+const VoiceChatRoleManager = require('./modules/comcraft/voice-chat-role/manager');
 // Voice Move Commands and Handlers
 let voiceMoveCommands = null;
 let VoiceMoveHandlers = null;
@@ -608,6 +609,17 @@ client.once('ready', async () => {
     global.camOnlyVoiceHandlers = null;
   }
 
+  // Initialize Voice Chat Role Manager
+  let voiceChatRoleManager = null;
+  try {
+    voiceChatRoleManager = new VoiceChatRoleManager(client);
+    global.voiceChatRoleManager = voiceChatRoleManager;
+    console.log('✅ Voice Chat Role Manager initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Voice Chat Role Manager:', error.message);
+    global.voiceChatRoleManager = null;
+  }
+
   // Initialize Voice Move Handler
   let voiceMoveHandlers = null;
   if (VoiceMoveHandlers) {
@@ -865,7 +877,7 @@ client.once('ready', async () => {
           // Get all active voice sessions
           const { data: activeSessions } = await userStatsManager.supabase
             .from('voice_sessions')
-            .select('guild_id, user_id, joined_at')
+            .select('id, guild_id, user_id, joined_at')
             .eq('is_active', true);
 
           if (!activeSessions || activeSessions.length === 0) {
@@ -929,10 +941,19 @@ client.once('ready', async () => {
                   const now = new Date();
                   const minutesActive = Math.floor((now - joinedAt) / (1000 * 60));
 
-                  // Only award XP if user has been in voice for at least 1 minute
+                  // Award XP for every full minute the user has been in voice
+                  // This ensures users get XP every minute they're active
                   if (minutesActive >= 1) {
                     // Award XP for this minute (pass guild and member for role multiplier support)
                     await xpManager.addVoiceXP(guild, member.user, 1);
+                    
+                    // Update the joined_at timestamp to prevent duplicate XP awards
+                    // This ensures we only give XP once per minute
+                    const newJoinedAt = new Date(joinedAt.getTime() + (minutesActive * 60 * 1000));
+                    await userStatsManager.supabase
+                      .from('voice_sessions')
+                      .update({ joined_at: newJoinedAt.toISOString() })
+                      .eq('id', session.id);
                   }
                 } catch (sessionError) {
                   console.error(`❌ [Voice XP] Error processing session for user ${session.user_id}:`, sessionError.message);
@@ -1339,6 +1360,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
       await global.camOnlyVoiceManager.handleVoiceStateUpdate(oldState, newState);
     }
 
+    // Voice chat role handling
+    if (global.voiceChatRoleManager) {
+      await global.voiceChatRoleManager.handleVoiceStateUpdate(oldState, newState);
+    }
+
     // User stats tracking
     if (global.userStatsManager) {
       const guildId = newState.guild?.id || oldState.guild?.id;
@@ -1417,6 +1443,14 @@ client.on('messageCreate', handleMessageCreate);
 // INTERACTIONS (Commands, Buttons, Select Menus)
 // ================================================================
 client.on('interactionCreate', async (interaction) => {
+  // Handle cam-only voice verification buttons (before license check)
+  if (interaction.isButton() && interaction.customId.startsWith('cam_verify_')) {
+    if (global.camOnlyVoiceManager) {
+      const handled = await global.camOnlyVoiceManager.handleVerificationButton(interaction);
+      if (handled) return; // Button was handled, don't continue
+    }
+  }
+
   // Handle casino interactions BEFORE license check to prevent timeout
   // For coinflip buttons that need defer, defer IMMEDIATELY
   if (interaction.isButton()) {
