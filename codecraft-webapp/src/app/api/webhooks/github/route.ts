@@ -115,8 +115,8 @@ export async function POST(request: NextRequest) {
         console.log(`🔄 Updating server for guild ${server.guild_id} (${server.bot_username})...`);
         
         // Send command to pull latest code and restart
-        // The server will execute: git pull && npm install --production
-        await client.sendCommand(server.pterodactyl_server_uuid, 'git pull origin main');
+        // Use improved git pull that handles conflicts
+        await client.sendCommand(server.pterodactyl_server_uuid, 'cd /home/container && git fetch origin main && git reset --hard origin/main');
         
         // Wait a bit for git pull to complete
         await new Promise(resolve => setTimeout(resolve, 3000));

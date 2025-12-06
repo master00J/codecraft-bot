@@ -1239,10 +1239,46 @@ if [ -f .env ]; then
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Pull latest code from GitHub if repository exists
+# Improved git pull with conflict resolution
 if [ -d .git ]; then
     echo "📥 Pulling latest code from GitHub..."
-    git pull origin ${branch} 2>&1 || echo "⚠️  Git pull failed (continuing with existing files)"
+    
+    # Configure git to avoid merge conflicts
+    git config pull.rebase false 2>/dev/null || true
+    git config pull.ff only 2>/dev/null || true
+    
+    # Fetch latest changes first
+    git fetch origin ${branch} 2>&1 || {
+        echo "⚠️  Git fetch failed, checking remote configuration..."
+        git remote set-url origin ${repoUrl.replace('.git', '')} 2>/dev/null || true
+        git fetch origin ${branch} 2>&1 || echo "⚠️  Still failed to fetch"
+    }
+    
+    # Check if there are local changes
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        echo "⚠️  Local changes detected, resetting them..."
+        git reset --hard HEAD 2>/dev/null || true
+    fi
+    
+    # Try to pull with different strategies
+    if ! git pull origin ${branch} 2>&1; then
+        echo "⚠️  Standard pull failed, trying reset strategy..."
+        
+        # Reset to remote state (discard local changes)
+        git fetch origin ${branch} 2>&1
+        git reset --hard origin/${branch} 2>&1 || {
+            echo "⚠️  Reset failed, trying checkout..."
+            git checkout -f ${branch} 2>/dev/null || true
+            git reset --hard origin/${branch} 2>&1 || true
+        }
+        
+        echo "✅ Code reset to latest version from GitHub"
+    else
+        echo "✅ Successfully pulled latest code"
+    fi
+    
+    # Clean up any untracked files that might cause issues
+    git clean -fd 2>/dev/null || true
 fi
 
 # Clone repository if index.js doesn't exist
