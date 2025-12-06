@@ -41,7 +41,6 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id } = params;
     const body = await request.json();
     const { items, ...updateData } = body;
 
@@ -124,8 +123,6 @@ export async function DELETE(
     if (!user?.is_admin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-
-    const { id } = params;
 
     // Delete update (items will be deleted via CASCADE)
     const { error } = await supabase
