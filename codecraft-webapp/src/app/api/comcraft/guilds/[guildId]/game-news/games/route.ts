@@ -13,7 +13,6 @@ export async function GET(
   const { guildId } = await params;
 
   try {
-    const { guildId } = params;
 
     // Fetch all available game sources
     const { data: games, error } = await supabaseAdmin

@@ -24,7 +24,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
     const stockId = searchParams.get('stock_id');
@@ -185,7 +184,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
 
     const { action, ...data } = body;

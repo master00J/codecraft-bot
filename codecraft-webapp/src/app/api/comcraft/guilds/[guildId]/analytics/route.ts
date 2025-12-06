@@ -26,7 +26,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     
     // Check if guild has analytics feature (Basic tier+)
     const { data: config } = await supabase

@@ -12,15 +12,13 @@ export async function PATCH(
   { params }: { params: Promise<{ guildId: string; reactionId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, reactionId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const { guildId, reactionId } = params;
     const body = await request.json();
 
     const updates: any = {
@@ -71,15 +69,13 @@ export async function DELETE(
   { params }: { params: Promise<{ guildId: string; reactionId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, reactionId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const { guildId, reactionId } = params;
 
     const { error } = await supabaseAdmin
       .from('auto_reactions')

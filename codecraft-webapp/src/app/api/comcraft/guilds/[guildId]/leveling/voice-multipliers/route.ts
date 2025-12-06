@@ -22,7 +22,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
 
     // Fetch all voice multipliers for this guild
     const { data, error } = await supabase
@@ -57,7 +56,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
 
     const { role_id, role_name, multiplier, enabled = true } = body;
@@ -117,7 +115,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const { searchParams } = new URL(request.url);
     const roleId = searchParams.get('role_id');
 

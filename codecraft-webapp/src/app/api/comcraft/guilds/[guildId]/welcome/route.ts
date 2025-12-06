@@ -26,7 +26,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
 
     // @ts-ignore
     const discordId = session.user.discordId || session.user.id || session.user.sub;
@@ -138,7 +137,6 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
 
     // @ts-ignore

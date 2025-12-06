@@ -28,7 +28,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const { searchParams } = new URL(request.url);
     const notificationId = searchParams.get('notificationId');
 
@@ -75,7 +74,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
     const { notificationId, messageTemplate } = body;
 
@@ -172,7 +170,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const { searchParams } = new URL(request.url);
     const notificationId = searchParams.get('notificationId');
 

@@ -20,7 +20,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
 
     // Get config
     const { data: config, error: configError } = await supabaseAdmin
@@ -89,7 +88,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
 
     const { data: reaction, error } = await supabaseAdmin
@@ -144,7 +142,6 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
 
     const updates: any = {

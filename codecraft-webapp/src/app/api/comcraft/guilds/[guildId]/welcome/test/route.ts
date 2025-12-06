@@ -26,7 +26,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const config = await request.json();
 
     // @ts-ignore

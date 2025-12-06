@@ -10,10 +10,9 @@ export async function GET(
   { params }: { params: Promise<{ guildId: string; gameId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, gameId } = await params;
 
   try {
-    const { gameId } = params;
 
     const { data: news, error } = await supabaseAdmin
       .from('game_news_posts')

@@ -13,7 +13,6 @@ export async function GET(
   const { guildId } = await params;
 
   try {
-    const { guildId } = params;
 
     const { data: subscriptions, error } = await supabaseAdmin
       .from('game_news_configs')
@@ -67,7 +66,6 @@ export async function POST(
   const { guildId } = await params;
 
   try {
-    const { guildId } = params;
     const body = await request.json();
     const { channelId, gameId, notificationRoleId, filters } = body;
 

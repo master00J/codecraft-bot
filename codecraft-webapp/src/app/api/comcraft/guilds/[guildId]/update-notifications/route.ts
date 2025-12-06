@@ -30,7 +30,6 @@ export async function GET(
     // @ts-ignore
     const discordId = session.user.discordId || session.user.id || session.user.sub;
 
-    const { guildId } = params;
 
     // Get guild config
     const { data: config, error } = await supabase
@@ -81,7 +80,6 @@ export async function PATCH(
     // @ts-ignore
     const discordId = session.user.discordId || session.user.id || session.user.sub;
 
-    const { guildId } = params;
     const body = await request.json();
     const { enabled, channelId, types, roleIds } = body;
 

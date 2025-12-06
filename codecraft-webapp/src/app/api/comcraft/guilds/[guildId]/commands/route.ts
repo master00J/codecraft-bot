@@ -24,7 +24,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
 
     const { data: commands, error } = await supabase
       .from('custom_commands')
@@ -58,7 +57,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const body = await request.json();
 
     // @ts-ignore
@@ -100,7 +98,6 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const { searchParams } = new URL(request.url);
     const commandId = searchParams.get('id');
     const body = await request.json();

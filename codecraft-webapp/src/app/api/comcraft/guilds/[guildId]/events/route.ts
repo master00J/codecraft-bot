@@ -27,7 +27,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
     const { searchParams } = new URL(request.url);
     const upcoming = searchParams.get('upcoming') === 'true';
     const active = searchParams.get('active') !== 'false';
@@ -82,7 +81,6 @@ export async function POST(
     // @ts-ignore
     const discordId = session.user.discordId || session.user.id || session.user.sub;
 
-    const { guildId } = params;
     const body = await request.json();
 
     const {

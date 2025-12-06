@@ -10,7 +10,7 @@ export async function DELETE(
   { params }: { params: Promise<{ guildId: string; memoryId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, memoryId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -24,8 +24,6 @@ export async function DELETE(
     if (!discordId) {
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
-
-    const { guildId, memoryId } = params;
     const access = await getGuildAccess(guildId, discordId);
     if (!access.allowed) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });

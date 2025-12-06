@@ -31,7 +31,7 @@ export async function POST(
     const discordId = session.user.discordId || session.user.id || session.user.sub;
     const discordTag = session.user.name || session.user.email || 'Unknown';
 
-    const { eventId } = params;
+    const { eventId } = await params;
     const body = await request.json();
     const { status, notes } = body;
 
@@ -105,7 +105,7 @@ export async function GET(
   { params }: { params: Promise<{ guildId: string; eventId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, eventId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -113,8 +113,6 @@ export async function GET(
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const { eventId } = params;
 
     const { data: rsvps, error } = await supabase
       .from('event_rsvps')

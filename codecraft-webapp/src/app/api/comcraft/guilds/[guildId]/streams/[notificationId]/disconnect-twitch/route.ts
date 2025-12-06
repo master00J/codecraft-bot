@@ -10,10 +10,9 @@ export async function POST(
   { params }: { params: Promise<{ guildId: string; notificationId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, notificationId } = await params;
 
   try {
-    const { guildId, notificationId } = params;
 
     console.log('🔌 Disconnecting Twitch for notification:', notificationId);
 

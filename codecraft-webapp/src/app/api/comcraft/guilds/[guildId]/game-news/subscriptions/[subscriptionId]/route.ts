@@ -10,10 +10,9 @@ export async function PATCH(
   { params }: { params: Promise<{ guildId: string; subscriptionId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, subscriptionId } = await params;
 
   try {
-    const { guildId, subscriptionId } = params;
     const body = await request.json();
     const { enabled, notificationRoleId, filters } = body;
 
@@ -79,10 +78,9 @@ export async function DELETE(
   { params }: { params: Promise<{ guildId: string; subscriptionId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, subscriptionId } = await params;
 
   try {
-    const { guildId, subscriptionId } = params;
 
     const { error } = await supabaseAdmin
       .from('game_news_configs')

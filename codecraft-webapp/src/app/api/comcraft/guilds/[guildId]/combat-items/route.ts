@@ -71,7 +71,6 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const { guildId } = params;
     const access = await getGuildAccess(guildId, discordId);
     if (!access.allowed) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
@@ -134,7 +133,6 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const { guildId } = params;
     const access = await getGuildAccess(guildId, discordId);
     if (!access.allowed) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
@@ -275,7 +273,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const { guildId } = params;
     const access = await getGuildAccess(guildId, discordId);
     if (!access.allowed) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
