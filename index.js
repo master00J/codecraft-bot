@@ -81,6 +81,7 @@ const CamOnlyVoiceManager = require('./modules/comcraft/cam-only-voice/manager')
 const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands');
 const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
 const VoiceChatRoleManager = require('./modules/comcraft/voice-chat-role/manager');
+const DiscordReferralManager = require('./modules/comcraft/referrals/manager');
 // Voice Move Commands and Handlers
 let voiceMoveCommands = null;
 let VoiceMoveHandlers = null;
@@ -618,6 +619,17 @@ client.once('ready', async () => {
   } catch (error) {
     console.error('❌ Failed to initialize Voice Chat Role Manager:', error.message);
     global.voiceChatRoleManager = null;
+  }
+
+  // Initialize Discord Referral Manager
+  let discordReferralManager = null;
+  try {
+    discordReferralManager = new DiscordReferralManager(client);
+    global.discordReferralManager = discordReferralManager;
+    console.log('✅ Discord Referral Manager initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Discord Referral Manager:', error.message);
+    global.discordReferralManager = null;
   }
 
   // Initialize Voice Move Handler
@@ -1339,6 +1351,11 @@ client.on('guildMemberAdd', async (member) => {
   
   await welcomeHandler.handleMemberJoin(member);
   await analyticsTracker.trackMemberJoin(member);
+
+  // Handle Discord referrals
+  if (global.discordReferralManager) {
+    await global.discordReferralManager.handleMemberJoin(member);
+  }
 });
 
 // ================================================================
@@ -1348,6 +1365,23 @@ client.on('guildMemberRemove', async (member) => {
   if (!(await ensureGuildLicense(member.guild.id))) return;
   await welcomeHandler.handleMemberLeave(member);
   await analyticsTracker.trackMemberLeave(member);
+});
+
+// ================================================================
+// INVITE EVENTS (For Referral Tracking)
+// ================================================================
+client.on('inviteCreate', async (invite) => {
+  // Clear invite cache when new invite is created
+  if (global.discordReferralManager) {
+    global.discordReferralManager.clearInviteCache(invite.guild.id);
+  }
+});
+
+client.on('inviteDelete', async (invite) => {
+  // Clear invite cache when invite is deleted
+  if (global.discordReferralManager) {
+    global.discordReferralManager.clearInviteCache(invite.guild.id);
+  }
 });
 
 // ================================================================
