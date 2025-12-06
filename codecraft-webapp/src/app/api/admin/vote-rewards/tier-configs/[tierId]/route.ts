@@ -55,7 +55,7 @@ export async function PATCH(
     const { data: tier, error: tierError } = await supabase
       .from('subscription_tiers')
       .select('id, tier_name, display_name')
-      .eq('id', params.tierId)
+      .eq('id', tierId)
       .single();
 
     if (tierError || !tier) {
@@ -66,7 +66,7 @@ export async function PATCH(
     const { data: existingConfig } = await supabase
       .from('tier_vote_rewards')
       .select('*')
-      .eq('tier_id', params.tierId)
+      .eq('tier_id', tierId)
       .maybeSingle();
 
     let result;
@@ -109,7 +109,7 @@ export async function PATCH(
       const { data, error: createError } = await supabase
         .from('tier_vote_rewards')
         .insert({
-          tier_id: params.tierId,
+          tier_id: tierId,
           tier_name: tier.tier_name,
           points_per_day: points_per_day,
           is_active: is_active !== undefined ? is_active : true
