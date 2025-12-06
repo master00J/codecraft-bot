@@ -19,8 +19,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const guildId = guildId
-
     // Verify user has access to this guild
     const { data: guild, error: guildError } = await supabaseAdmin
       .from('guild_configs')
@@ -81,7 +79,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const guildId = guildId
     const body = await request.json()
 
     // Verify user has access to this guild
