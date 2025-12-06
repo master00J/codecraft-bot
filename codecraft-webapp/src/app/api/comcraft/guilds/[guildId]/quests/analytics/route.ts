@@ -73,7 +73,7 @@ export async function GET(
     const { data: completions, error: completionsError } = await supabaseAdmin
       .from('quest_completions')
       .select('quest_id, completed_at')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('completed_at', { ascending: false })
       .limit(1000);
 
@@ -85,7 +85,7 @@ export async function GET(
     const { data: quests, error: questsError } = await supabaseAdmin
       .from('quests')
       .select('id, name, quest_type, category')
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (questsError) {
       console.error('Error fetching quests:', questsError);

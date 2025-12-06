@@ -32,7 +32,7 @@ export async function GET(
         *,
         embed:saved_embeds(*)
       `)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('next_send_at', { ascending: true });
 
     if (error) {
@@ -66,7 +66,7 @@ export async function POST(
     const { data: schedule, error } = await supabase
       .from('scheduled_embeds')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         embed_id: body.embed_id,
         channel_id: body.channel_id,
         schedule_type: body.schedule_type,
@@ -118,7 +118,7 @@ export async function DELETE(
       .from('scheduled_embeds')
       .update({ status: 'cancelled' })
       .eq('id', scheduleId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error cancelling schedule:', error);

@@ -73,7 +73,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
     const { action, categoryId, ticketIds } = body;
@@ -97,7 +97,7 @@ export async function POST(
     let query = supabase
       .from('tickets')
       .select('id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .is('deleted_at', null); // Don't include already deleted tickets
 
     if (categoryId) {

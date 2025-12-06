@@ -52,7 +52,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const result = await callBotAPI(`/api/discord/${params.guildId}/channels`);
+    const result = await callBotAPI(`/api/discord/${guildId}/channels`);
     
     // The result structure is: { success: true, channels: { all: [], categories: [], text: [], voice: [] } }
     // Or: { success: false, error: '...' }

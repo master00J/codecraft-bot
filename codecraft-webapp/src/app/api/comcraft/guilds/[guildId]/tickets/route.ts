@@ -73,7 +73,7 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -86,7 +86,7 @@ export async function GET(
     let query = supabase
       .from('tickets')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -119,7 +119,7 @@ export async function GET(
     const { data: stats } = await supabase
       .from('tickets')
       .select('status')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .is('deleted_at', null);
 
     const statistics = {
@@ -133,14 +133,14 @@ export async function GET(
     const { data: config } = await supabase
       .from('ticket_config')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .maybeSingle();
 
     // Get categories
     const { data: categories } = await supabase
       .from('ticket_categories')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('name', { ascending: true });
 
     return NextResponse.json({
@@ -180,7 +180,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
 
@@ -247,7 +247,7 @@ export async function PATCH(
     const { error } = await supabase
       .from('ticket_config')
       .upsert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         ...updates,
         updated_at: new Date().toISOString()
       }, {

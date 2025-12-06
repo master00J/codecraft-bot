@@ -61,7 +61,7 @@ export async function POST(
   { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, ticketId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -75,14 +75,14 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     // Get ticket to verify it exists and get channel ID
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .select('*')
-      .eq('id', params.ticketId)
-      .eq('guild_id', params.guildId)
+      .eq('id', ticketId)
+      .eq('guild_id', guildId)
       .single();
 
     if (ticketError || !ticket) {
@@ -99,14 +99,14 @@ export async function POST(
     }
 
     try {
-      const response = await fetch(`${COMCRAFT_BOT_API}/internal/tickets/${params.ticketId}/sync-messages`, {
+      const response = await fetch(`${COMCRAFT_BOT_API}/internal/tickets/${ticketId}/sync-messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Internal-Secret': INTERNAL_SECRET
         },
         body: JSON.stringify({
-          guildId: params.guildId,
+          guildId: guildId,
           channelId: ticket.discord_channel_id
         })
       });

@@ -84,7 +84,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('custom_bot_tokens')
       .select('*') // We need bot_token to check status, but won't expose it in response
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -104,7 +104,7 @@ export async function GET(
     if (data.setup_completed && data.bot_token && data.bot_application_id) {
       try {
         // Check bot status via Discord API
-        const status = await checkBotStatus(params.guildId, data.bot_application_id, data.bot_token);
+        const status = await checkBotStatus(guildId, data.bot_application_id, data.bot_token);
         botOnline = status.online;
         
         if (status.totalGuilds !== undefined) {
@@ -120,12 +120,12 @@ export async function GET(
             last_seen: botOnline ? new Date().toISOString() : data.last_seen,
             updated_at: new Date().toISOString()
           })
-          .eq('guild_id', params.guildId)
+          .eq('guild_id', guildId)
           .then(({ error: updateError }) => {
             if (updateError) {
               console.error('Error updating bot status:', updateError);
             } else {
-              console.log(`✅ Updated bot status for guild ${params.guildId}: ${botOnline ? 'online' : 'offline'}`);
+              console.log(`✅ Updated bot status for guild ${guildId}: ${botOnline ? 'online' : 'offline'}`);
             }
           });
       } catch (statusError) {
@@ -171,7 +171,7 @@ export async function POST(
     const { data: config } = await supabase
       .from('guild_configs')
       .select('subscription_tier')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     const tier = config?.subscription_tier || 'free';
@@ -221,7 +221,7 @@ export async function POST(
 
     const botUser = await discordResponse.json();
 
-    console.log(`✅ Bot Personalizer: Validated bot ${botUser.username}#${botUser.discriminator} for guild ${params.guildId}`);
+    console.log(`✅ Bot Personalizer: Validated bot ${botUser.username}#${botUser.discriminator} for guild ${guildId}`);
 
     // Check if bot is already in the guild
     let botInGuild = false;
@@ -235,7 +235,7 @@ export async function POST(
 
       if (botGuildsResponse.ok) {
         const botGuilds = await botGuildsResponse.json();
-        botInGuild = botGuilds.some((g: any) => g.id === params.guildId);
+        botInGuild = botGuilds.some((g: any) => g.id === guildId);
         totalGuilds = botGuilds.length;
         
         if (!botInGuild) {
@@ -257,7 +257,7 @@ export async function POST(
     const { data, error } = await supabase
       .from('custom_bot_tokens')
       .upsert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         owner_discord_id: ownerDiscordId,
         bot_token: botToken, // TODO: Encrypt this!
         bot_application_id: botUser.id,
@@ -285,7 +285,7 @@ export async function POST(
 
     // Check bot status after saving (async, don't wait)
     if (botInGuild) {
-      checkBotStatus(params.guildId, botUser.id, botToken)
+      checkBotStatus(guildId, botUser.id, botToken)
         .then((status) => {
           supabase
             .from('custom_bot_tokens')
@@ -295,12 +295,12 @@ export async function POST(
               last_seen: status.online ? new Date().toISOString() : null,
               updated_at: new Date().toISOString()
             })
-            .eq('guild_id', params.guildId)
+            .eq('guild_id', guildId)
             .then(({ error: updateError }) => {
               if (updateError) {
                 console.error('Error updating bot status after setup:', updateError);
               } else {
-                console.log(`✅ Bot status updated for guild ${params.guildId}: ${status.online ? 'online' : 'offline'}`);
+                console.log(`✅ Bot status updated for guild ${guildId}: ${status.online ? 'online' : 'offline'}`);
               }
             });
         })
@@ -314,7 +314,7 @@ export async function POST(
     let provisioningError: string | null = null;
     
     try {
-      console.log(`🚀 Starting Pterodactyl sub-server provisioning for guild ${params.guildId}...`);
+      console.log(`🚀 Starting Pterodactyl sub-server provisioning for guild ${guildId}...`);
       
       // Use existing Splitter API client (creates sub-server under parent)
       const client = getPterodactylClient();
@@ -323,7 +323,7 @@ export async function POST(
       const { data: existingConfig } = await supabase
         .from('custom_bot_tokens')
         .select('pterodactyl_server_uuid, pterodactyl_server_id')
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .single();
       
       if (existingConfig?.pterodactyl_server_uuid) {
@@ -357,7 +357,7 @@ export async function POST(
       
       // Get default tier config (starter tier for custom bots)
       const config = getDeploymentConfig('starter', []);
-      const serverName = `comcraft-${botUser.username}-${params.guildId.slice(-6)}`.toLowerCase();
+      const serverName = `comcraft-${botUser.username}-${guildId.slice(-6)}`.toLowerCase();
       
       // Create server via Pterodactyl API (supports both Splitter API and Application API)
       // The client.createServer() method automatically detects the API mode from PTERODACTYL_API_MODE env var
@@ -375,7 +375,7 @@ export async function POST(
         environment: {
           // Bot-specific variables
           DISCORD_BOT_TOKEN: botToken,
-          GUILD_ID: params.guildId,
+          GUILD_ID: guildId,
           BOT_APPLICATION_ID: botUser.id,
           DISCORD_CLIENT_ID: botUser.id, // Same as BOT_APPLICATION_ID
           NODE_ENV: 'production',
@@ -484,7 +484,7 @@ export async function POST(
         console.log(`✅ Environment variables automatically set for custom bot:`);
         console.log(`   Bot-specific:`);
         console.log(`   - DISCORD_BOT_TOKEN: ${botToken.substring(0, 10)}...`);
-        console.log(`   - GUILD_ID: ${params.guildId}`);
+        console.log(`   - GUILD_ID: ${guildId}`);
         console.log(`   - BOT_APPLICATION_ID: ${botUser.id}`);
         console.log(`   - NODE_ENV: production`);
         console.log(`   Shared (from Vercel env vars):`);
@@ -523,7 +523,7 @@ export async function POST(
           ...serverUpdateData,
           server_status: 'installing'
         })
-        .eq('guild_id', params.guildId);
+        .eq('guild_id', guildId);
 
       if (updateError) {
         // If error is about missing column, try without server_status
@@ -532,7 +532,7 @@ export async function POST(
           const { error: fallbackError } = await supabase
             .from('custom_bot_tokens')
             .update(serverUpdateData)
-            .eq('guild_id', params.guildId);
+            .eq('guild_id', guildId);
           
           if (fallbackError) {
             console.error('❌ Error updating Pterodactyl server info (fallback):', fallbackError);
@@ -550,7 +550,7 @@ export async function POST(
       await supabase
         .from('bot_container_events')
         .insert({
-          guild_id: params.guildId,
+          guild_id: guildId,
           bot_application_id: botUser.id,
           event_type: 'server_created',
           event_data: {
@@ -590,7 +590,7 @@ export async function POST(
             await supabase
               .from('bot_container_events')
               .insert({
-                guild_id: params.guildId,
+                guild_id: guildId,
                 bot_application_id: botUser.id,
                 event_type: 'server_ready',
                 event_data: {
@@ -616,13 +616,13 @@ export async function POST(
               server_status: 'starting',
               updated_at: new Date().toISOString()
             })
-            .eq('guild_id', params.guildId);
+            .eq('guild_id', guildId);
 
           // Log start event
           await supabase
             .from('bot_container_events')
             .insert({
-              guild_id: params.guildId,
+              guild_id: guildId,
               bot_application_id: botUser.id,
               event_type: 'server_starting',
               event_data: {
@@ -637,7 +637,7 @@ export async function POST(
           await supabase
             .from('bot_container_events')
             .insert({
-              guild_id: params.guildId,
+              guild_id: guildId,
               bot_application_id: botUser.id,
               event_type: 'server_error',
               event_data: {
@@ -657,7 +657,7 @@ export async function POST(
       await supabase
         .from('bot_container_events')
         .insert({
-          guild_id: params.guildId,
+          guild_id: guildId,
           bot_application_id: botUser.id,
           event_type: 'server_error',
           event_data: {
@@ -717,7 +717,7 @@ export async function DELETE(
     const { data: botConfig } = await supabase
       .from('custom_bot_tokens')
       .select('pterodactyl_server_uuid, bot_application_id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     // Stop and delete Pterodactyl sub-server if it exists
@@ -759,7 +759,7 @@ export async function DELETE(
         await supabase
           .from('bot_container_events')
           .insert({
-            guild_id: params.guildId,
+            guild_id: guildId,
             bot_application_id: botConfig.bot_application_id,
             event_type: 'server_deleted',
             event_data: {
@@ -775,7 +775,7 @@ export async function DELETE(
         await supabase
           .from('bot_container_events')
           .insert({
-            guild_id: params.guildId,
+            guild_id: guildId,
             bot_application_id: botConfig?.bot_application_id,
             event_type: 'server_cleanup_error',
             event_data: {
@@ -810,7 +810,7 @@ export async function DELETE(
           server_status: 'stopped',
           server_stopped_at: new Date().toISOString()
         })
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .select('server_status')
         .limit(1);
 
@@ -820,7 +820,7 @@ export async function DELETE(
         const { error } = await supabase
           .from('custom_bot_tokens')
           .update(updateData)
-          .eq('guild_id', params.guildId);
+          .eq('guild_id', guildId);
         
         if (error) {
           console.error('Error disabling bot personalizer:', error);
@@ -838,7 +838,7 @@ export async function DELETE(
       const { error: fallbackError } = await supabase
         .from('custom_bot_tokens')
         .update(updateData)
-        .eq('guild_id', params.guildId);
+        .eq('guild_id', guildId);
       
       if (fallbackError) {
         console.error('Error disabling bot personalizer:', fallbackError);

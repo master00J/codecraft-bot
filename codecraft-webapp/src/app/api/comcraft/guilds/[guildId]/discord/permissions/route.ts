@@ -25,7 +25,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const response = await fetch(`${COMCRAFT_BOT_API}/api/discord/${params.guildId}/permissions`, {
+    const response = await fetch(`${COMCRAFT_BOT_API}/api/discord/${guildId}/permissions`, {
       headers: {
         'X-Internal-Secret': INTERNAL_SECRET!
       }

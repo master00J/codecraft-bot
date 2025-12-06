@@ -79,7 +79,7 @@ export async function GET(
         .from('quest_chains')
         .select('*')
         .eq('id', chainId)
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .single();
 
       if (error || !chain) {
@@ -91,7 +91,7 @@ export async function GET(
         .from('quests')
         .select('id, name, emoji, chain_position')
         .eq('chain_id', chainId)
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .order('chain_position', { ascending: true });
 
       return NextResponse.json({ 
@@ -106,7 +106,7 @@ export async function GET(
     const { data: chains, error } = await supabaseAdmin
       .from('quest_chains')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -121,7 +121,7 @@ export async function GET(
           .from('quests')
           .select('id, name, chain_position')
           .eq('chain_id', chain.id)
-          .eq('guild_id', params.guildId)
+          .eq('guild_id', guildId)
           .order('chain_position', { ascending: true });
 
         return {
@@ -177,7 +177,7 @@ export async function POST(
     const { data: chain, error } = await supabaseAdmin
       .from('quest_chains')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         name,
         description: description || null,
         emoji: emoji || '🔗',
@@ -205,7 +205,7 @@ export async function POST(
             chain_position: i + 1
           })
           .eq('id', questIds[i])
-          .eq('guild_id', params.guildId);
+          .eq('guild_id', guildId);
       }
     }
 
@@ -256,7 +256,7 @@ export async function PATCH(
         .from('quests')
         .update({ chain_id: null, chain_position: null })
         .eq('chain_id', id)
-        .eq('guild_id', params.guildId);
+        .eq('guild_id', guildId);
 
       // Then add new quests to chain
       for (let i = 0; i < quest_ids.length; i++) {
@@ -267,7 +267,7 @@ export async function PATCH(
             chain_position: i + 1
           })
           .eq('id', quest_ids[i])
-          .eq('guild_id', params.guildId);
+          .eq('guild_id', guildId);
       }
 
       updates.total_quests = quest_ids.length;
@@ -280,7 +280,7 @@ export async function PATCH(
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .select()
       .single();
 
@@ -338,14 +338,14 @@ export async function DELETE(
       .from('quests')
       .update({ chain_id: null, chain_position: null })
       .eq('chain_id', chainId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     // Delete chain
     const { error } = await supabaseAdmin
       .from('quest_chains')
       .delete()
       .eq('id', chainId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting quest chain:', error);

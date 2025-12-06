@@ -36,7 +36,7 @@ export async function POST(
     const { data: deployment, error } = await supabaseAdmin
       .from('bot_deployments')
       .select('*, orders!inner(discord_id)')
-      .eq('order_id', params.orderId)
+      .eq('order_id', orderId)
       .single()
 
     if (error || !deployment || deployment.orders.discord_id !== discordId) {

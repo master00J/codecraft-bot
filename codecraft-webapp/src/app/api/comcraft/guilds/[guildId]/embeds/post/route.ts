@@ -41,7 +41,7 @@ export async function POST(
       .from('saved_embeds')
       .select('*')
       .eq('id', embedId)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (embedError || !embed) {
@@ -50,7 +50,7 @@ export async function POST(
 
     // Prepare payload for bot API
     let payload: any = {
-      guildId: params.guildId,
+      guildId: guildId,
       channelId,
       mentionRoleId,
       pinMessage

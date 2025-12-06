@@ -130,32 +130,32 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { data: config } = await supabase
       .from('comcraft_feedback_configs')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .maybeSingle();
 
     const { data: pending } = await supabase
       .from('comcraft_feedback_submissions')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
     const { data: inProgress } = await supabase
       .from('comcraft_feedback_submissions')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .eq('status', 'in_progress')
       .order('claimed_at', { ascending: true });
 
     const { data: recentCompleted } = await supabase
       .from('comcraft_feedback_submissions')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .eq('status', 'completed')
       .order('completed_at', { ascending: false })
       .limit(10);
@@ -194,7 +194,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     if (!INTERNAL_SECRET) {
       console.error('INTERNAL_API_SECRET is not set.');
@@ -209,7 +209,7 @@ export async function POST(
       return NextResponse.json({ error: 'channelId is required' }, { status: 400 });
     }
 
-    const response = await fetch(`${COMCRAFT_BOT_API}/api/feedback/${params.guildId}/setup`, {
+    const response = await fetch(`${COMCRAFT_BOT_API}/api/feedback/${guildId}/setup`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -258,7 +258,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
 
@@ -356,7 +356,7 @@ export async function PATCH(
     const { error } = await supabase
       .from('comcraft_feedback_configs')
       .update(updates)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error updating feedback modal config:', error);

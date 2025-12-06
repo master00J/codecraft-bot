@@ -35,7 +35,7 @@ export async function GET(
         *,
         options:role_menu_options(*)
       `)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -70,7 +70,7 @@ export async function POST(
     const { data: menu, error: menuError } = await supabase
       .from('role_menus')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         menu_name: body.menu_name,
         menu_type: body.menu_type || 'buttons',
         channel_id: body.channel_id,
@@ -92,7 +92,7 @@ export async function POST(
     if (body.options && body.options.length > 0) {
       const options = body.options.map((opt: any, index: number) => ({
         menu_id: menu.id,
-        guild_id: params.guildId,
+        guild_id: guildId,
         role_id: opt.role_id,
         role_name: opt.role_name,
         button_label: opt.button_label || opt.role_name,
@@ -178,7 +178,7 @@ export async function PATCH(
         updated_at: new Date().toISOString()
       })
       .eq('id', menuId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (menuError) {
       console.error('Error updating menu:', menuError);
@@ -195,7 +195,7 @@ export async function PATCH(
     if (body.options && body.options.length > 0) {
       const options = body.options.map((opt: any, index: number) => ({
         menu_id: menuId,
-        guild_id: params.guildId,
+        guild_id: guildId,
         role_id: opt.role_id,
         role_name: opt.role_name,
         button_label: opt.button_label || opt.role_name,
@@ -268,7 +268,7 @@ export async function DELETE(
       .from('role_menus')
       .delete()
       .eq('id', menuId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting menu:', error);

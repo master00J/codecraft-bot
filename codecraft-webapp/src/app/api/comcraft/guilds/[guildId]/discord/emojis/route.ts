@@ -52,7 +52,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const result = await callBotAPI(`/api/discord/${params.guildId}/emojis`);
+    const result = await callBotAPI(`/api/discord/${guildId}/emojis`);
     return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching emojis:', error);

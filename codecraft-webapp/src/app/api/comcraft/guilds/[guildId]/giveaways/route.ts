@@ -158,17 +158,17 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const hasAccess = await assertAccess(params.guildId, discordId);
+    const hasAccess = await assertAccess(guildId, discordId);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const featureEnabled = await isGiveawaysEnabled(params.guildId);
+    const featureEnabled = await isGiveawaysEnabled(guildId);
 
     const { data, error } = await supabase
       .from('giveaways')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -212,12 +212,12 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const hasAccess = await assertAccess(params.guildId, discordId);
+    const hasAccess = await assertAccess(guildId, discordId);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const featureEnabled = await isGiveawaysEnabled(params.guildId);
+    const featureEnabled = await isGiveawaysEnabled(guildId);
     if (!featureEnabled) {
       return NextResponse.json({ error: 'Giveaways are not enabled for this guild.' }, { status: 403 });
     }
@@ -302,7 +302,7 @@ export async function POST(
         'X-Internal-Secret': INTERNAL_SECRET,
       },
       body: JSON.stringify({
-        guildId: params.guildId,
+        guildId: guildId,
         channelId,
         prize,
         durationMinutes: parsedDuration,

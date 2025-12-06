@@ -73,12 +73,12 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { data: categories, error } = await supabase
       .from('ticket_categories')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('name', { ascending: true });
 
     if (error) {
@@ -120,7 +120,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
 
@@ -130,7 +130,7 @@ export async function POST(
     }
 
     const categoryData: any = {
-      guild_id: params.guildId,
+      guild_id: guildId,
       name: body.name.trim(),
       description: body.description?.trim() || null,
       emoji: body.emoji?.trim() || null,

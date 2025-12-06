@@ -70,12 +70,12 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { data: birthdays, error } = await supabase
       .from('comcraft_birthdays')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('birthday', { ascending: true });
 
     if (error) {
@@ -93,7 +93,7 @@ export async function GET(
          birthday_ping_role,
          birthday_announcement_time`
       )
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     return NextResponse.json({
@@ -128,7 +128,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
 
@@ -142,7 +142,7 @@ export async function POST(
     }
 
     const payload = {
-      guild_id: params.guildId,
+      guild_id: guildId,
       user_id: body.user_id,
       username: body.username || null,
       display_name: body.display_name || null,
@@ -192,7 +192,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
     const birthdayId = body.id;
@@ -221,7 +221,7 @@ export async function PATCH(
       .from('comcraft_birthdays')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', birthdayId)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .select()
       .single();
 
@@ -259,7 +259,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { searchParams } = new URL(request.url);
     const birthdayId = searchParams.get('id');
@@ -272,7 +272,7 @@ export async function DELETE(
       .from('comcraft_birthdays')
       .delete()
       .eq('id', birthdayId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting birthday:', error);

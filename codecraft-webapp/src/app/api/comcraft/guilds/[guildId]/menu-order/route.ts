@@ -51,13 +51,13 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await getGuildAccess(params.guildId, discordId);
+    await getGuildAccess(guildId, discordId);
 
     // Get menu order from guild config
     const { data: config, error } = await supabase
       .from('guild_configs')
       .select('menu_order')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (error) {
@@ -97,7 +97,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await getGuildAccess(params.guildId, discordId);
+    await getGuildAccess(guildId, discordId);
 
     const body = await request.json();
     const { menuOrder } = body;
@@ -110,7 +110,7 @@ export async function PATCH(
     const { error } = await supabase
       .from('guild_configs')
       .update({ menu_order: menuOrder })
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error updating menu order:', error);

@@ -32,7 +32,7 @@ export async function POST(
     // @ts-ignore
     const createdBy = session.user.name || 'Admin';
 
-    const response = await fetch(`${COMCRAFT_BOT_API}/api/discord/${params.guildId}/quick-setup/${type}`, {
+    const response = await fetch(`${COMCRAFT_BOT_API}/api/discord/${guildId}/quick-setup/${type}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

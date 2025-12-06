@@ -12,7 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, ticketId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -36,8 +36,8 @@ export async function POST(
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .select('id, guild_id, discord_user_id')
-      .eq('id', params.ticketId)
-      .eq('guild_id', params.guildId)
+      .eq('id', ticketId)
+      .eq('guild_id', guildId)
       .single();
 
     if (ticketError || !ticket) {
@@ -52,7 +52,7 @@ export async function POST(
     const { data: existing } = await supabase
       .from('ticket_ratings')
       .select('id')
-      .eq('ticket_id', params.ticketId)
+      .eq('ticket_id', ticketId)
       .eq('discord_user_id', discordId)
       .maybeSingle();
 
@@ -71,8 +71,8 @@ export async function POST(
     const { data, error } = await supabase
       .from('ticket_ratings')
       .insert({
-        ticket_id: params.ticketId,
-        guild_id: params.guildId,
+        ticket_id: ticketId,
+        guild_id: guildId,
         user_id: userData?.id || null,
         discord_user_id: discordId,
         rating,
@@ -98,7 +98,7 @@ export async function GET(
   { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, ticketId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -109,7 +109,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('ticket_ratings')
       .select('*')
-      .eq('ticket_id', params.ticketId)
+      .eq('ticket_id', ticketId)
       .maybeSingle();
 
     if (error && error.code !== 'PGRST116') {

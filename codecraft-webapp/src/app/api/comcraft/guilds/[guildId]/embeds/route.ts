@@ -29,7 +29,7 @@ export async function GET(
     const { data: embeds, error } = await supabase
       .from('saved_embeds')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -65,7 +65,7 @@ export async function POST(
     const isCapsule = body.is_capsule || false;
     
     const insertData: any = {
-      guild_id: params.guildId,
+      guild_id: guildId,
       created_by: discordId,
       name: body.name,
       template_type: body.template_type || 'custom',
@@ -227,7 +227,7 @@ export async function PATCH(
       .from('saved_embeds')
       .update(updateData)
       .eq('id', embedId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error updating embed:', error);
@@ -266,7 +266,7 @@ export async function DELETE(
       .from('saved_embeds')
       .delete()
       .eq('id', embedId)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting embed:', error);

@@ -73,13 +73,13 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     // Get all tickets
     const { data: allTickets } = await supabase
       .from('tickets')
       .select('*')
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (!allTickets) {
       return NextResponse.json({ 

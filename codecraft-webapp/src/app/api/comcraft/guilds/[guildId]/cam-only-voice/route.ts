@@ -29,7 +29,7 @@ export async function GET(
     const { data: config, error } = await supabase
       .from('cam_only_voice_config')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -41,7 +41,7 @@ export async function GET(
     if (!config) {
       return NextResponse.json({
         config: {
-          guild_id: params.guildId,
+          guild_id: guildId,
           enabled: false,
           channel_ids: [],
           grace_period_seconds: 10,
@@ -83,7 +83,7 @@ export async function PATCH(
     const { data: existingConfig } = await supabase
       .from('cam_only_voice_config')
       .select('id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     const updateData: any = {
@@ -106,7 +106,7 @@ export async function PATCH(
       const { data, error } = await supabase
         .from('cam_only_voice_config')
         .update(updateData)
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .select()
         .single();
 
@@ -121,7 +121,7 @@ export async function PATCH(
       const { data, error } = await supabase
         .from('cam_only_voice_config')
         .insert({
-          guild_id: params.guildId,
+          guild_id: guildId,
           ...updateData
         })
         .select()

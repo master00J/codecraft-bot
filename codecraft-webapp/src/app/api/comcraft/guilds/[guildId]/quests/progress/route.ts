@@ -28,7 +28,7 @@ export async function GET(
         *,
         quests(*)
       `)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (userId) {
       query = query.eq('user_id', userId);

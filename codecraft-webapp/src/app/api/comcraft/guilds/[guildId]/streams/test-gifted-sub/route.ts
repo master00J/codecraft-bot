@@ -14,7 +14,7 @@ export async function POST(
 
   try {
     const { notificationId, gifterName, amount, tier } = await request.json();
-    const guildId = params.guildId;
+    const guildId = guildId;
 
     console.log('🧪 Proxying test gifted sub notification request...');
     console.log('   Guild:', guildId);

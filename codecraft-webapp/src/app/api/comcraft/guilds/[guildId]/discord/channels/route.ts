@@ -61,7 +61,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const result = await callBotAPI(`/api/discord/${params.guildId}/channels`);
+    const result = await callBotAPI(`/api/discord/${guildId}/channels`);
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error fetching channels:', error);
@@ -99,7 +99,7 @@ export async function POST(
     // @ts-ignore
     body.createdBy = session.user.name || 'Admin';
 
-    const result = await callBotAPI(`/api/discord/${params.guildId}/channels`, 'POST', body);
+    const result = await callBotAPI(`/api/discord/${guildId}/channels`, 'POST', body);
     return NextResponse.json(result);
   } catch (error) {
     console.error('Error creating channel:', error);

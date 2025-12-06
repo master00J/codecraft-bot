@@ -62,7 +62,7 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const accessError = await assertAccess(params.guildId, discordId);
+    const accessError = await assertAccess(guildId, discordId);
     if (accessError) return accessError;
 
     const { searchParams } = new URL(request.url);
@@ -71,7 +71,7 @@ export async function GET(
     let query = supabase
       .from('ticket_templates')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .eq('is_active', true)
       .order('name', { ascending: true });
 
@@ -113,7 +113,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const accessError = await assertAccess(params.guildId, discordId);
+    const accessError = await assertAccess(guildId, discordId);
     if (accessError) return accessError;
 
     const { data: user } = await supabase
@@ -132,7 +132,7 @@ export async function POST(
     const { data, error } = await supabase
       .from('ticket_templates')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         category_id: category_id || null,
         name,
         description: description || null,

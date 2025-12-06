@@ -36,7 +36,7 @@ export async function GET(
           users(discord_id)
         )
       `)
-      .eq('order_id', params.orderId)
+      .eq('order_id', orderId)
       .single()
 
     if (error || !deployment) {

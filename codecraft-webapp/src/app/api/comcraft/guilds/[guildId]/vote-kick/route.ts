@@ -29,7 +29,7 @@ export async function GET(
     const { data: config, error } = await supabase
       .from('vote_kick_config')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -41,7 +41,7 @@ export async function GET(
     if (!config) {
       return NextResponse.json({
         config: {
-          guild_id: params.guildId,
+          guild_id: guildId,
           enabled: false,
           required_votes: 3,
           vote_duration_seconds: 60,
@@ -81,7 +81,7 @@ export async function PATCH(
     const { data: existingConfig } = await supabase
       .from('vote_kick_config')
       .select('id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     const updateData: any = {
@@ -102,7 +102,7 @@ export async function PATCH(
       const { data, error } = await supabase
         .from('vote_kick_config')
         .update(updateData)
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .select()
         .single();
 
@@ -117,7 +117,7 @@ export async function PATCH(
       const { data, error } = await supabase
         .from('vote_kick_config')
         .insert({
-          guild_id: params.guildId,
+          guild_id: guildId,
           ...updateData
         })
         .select()

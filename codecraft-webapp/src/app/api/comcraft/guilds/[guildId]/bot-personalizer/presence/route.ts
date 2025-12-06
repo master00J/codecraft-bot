@@ -49,7 +49,7 @@ export async function PATCH(
     const { data: botConfig, error: configError } = await supabase
       .from('custom_bot_tokens')
       .select('bot_application_id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (configError || !botConfig) {
@@ -73,7 +73,7 @@ export async function PATCH(
     const { error: updateError } = await supabase
       .from('custom_bot_tokens')
       .update(updateData)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (updateError) {
       console.error('Error updating bot presence:', updateError);
@@ -84,7 +84,7 @@ export async function PATCH(
     await supabase
       .from('bot_container_events')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         bot_application_id: botConfig.bot_application_id,
         event_type: 'presence_updated',
         event_data: {
@@ -103,7 +103,7 @@ export async function PATCH(
       const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
       
       // Fire and forget - don't block the response
-      fetch(`${botApiUrl}/api/bot/${params.guildId}/update-presence`, {
+      fetch(`${botApiUrl}/api/bot/${guildId}/update-presence`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ export async function PATCH(
           clearTimeout(timeoutId);
           // Silently handle errors - bot might be offline or on different server
           if (error.name !== 'AbortError') {
-            console.log(`ℹ️ Could not trigger immediate presence update for guild ${params.guildId} (bot will update within 5 seconds)`);
+            console.log(`ℹ️ Could not trigger immediate presence update for guild ${guildId} (bot will update within 5 seconds)`);
           }
         });
     } catch (error) {

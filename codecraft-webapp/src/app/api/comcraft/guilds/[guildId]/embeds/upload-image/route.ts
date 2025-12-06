@@ -49,7 +49,7 @@ export async function POST(
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(7);
     const fileExt = file.name.split('.').pop();
-    const fileName = `embed-images/${params.guildId}/${timestamp}-${randomString}.${fileExt}`;
+    const fileName = `embed-images/${guildId}/${timestamp}-${randomString}.${fileExt}`;
 
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
@@ -82,7 +82,7 @@ export async function POST(
     await supabase
       .from('embed_images')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         uploaded_by: discordId,
         filename: fileName,
         url: imageUrl,

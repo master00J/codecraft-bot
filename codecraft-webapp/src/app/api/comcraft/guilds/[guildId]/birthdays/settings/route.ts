@@ -70,7 +70,7 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { data, error } = await supabase
       .from('guild_configs')
@@ -82,7 +82,7 @@ export async function GET(
          birthday_ping_role,
          birthday_announcement_time`
       )
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single();
 
     if (error) {
@@ -119,7 +119,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
 
@@ -151,7 +151,7 @@ export async function PATCH(
     const { error } = await supabase
       .from('guild_configs')
       .update(payload)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error updating birthday settings:', error);

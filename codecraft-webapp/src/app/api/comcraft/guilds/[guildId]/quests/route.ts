@@ -80,7 +80,7 @@ export async function GET(
           quest_progress(*)
         `)
         .eq('id', questId)
-        .eq('guild_id', params.guildId)
+        .eq('guild_id', guildId)
         .single();
 
       if (error || !quest) {
@@ -94,7 +94,7 @@ export async function GET(
     const { data: quests, error } = await supabaseAdmin
       .from('quests')
       .select('*')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .order('category', { ascending: true })
       .order('chain_position', { ascending: true })
       .order('created_at', { ascending: false });
@@ -177,7 +177,7 @@ export async function POST(
     const { data: quest, error } = await supabaseAdmin
       .from('quests')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         name,
         description: description || null,
         emoji: emoji || '📋',
@@ -259,7 +259,7 @@ export async function PATCH(
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .select()
       .single();
 
@@ -315,7 +315,7 @@ export async function DELETE(
       .from('quests')
       .delete()
       .eq('id', id)
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting quest:', error);
