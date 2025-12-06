@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // Update payment method (admin only)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -51,8 +54,11 @@ export async function PATCH(
 // This preserves data integrity for existing payments
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {

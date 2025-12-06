@@ -58,8 +58,11 @@ async function assertAccess(guildId: string, discordId: string) {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string; ticketId: string } }
+  { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

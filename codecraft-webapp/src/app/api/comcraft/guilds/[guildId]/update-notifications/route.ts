@@ -15,8 +15,11 @@ const supabase = supabaseAdmin;
 // GET - Get update notifications setting
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     
@@ -63,8 +66,11 @@ export async function GET(
 // PATCH - Update update notifications setting
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     

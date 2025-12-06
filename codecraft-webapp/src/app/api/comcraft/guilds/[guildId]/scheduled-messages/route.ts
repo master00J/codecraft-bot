@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // Get all scheduled messages for a guild
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -67,8 +70,11 @@ export async function GET(
 // Create a new scheduled message
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {

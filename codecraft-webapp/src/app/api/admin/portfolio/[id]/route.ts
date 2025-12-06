@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // Update portfolio item (admin only)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -40,8 +43,11 @@ export async function PATCH(
 // Delete portfolio item (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {

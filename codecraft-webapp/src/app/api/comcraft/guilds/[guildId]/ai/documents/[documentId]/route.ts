@@ -7,8 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; documentId: string } }
+  { params }: { params: Promise<{ guildId: string; documentId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 
@@ -74,8 +77,11 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; documentId: string } }
+  { params }: { params: Promise<{ guildId: string; documentId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 

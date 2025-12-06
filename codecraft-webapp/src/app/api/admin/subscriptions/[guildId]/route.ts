@@ -44,8 +44,11 @@ async function ensureAdmin() {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const check = await ensureAdmin();
     if (!check.ok) {

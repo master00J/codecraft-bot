@@ -46,8 +46,11 @@ async function getGuildAccess(guildId: string, discordId: string) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

@@ -9,8 +9,11 @@ export const dynamic = 'force-dynamic'
 // POST - Control bot (start/stop/restart)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
+
+  const { orderId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     

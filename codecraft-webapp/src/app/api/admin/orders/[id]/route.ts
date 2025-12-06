@@ -9,8 +9,11 @@ export const dynamic = 'force-dynamic'
 // Get single order by ID (admin only)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     // Get user from NextAuth session
     const session = await getServerSession(authOptions)
@@ -29,7 +32,7 @@ export async function GET(
       }, { status: 403 })
     }
 
-    const orderId = params.id
+    const orderId = id
 
     if (!orderId) {
       return NextResponse.json({ error: 'Order ID required' }, { status: 400 })
@@ -116,8 +119,11 @@ export async function GET(
 // Update order (admin only)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -132,7 +138,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const orderId = params.id
+    const orderId = id
     const body = await request.json()
 
     console.log('Updating order:', orderId, body)

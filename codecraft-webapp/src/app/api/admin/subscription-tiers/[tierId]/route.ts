@@ -39,8 +39,11 @@ async function checkAdminAccess() {
 // GET - Get tier details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { tierId: string } }
+  { params }: { params: Promise<{ tierId: string }> }
 ) {
+
+  const { tierId } = await params;
+
   try {
     const { isAdmin, error } = await checkAdminAccess();
     if (!isAdmin) {
@@ -72,8 +75,11 @@ export async function GET(
 // PATCH - Update tier
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { tierId: string } }
+  { params }: { params: Promise<{ tierId: string }> }
 ) {
+
+  const { tierId } = await params;
+
   try {
     const { isAdmin, error } = await checkAdminAccess();
     if (!isAdmin) {
@@ -130,8 +136,11 @@ export async function PATCH(
 // DELETE - Delete tier
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { tierId: string } }
+  { params }: { params: Promise<{ tierId: string }> }
 ) {
+
+  const { tierId } = await params;
+
   try {
     const { isAdmin, error } = await checkAdminAccess();
     if (!isAdmin) {

@@ -10,8 +10,11 @@ export const dynamic = 'force-dynamic'
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     // Check authentication
     const token = await getToken({
@@ -81,8 +84,11 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     // Check authentication
     const token = await getToken({

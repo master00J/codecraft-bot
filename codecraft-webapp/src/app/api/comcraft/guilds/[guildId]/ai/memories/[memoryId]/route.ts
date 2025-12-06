@@ -7,8 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; memoryId: string } }
+  { params }: { params: Promise<{ guildId: string; memoryId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 

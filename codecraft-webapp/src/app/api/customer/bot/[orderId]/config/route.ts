@@ -9,8 +9,11 @@ export const dynamic = 'force-dynamic'
 // GET - Get bot configuration
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
+
+  const { orderId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     
@@ -58,8 +61,11 @@ export async function GET(
 // PATCH - Update bot configuration
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
+
+  const { orderId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     

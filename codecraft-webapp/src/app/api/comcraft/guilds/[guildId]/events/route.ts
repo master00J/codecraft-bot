@@ -15,8 +15,11 @@ const supabase = supabaseAdmin;
 // GET - Get all events for a guild
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     
@@ -64,8 +67,11 @@ export async function GET(
 // POST - Create new event
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     

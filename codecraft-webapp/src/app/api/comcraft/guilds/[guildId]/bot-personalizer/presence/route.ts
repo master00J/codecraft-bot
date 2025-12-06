@@ -10,8 +10,11 @@ const supabase = supabaseAdmin;
 // PATCH - Update bot presence/status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     

@@ -44,8 +44,11 @@ async function assertAccess(guildId: string, discordId: string) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string; giveawayId: string } }
+  { params }: { params: Promise<{ guildId: string; giveawayId: string }> }
 ) {
+
+  const { guildId, giveawayId } = await params;
+
   try {
     if (!INTERNAL_SECRET) {
       return NextResponse.json({ error: 'Internal API secret not configured' }, { status: 500 });
@@ -62,7 +65,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const hasAccess = await assertAccess(params.guildId, discordId);
+    const hasAccess = await assertAccess(guildId, discordId);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
@@ -76,14 +79,14 @@ export async function POST(
 
     const endpoint = action === 'end' ? 'end' : 'reroll';
 
-    const response = await fetch(`${COMCRAFT_BOT_API}/api/giveaways/${params.giveawayId}/${endpoint}`, {
+    const response = await fetch(`${COMCRAFT_BOT_API}/api/giveaways/${giveawayId}/${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Secret': INTERNAL_SECRET,
       },
       body: JSON.stringify({
-        guildId: params.guildId,
+        guildId: guildId,
         actorId: discordId,
         actorName: session.user?.name || session.user?.email || 'Dashboard',
       }),

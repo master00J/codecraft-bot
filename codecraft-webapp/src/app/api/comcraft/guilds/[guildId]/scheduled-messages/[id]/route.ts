@@ -8,16 +8,15 @@ export const dynamic = 'force-dynamic'
 // Update a scheduled message
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; id: string } }
+  { params }: { params: Promise<{ guildId: string; id: string }> }
 ) {
+  const { guildId, id: messageId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const guildId = params.guildId
-    const messageId = params.id
     const body = await request.json()
 
     // Verify user has access to this guild
@@ -195,16 +194,15 @@ export async function PATCH(
 // Delete a scheduled message
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; id: string } }
+  { params }: { params: Promise<{ guildId: string; id: string }> }
 ) {
+  const { guildId, id: messageId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const guildId = params.guildId
-    const messageId = params.id
 
     // Verify user has access to this guild
     const { data: guild, error: guildError } = await supabaseAdmin

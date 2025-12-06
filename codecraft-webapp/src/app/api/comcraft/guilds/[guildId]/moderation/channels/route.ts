@@ -52,8 +52,11 @@ async function getGuildAccess(guildId: string, discordId: string) {
 // GET - Get all channel moderation rules for a guild
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 
@@ -94,8 +97,11 @@ export async function GET(
 // POST - Create or update a channel moderation rule
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 
@@ -151,8 +157,11 @@ export async function POST(
 // DELETE - Delete a channel moderation rule
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 

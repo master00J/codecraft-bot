@@ -53,8 +53,11 @@ async function getGuildAccess(guildId: string, discordId: string) {
 // GET - Fetch all polls for a guild
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -146,8 +149,11 @@ export async function GET(
 // POST - Create a new poll
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -272,8 +278,11 @@ export async function POST(
 // PATCH - Update a poll
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -338,8 +347,11 @@ export async function PATCH(
 // DELETE - Delete a poll
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

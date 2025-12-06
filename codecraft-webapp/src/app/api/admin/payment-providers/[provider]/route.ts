@@ -7,8 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { provider: string } }
+  { params }: { params: Promise<{ provider: string }> }
 ) {
+
+  const { provider } = await params;
+
   try {
     const session = await getServerSession(authOptions);
 

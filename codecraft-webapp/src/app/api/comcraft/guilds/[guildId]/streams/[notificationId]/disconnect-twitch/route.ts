@@ -7,8 +7,11 @@ import { supabaseAdmin } from '@/lib/supabase/server';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string; notificationId: string } }
+  { params }: { params: Promise<{ guildId: string; notificationId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const { guildId, notificationId } = params;
 

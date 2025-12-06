@@ -41,8 +41,11 @@ async function callBotAPI(endpoint: string, method: string = 'GET', body?: any) 
 // GET - Fetch all categories (channels with type 4)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

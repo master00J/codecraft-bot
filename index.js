@@ -1825,6 +1825,10 @@ client.on('interactionCreate', async (interaction) => {
         await handleLeaderboardCommand(interaction);
         break;
 
+      case 'myreferrals':
+        await handleMyReferralsCommand(interaction);
+        break;
+
       case 'setxp':
         await handleSetXPCommand(interaction);
         break;
@@ -2634,6 +2638,159 @@ async function handleStatsCommand(interaction) {
   } catch (error) {
     console.error('[StatsCommand] Error:', error);
     await interaction.editReply('❌ An error occurred while fetching stats.');
+  }
+}
+
+async function handleMyReferralsCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!global.discordReferralManager) {
+    return interaction.editReply({ 
+      content: '❌ Referral system is not available at this time.' 
+    });
+  }
+
+  try {
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+
+    // Get referral stats for this user in this guild
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    // Get stats
+    const { data: stats, error: statsError } = await supabase
+      .from('discord_referral_stats')
+      .select('*')
+      .eq('guild_id', guildId)
+      .eq('inviter_user_id', userId)
+      .single();
+
+    // Get recent referrals
+    const { data: recentReferrals, error: referralsError } = await supabase
+      .from('discord_referrals')
+      .select('*')
+      .eq('guild_id', guildId)
+      .eq('inviter_user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Get tier info
+    const { data: tiers } = await supabase
+      .from('discord_referral_tiers')
+      .select('*')
+      .eq('guild_id', guildId)
+      .eq('enabled', true)
+      .order('min_invites', { ascending: true });
+
+    // Get config to check if enabled
+    const config = await global.discordReferralManager.getConfig(guildId);
+
+    if (!config || !config.enabled) {
+      return interaction.editReply({
+        content: '❌ Referral system is not enabled in this server.'
+      });
+    }
+
+    // Build embed
+    const embed = new EmbedBuilder()
+      .setColor('#00FF00')
+      .setTitle('📊 Your Referral Statistics')
+      .setDescription(`Referral stats for ${interaction.user.toString()}`)
+      .setTimestamp();
+
+    if (stats) {
+      embed.addFields(
+        {
+          name: '📈 Total Invites',
+          value: `${stats.total_invites || 0}`,
+          inline: true
+        },
+        {
+          name: '✅ Successful Referrals',
+          value: `${stats.total_rewards_given || 0}`,
+          inline: true
+        },
+        {
+          name: '🎁 Last Reward',
+          value: stats.last_reward_at 
+            ? `<t:${Math.floor(new Date(stats.last_reward_at).getTime() / 1000)}:R>`
+            : 'Never',
+          inline: true
+        }
+      );
+
+      // Show current tier
+      if (tiers && tiers.length > 0) {
+        const totalInvites = stats.total_invites || 0;
+        let currentTier = null;
+        let nextTier = null;
+
+        for (const tier of tiers) {
+          if (totalInvites >= tier.min_invites) {
+            currentTier = tier;
+          } else if (!nextTier) {
+            nextTier = tier;
+            break;
+          }
+        }
+
+        if (currentTier) {
+          embed.addFields({
+            name: '🏆 Current Tier',
+            value: `**${currentTier.tier_name}** (${currentTier.min_invites}+ invites)`,
+            inline: false
+          });
+        }
+
+        if (nextTier) {
+          const invitesNeeded = nextTier.min_invites - totalInvites;
+          embed.addFields({
+            name: '⬆️ Next Tier',
+            value: `**${nextTier.tier_name}** - ${invitesNeeded} more invite${invitesNeeded !== 1 ? 's' : ''} needed`,
+            inline: false
+          });
+        }
+      }
+    } else {
+      embed.addFields({
+        name: '📊 Statistics',
+        value: 'You haven\'t invited anyone yet. Start inviting friends to earn rewards!',
+        inline: false
+      });
+    }
+
+    // Show recent referrals
+    if (recentReferrals && recentReferrals.length > 0) {
+      const referralsList = recentReferrals.slice(0, 5).map((ref, index) => {
+        const date = new Date(ref.created_at);
+        const dateStr = `<t:${Math.floor(date.getTime() / 1000)}:R>`;
+        const rewardStatus = ref.inviter_reward_given ? '✅' : '⏳';
+        return `${index + 1}. ${rewardStatus} <@${ref.new_member_user_id}> - ${dateStr}`;
+      }).join('\n');
+
+      embed.addFields({
+        name: '📋 Recent Referrals',
+        value: referralsList || 'No recent referrals',
+        inline: false
+      });
+    }
+
+    // Add footer with invite info
+    embed.setFooter({ 
+      text: 'Invite friends to this server to earn rewards! Your invites are tracked automatically.' 
+    });
+
+    return interaction.editReply({ embeds: [embed] });
+
+  } catch (error) {
+    console.error('[MyReferralsCommand] Error:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while fetching your referral statistics.'
+    });
   }
 }
 
@@ -6973,6 +7130,10 @@ async function registerCommands(clientInstance) {
         return [];
       }
     })(),
+
+    new SlashCommandBuilder()
+      .setName('myreferrals')
+      .setDescription('📊 View your referral statistics and invites'),
 
     new SlashCommandBuilder()
       .setName('setxp')

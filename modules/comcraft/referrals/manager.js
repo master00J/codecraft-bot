@@ -128,13 +128,26 @@ class DiscordReferralManager {
         return;
       }
 
-      // Get current invites
-      const currentInvites = await this.getInvites(member.guild);
-      
       // Get cached invites (from before this member joined)
       const cacheKey = guildId;
-      const cached = this.inviteCache.get(cacheKey);
-      const oldInvites = cached?.invites || new Map();
+      let cached = this.inviteCache.get(cacheKey);
+      let oldInvites = cached?.invites || new Map();
+
+      // If cache is empty or expired, fetch invites first to establish baseline
+      if (!cached || oldInvites.size === 0) {
+        console.log(`[DiscordReferral] Cache empty for ${guildId}, fetching invites to establish baseline...`);
+        oldInvites = await this.getInvites(member.guild);
+        // Store in cache
+        this.inviteCache.set(cacheKey, {
+          invites: oldInvites,
+          timestamp: Date.now()
+        });
+        // Wait a moment for Discord to update invite uses
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Get current invites (after member joined)
+      const currentInvites = await this.getInvites(member.guild);
 
       // Find which invite was used
       const usedInvite = await this.findUsedInvite(member.guild, oldInvites, currentInvites);

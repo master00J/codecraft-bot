@@ -70,8 +70,11 @@ async function checkBotStatus(guildId: string, botApplicationId: string, botToke
 // GET - Fetch bot personalizer config
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -150,8 +153,11 @@ export async function GET(
 // POST - Enable bot personalizer with custom token
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -696,8 +702,11 @@ export async function POST(
 // DELETE - Disable bot personalizer
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

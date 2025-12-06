@@ -37,8 +37,11 @@ async function checkAdminAccess() {
 // PATCH - Update tier vote rewards configuration
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { tierId: string } }
+  { params }: { params: Promise<{ tierId: string }> }
 ) {
+
+  const { tierId } = await params;
+
   try {
     const { isAdmin, error } = await checkAdminAccess();
     if (!isAdmin) {

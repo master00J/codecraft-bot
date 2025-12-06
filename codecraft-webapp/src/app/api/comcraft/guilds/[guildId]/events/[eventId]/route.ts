@@ -15,8 +15,11 @@ const supabase = supabaseAdmin;
 // GET - Get single event
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string; eventId: string } }
+  { params }: { params: Promise<{ guildId: string; eventId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     
@@ -50,8 +53,11 @@ export async function GET(
 // PATCH - Update event
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; eventId: string } }
+  { params }: { params: Promise<{ guildId: string; eventId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     
@@ -115,8 +121,11 @@ export async function PATCH(
 // DELETE - Delete event
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; eventId: string } }
+  { params }: { params: Promise<{ guildId: string; eventId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     

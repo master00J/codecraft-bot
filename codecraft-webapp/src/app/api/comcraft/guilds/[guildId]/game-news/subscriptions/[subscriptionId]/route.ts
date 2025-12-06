@@ -7,8 +7,11 @@ import { supabaseAdmin } from '@/lib/supabase/server';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; subscriptionId: string } }
+  { params }: { params: Promise<{ guildId: string; subscriptionId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const { guildId, subscriptionId } = params;
     const body = await request.json();
@@ -73,8 +76,11 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; subscriptionId: string } }
+  { params }: { params: Promise<{ guildId: string; subscriptionId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const { guildId, subscriptionId } = params;
 

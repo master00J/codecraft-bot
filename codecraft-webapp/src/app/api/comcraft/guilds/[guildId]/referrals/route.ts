@@ -14,7 +14,7 @@ const supabase = supabaseAdmin;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -23,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
+    const { guildId } = await params;
 
     // @ts-ignore
     const discordId = session.user.discordId || session.user.id || session.user.sub;
@@ -140,7 +140,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -149,7 +149,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = params;
+    const { guildId } = await params;
     const body = await request.json();
 
     // @ts-ignore

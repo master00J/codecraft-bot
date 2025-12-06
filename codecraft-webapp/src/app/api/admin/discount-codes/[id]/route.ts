@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // GET - Get specific discount code
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     
@@ -25,7 +28,7 @@ export async function GET(
     const { data: code, error } = await supabaseAdmin
       .from('discount_codes')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (error) throw error
@@ -48,8 +51,11 @@ export async function GET(
 // PATCH - Update discount code
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     
@@ -70,7 +76,7 @@ export async function PATCH(
         ...body,
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single()
 
@@ -93,8 +99,10 @@ export async function PATCH(
 // DELETE - Delete discount code
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     
@@ -111,14 +119,14 @@ export async function DELETE(
     const { count } = await supabaseAdmin
       .from('discount_code_usage')
       .select('*', { count: 'exact', head: true })
-      .eq('discount_code_id', params.id)
+      .eq('discount_code_id', id)
 
     if (count && count > 0) {
       // Soft delete - just deactivate
       await supabaseAdmin
         .from('discount_codes')
         .update({ is_active: false })
-        .eq('id', params.id)
+        .eq('id', id)
 
       return NextResponse.json({
         success: true,
@@ -130,7 +138,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('discount_codes')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 

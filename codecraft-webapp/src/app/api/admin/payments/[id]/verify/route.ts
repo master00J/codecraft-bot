@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // Verify/Reject payment (admin only)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -33,7 +36,7 @@ export async function POST(
       .eq('discord_id', discordId)
       .single()
 
-    const paymentId = params.id
+    const paymentId = id
     const body = await request.json()
     const { action, notes } = body // action: 'confirm' or 'reject'
 

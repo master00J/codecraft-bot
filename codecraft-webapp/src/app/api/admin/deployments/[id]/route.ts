@@ -9,8 +9,10 @@ export const dynamic = 'force-dynamic'
 // Get single deployment
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     
@@ -33,7 +35,7 @@ export async function GET(
           users(discord_tag, email, avatar_url)
         )
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (error || !deployment) {
@@ -74,8 +76,11 @@ export async function GET(
 // Update deployment (admin only)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     
@@ -95,15 +100,15 @@ export async function PATCH(
     if (action) {
       switch (action) {
         case 'suspend':
-          const suspended = await suspendBot(params.id)
+          const suspended = await suspendBot(id)
           return NextResponse.json({ success: suspended })
 
         case 'unsuspend':
-          const unsuspended = await unsuspendBot(params.id)
+          const unsuspended = await unsuspendBot(id)
           return NextResponse.json({ success: unsuspended })
 
         case 'terminate':
-          const terminated = await terminateBot(params.id)
+          const terminated = await terminateBot(id)
           return NextResponse.json({ success: terminated })
 
         case 'update_resources':
@@ -111,7 +116,7 @@ export async function PATCH(
             return NextResponse.json({ error: 'new_tier required' }, { status: 400 })
           }
           const updated = await updateBotResources(
-            params.id,
+            id,
             body.new_tier,
             body.new_addons || []
           )
@@ -126,7 +131,7 @@ export async function PATCH(
     const { error } = await supabaseAdmin
       .from('bot_deployments')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       throw error

@@ -58,8 +58,10 @@ async function assertAccess(guildId: string, discordId: string) {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string; ticketId: string } }
+  { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
+  const { guildId, ticketId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -72,14 +74,14 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     // Get ticket
     const { data: ticket, error } = await supabase
       .from('tickets')
       .select('*')
-      .eq('id', params.ticketId)
-      .eq('guild_id', params.guildId)
+      .eq('id', ticketId)
+      .eq('guild_id', guildId)
       .single();
 
     if (error || !ticket) {
@@ -90,14 +92,14 @@ export async function GET(
     const { data: messages } = await supabase
       .from('ticket_messages')
       .select('*')
-      .eq('ticket_id', params.ticketId)
+      .eq('ticket_id', ticketId)
       .order('created_at', { ascending: true });
 
     // Get rating if exists
     const { data: rating } = await supabase
       .from('ticket_ratings')
       .select('*')
-      .eq('ticket_id', params.ticketId)
+      .eq('ticket_id', ticketId)
       .maybeSingle();
 
     return NextResponse.json({
@@ -119,8 +121,10 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; ticketId: string } }
+  { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
+  const { guildId, ticketId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -133,7 +137,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
     const action = body.action as string;
@@ -142,8 +146,8 @@ export async function PATCH(
     const { data: ticket } = await supabase
       .from('tickets')
       .select('*')
-      .eq('id', params.ticketId)
-      .eq('guild_id', params.guildId)
+      .eq('id', ticketId)
+      .eq('guild_id', guildId)
       .single();
 
     if (!ticket) {
@@ -240,7 +244,7 @@ export async function PATCH(
         ...updates,
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.ticketId);
+      .eq('id', ticketId);
 
     if (updateError) {
       console.error('Error updating ticket:', updateError);
@@ -250,14 +254,14 @@ export async function PATCH(
     // If closing via dashboard, notify bot to close the Discord channel
     if (action === 'close' && INTERNAL_SECRET && ticket.discord_channel_id) {
       try {
-        const botResponse = await fetch(`${COMCRAFT_BOT_API}/internal/tickets/${params.ticketId}/close`, {
+        const botResponse = await fetch(`${COMCRAFT_BOT_API}/internal/tickets/${ticketId}/close`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Internal-Secret': INTERNAL_SECRET
           },
           body: JSON.stringify({
-            guildId: params.guildId,
+            guildId: guildId,
             channelId: ticket.discord_channel_id,
             reason: body.reason || 'Closed from dashboard',
             closedBy: discordId,
@@ -290,8 +294,10 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; ticketId: string } }
+  { params }: { params: Promise<{ guildId: string; ticketId: string }> }
 ) {
+  const { guildId, ticketId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -304,14 +310,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     // Get ticket first
     const { data: ticket } = await supabase
       .from('tickets')
       .select('*')
-      .eq('id', params.ticketId)
-      .eq('guild_id', params.guildId)
+      .eq('id', ticketId)
+      .eq('guild_id', guildId)
       .single();
 
     if (!ticket) {
@@ -337,8 +343,8 @@ export async function DELETE(
         deleted_by: user?.id || null,
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.ticketId)
-      .eq('guild_id', params.guildId);
+      .eq('id', ticketId)
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting ticket:', error);

@@ -15,8 +15,11 @@ const supabase = supabaseAdmin;
 // PATCH - Update an update
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     
@@ -96,8 +99,11 @@ export async function PATCH(
 // DELETE - Delete an update
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     

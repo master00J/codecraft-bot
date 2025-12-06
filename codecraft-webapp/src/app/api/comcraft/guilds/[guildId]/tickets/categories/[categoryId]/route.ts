@@ -56,8 +56,11 @@ async function assertAccess(guildId: string, discordId: string) {
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; categoryId: string } }
+  { params }: { params: Promise<{ guildId: string; categoryId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -128,8 +131,11 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; categoryId: string } }
+  { params }: { params: Promise<{ guildId: string; categoryId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

@@ -141,8 +141,11 @@ async function isGiveawaysEnabled(guildId: string) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -188,8 +191,11 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { guildId: string } }
+  { params }: { params: Promise<{ guildId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     if (!INTERNAL_SECRET) {
       return NextResponse.json({ error: 'Internal API secret not configured' }, { status: 500 });

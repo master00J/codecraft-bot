@@ -9,8 +9,11 @@ import { supabaseAdmin } from '@/lib/supabase/server';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { guildId: string; reactionId: string } }
+  { params }: { params: Promise<{ guildId: string; reactionId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -65,8 +68,11 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { guildId: string; reactionId: string } }
+  { params }: { params: Promise<{ guildId: string; reactionId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

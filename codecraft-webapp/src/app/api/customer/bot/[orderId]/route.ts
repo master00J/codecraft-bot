@@ -9,8 +9,11 @@ export const dynamic = 'force-dynamic'
 // Get bot status and resource usage for customer
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
+
+  const { orderId } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     

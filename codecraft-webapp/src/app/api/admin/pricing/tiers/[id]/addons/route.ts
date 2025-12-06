@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // Get allowed add-ons for a tier
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -24,7 +27,7 @@ export async function GET(
     const { data: links, error } = await supabaseAdmin
       .from('tier_allowed_addons')
       .select('addon_id')
-      .eq('tier_id', params.id)
+      .eq('tier_id', id)
 
     if (error) throw error
 
@@ -40,8 +43,11 @@ export async function GET(
 // Set allowed add-ons for a tier
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -56,7 +62,7 @@ export async function POST(
     const body = await request.json()
     const { addon_ids } = body // Array of addon IDs
 
-    const tierId = params.id
+    const tierId = id
 
     // Delete existing links
     await supabaseAdmin

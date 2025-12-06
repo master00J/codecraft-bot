@@ -7,8 +7,11 @@ import { supabaseAdmin } from '@/lib/supabase/server';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { guildId: string; gameId: string } }
+  { params }: { params: Promise<{ guildId: string; gameId: string }> }
 ) {
+
+  const { guildId } = await params;
+
   try {
     const { gameId } = params;
 

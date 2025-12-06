@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 // Update tier (admin only)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -27,7 +30,7 @@ export async function PATCH(
     const { error } = await supabaseAdmin
       .from('pricing_tiers')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 
@@ -41,8 +44,11 @@ export async function PATCH(
 // Delete tier (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const { id } = await params;
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -57,7 +63,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('pricing_tiers')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 

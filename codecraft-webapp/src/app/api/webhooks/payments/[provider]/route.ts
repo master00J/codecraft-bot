@@ -143,9 +143,12 @@ async function handleNowPayments(request: NextRequest) {
   return NextResponse.json({ success: true });
 }
 
-export async function POST(request: NextRequest, { params }: { params: { provider: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
+
+  const { provider } = await params;
+
   try {
-    switch (params.provider) {
+    switch (provider) {
       case 'coinpayments':
         return await handleCoinPayments(request);
       case 'nowpayments':
