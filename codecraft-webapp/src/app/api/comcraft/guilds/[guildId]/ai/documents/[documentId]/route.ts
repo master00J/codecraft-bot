@@ -10,7 +10,7 @@ export async function PATCH(
   { params }: { params: Promise<{ guildId: string; documentId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, documentId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -24,8 +24,6 @@ export async function PATCH(
     if (!discordId) {
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
-
-    const { guildId, documentId } = params;
     const access = await getGuildAccess(guildId, discordId);
     if (!access.allowed) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
@@ -80,7 +78,7 @@ export async function DELETE(
   { params }: { params: Promise<{ guildId: string; documentId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, documentId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -94,8 +92,6 @@ export async function DELETE(
     if (!discordId) {
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
-
-    const { guildId, documentId } = params;
     const access = await getGuildAccess(guildId, discordId);
     if (!access.allowed) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
