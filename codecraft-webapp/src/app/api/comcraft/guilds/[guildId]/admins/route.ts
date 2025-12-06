@@ -33,7 +33,7 @@ export async function POST(
     const { data: guild } = await supabaseAdmin
       .from('guild_configs')
       .select('owner_discord_id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single()
 
     if (!guild) {
@@ -58,7 +58,7 @@ export async function POST(
     const { error: insertError } = await supabaseAdmin
       .from('guild_authorized_users')
       .insert({
-        guild_id: params.guildId,
+        guild_id: guildId,
         discord_id: discordId,
         role: role,
         added_by: requestingUserId
@@ -111,7 +111,7 @@ export async function DELETE(
     const { data: guild } = await supabaseAdmin
       .from('guild_configs')
       .select('owner_discord_id')
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .single()
 
     if (!guild || guild.owner_discord_id !== requestingUserId) {
@@ -126,7 +126,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('guild_authorized_users')
       .delete()
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .eq('discord_id', discordId)
 
     if (error) throw error
