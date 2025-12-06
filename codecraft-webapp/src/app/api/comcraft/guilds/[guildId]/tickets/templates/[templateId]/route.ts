@@ -49,7 +49,7 @@ export async function PATCH(
   { params }: { params: Promise<{ guildId: string; templateId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, templateId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -62,7 +62,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const accessError = await assertAccess(params.guildId, discordId);
+    const accessError = await assertAccess(guildId, discordId);
     if (accessError) return accessError;
 
     const { data: user } = await supabase
@@ -88,8 +88,8 @@ export async function PATCH(
     const { data, error } = await supabase
       .from('ticket_templates')
       .update(updates)
-      .eq('id', params.templateId)
-      .eq('guild_id', params.guildId)
+      .eq('id', templateId)
+      .eq('guild_id', guildId)
       .select()
       .single();
 
@@ -114,7 +114,7 @@ export async function DELETE(
   { params }: { params: Promise<{ guildId: string; templateId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, templateId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -127,14 +127,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const accessError = await assertAccess(params.guildId, discordId);
+    const accessError = await assertAccess(guildId, discordId);
     if (accessError) return accessError;
 
     const { error } = await supabase
       .from('ticket_templates')
       .delete()
-      .eq('id', params.templateId)
-      .eq('guild_id', params.guildId);
+      .eq('id', templateId)
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting template:', error);

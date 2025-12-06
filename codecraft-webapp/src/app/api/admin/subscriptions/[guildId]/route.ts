@@ -81,7 +81,7 @@ export async function PATCH(
     const { data, error } = await supabase
       .from('guild_configs')
       .update(payload)
-      .eq('guild_id', params.guildId)
+      .eq('guild_id', guildId)
       .select('*')
       .single();
 

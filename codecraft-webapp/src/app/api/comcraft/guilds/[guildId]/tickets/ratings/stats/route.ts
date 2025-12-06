@@ -62,13 +62,13 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    const accessError = await assertAccess(params.guildId, discordId);
+    const accessError = await assertAccess(guildId, discordId);
     if (accessError) return accessError;
 
     const { data, error } = await supabase
       .from('ticket_ratings')
       .select('rating')
-      .eq('guild_id', params.guildId);
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error fetching rating stats:', error);

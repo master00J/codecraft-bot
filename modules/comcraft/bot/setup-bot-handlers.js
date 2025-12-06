@@ -1110,6 +1110,14 @@ async function handleSlashCommand(interaction, handlers) {
       await handleCaseCommand(interaction, modActions);
       break;
 
+    case 'close':
+      await handleCloseCommand(interaction);
+      break;
+
+    case 'unlock':
+      await handleUnlockCommand(interaction);
+      break;
+
     // Custom commands
     case 'customcommand':
       await handleCustomCommandCommand(interaction, customCommands);
@@ -1852,6 +1860,103 @@ async function handleBanCommand(interaction, modActions) {
   } else {
     await interaction.reply({
       content: `❌ Error: ${result.error}`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleCloseCommand(interaction) {
+  // Check if user has ManageChannels permission
+  if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return interaction.reply({
+      content: '❌ You do not have permission to manage channels.',
+      ephemeral: true,
+    });
+  }
+
+  // Check if bot has ManageChannels permission
+  if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return interaction.reply({
+      content: '❌ I do not have permission to manage channels.',
+      ephemeral: true,
+    });
+  }
+
+  const channel = interaction.channel;
+  const reason = interaction.options.getString('reason') || 'No reason provided';
+
+  try {
+    // Lock the channel by removing SendMessages permission for @everyone
+    await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+      SendMessages: false,
+      AddReactions: false,
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor('#FF0000')
+      .setTitle('🔒 Channel Locked')
+      .setDescription(`This channel has been locked by ${interaction.user.tag}`)
+      .addFields(
+        { name: 'Reason', value: reason, inline: false }
+      )
+      .setTimestamp();
+
+    await interaction.reply({
+      embeds: [embed],
+    });
+  } catch (error) {
+    console.error('Error locking channel:', error);
+    await interaction.reply({
+      content: `❌ Error locking channel: ${error.message}`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleUnlockCommand(interaction) {
+  // Check if user has ManageChannels permission
+  if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return interaction.reply({
+      content: '❌ You do not have permission to manage channels.',
+      ephemeral: true,
+    });
+  }
+
+  // Check if bot has ManageChannels permission
+  if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return interaction.reply({
+      content: '❌ I do not have permission to manage channels.',
+      ephemeral: true,
+    });
+  }
+
+  const channel = interaction.channel;
+  const reason = interaction.options.getString('reason') || 'No reason provided';
+
+  try {
+    // Unlock the channel by allowing SendMessages permission for @everyone
+    // Remove the permission overwrite to restore default permissions
+    await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+      SendMessages: null,
+      AddReactions: null,
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor('#00FF00')
+      .setTitle('🔓 Channel Unlocked')
+      .setDescription(`This channel has been unlocked by ${interaction.user.tag}`)
+      .addFields(
+        { name: 'Reason', value: reason, inline: false }
+      )
+      .setTimestamp();
+
+    await interaction.reply({
+      embeds: [embed],
+    });
+  } catch (error) {
+    console.error('Error unlocking channel:', error);
+    await interaction.reply({
+      content: `❌ Error unlocking channel: ${error.message}`,
       ephemeral: true,
     });
   }
@@ -4186,6 +4291,24 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
       .setName('case')
       .setDescription('View a moderation case')
       .addIntegerOption((option) => option.setName('case').setDescription('Case ID').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('close')
+      .setDescription('[Mod] Lock a channel so no one can send messages')
+      .addStringOption((option) =>
+        option
+          .setName('reason')
+          .setDescription('Reason for closing the channel')
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('unlock')
+      .setDescription('[Mod] Unlock a channel so everyone can send messages again')
+      .addStringOption((option) =>
+        option
+          .setName('reason')
+          .setDescription('Reason for unlocking the channel')
+          .setRequired(false)
+      ),
     new SlashCommandBuilder()
       .setName('customcommand')
       .setDescription('Manage custom commands')

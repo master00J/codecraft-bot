@@ -7254,6 +7254,26 @@ async function registerCommands(clientInstance) {
           .setRequired(true)
       ),
 
+    new SlashCommandBuilder()
+      .setName('close')
+      .setDescription('[Mod] Lock a channel so no one can send messages')
+      .addStringOption((option) =>
+        option
+          .setName('reason')
+          .setDescription('Reason for closing the channel')
+          .setRequired(false)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('unlock')
+      .setDescription('[Mod] Unlock a channel so everyone can send messages again')
+      .addStringOption((option) =>
+        option
+          .setName('reason')
+          .setDescription('Reason for unlocking the channel')
+          .setRequired(false)
+      ),
+
     // Custom Commands
     new SlashCommandBuilder()
       .setName('customcommand')

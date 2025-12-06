@@ -58,7 +58,7 @@ export async function POST(
   { params }: { params: Promise<{ guildId: string; submissionId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, submissionId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -72,7 +72,7 @@ export async function POST(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     if (!INTERNAL_SECRET) {
       console.error('INTERNAL_API_SECRET is not set.');
@@ -84,7 +84,7 @@ export async function POST(
 
     const moderatorName = session.user?.name || session.user?.email || 'Dashboard moderator';
 
-    const response = await fetch(`${COMCRAFT_BOT_API}/api/feedback/${params.guildId}/submissions/${params.submissionId}/complete`, {
+    const response = await fetch(`${COMCRAFT_BOT_API}/api/feedback/${guildId}/submissions/${submissionId}/complete`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

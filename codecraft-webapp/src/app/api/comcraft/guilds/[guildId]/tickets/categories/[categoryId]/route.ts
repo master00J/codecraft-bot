@@ -59,7 +59,7 @@ export async function PATCH(
   { params }: { params: Promise<{ guildId: string; categoryId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, categoryId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -73,7 +73,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const body = await request.json();
 
@@ -108,8 +108,8 @@ export async function PATCH(
     const { error } = await supabase
       .from('ticket_categories')
       .update(updates)
-      .eq('id', params.categoryId)
-      .eq('guild_id', params.guildId);
+      .eq('id', categoryId)
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error updating ticket category:', error);
@@ -134,7 +134,7 @@ export async function DELETE(
   { params }: { params: Promise<{ guildId: string; categoryId: string }> }
 ) {
 
-  const { guildId } = await params;
+  const { guildId, categoryId } = await params;
 
   try {
     const session = await getServerSession(authOptions);
@@ -148,13 +148,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await assertAccess(params.guildId, discordId);
+    await assertAccess(guildId, discordId);
 
     const { error } = await supabase
       .from('ticket_categories')
       .delete()
-      .eq('id', params.categoryId)
-      .eq('guild_id', params.guildId);
+      .eq('id', categoryId)
+      .eq('guild_id', guildId);
 
     if (error) {
       console.error('Error deleting ticket category:', error);
