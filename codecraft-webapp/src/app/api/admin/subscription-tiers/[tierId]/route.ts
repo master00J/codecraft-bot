@@ -53,7 +53,7 @@ export async function GET(
     const { data: tier, error: tierError } = await supabase
       .from('subscription_tiers')
       .select('*')
-      .eq('id', params.tierId)
+      .eq('id', tierId)
       .single();
 
     if (tierError) throw tierError;
@@ -91,7 +91,7 @@ export async function PATCH(
     const { data: tier, error: updateError } = await supabase
       .from('subscription_tiers')
       .update(body)
-      .eq('id', params.tierId)
+      .eq('id', tierId)
       .select()
       .single();
 
@@ -151,7 +151,7 @@ export async function DELETE(
     const { error: updateError } = await supabase
       .from('subscription_tiers')
       .update({ is_active: false })
-      .eq('id', params.tierId);
+      .eq('id', tierId);
 
     if (updateError) throw updateError;
 

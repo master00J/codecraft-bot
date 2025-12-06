@@ -24,7 +24,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const providerKey = params.provider;
+    const providerKey = provider;
     const payload = await request.json();
 
     console.log(`[Payment Provider API] Updating ${providerKey}:`, {
