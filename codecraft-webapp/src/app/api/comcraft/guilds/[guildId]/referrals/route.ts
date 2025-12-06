@@ -92,6 +92,13 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(20);
 
+    // Get tiered rewards
+    const { data: tiers } = await supabase
+      .from('discord_referral_tiers')
+      .select('*')
+      .eq('guild_id', guildId)
+      .order('min_invites', { ascending: true });
+
     // If no config exists, return default
     if (!config) {
       return NextResponse.json({
@@ -113,7 +120,8 @@ export async function GET(
           log_channel_id: null
         },
         stats: stats || [],
-        recentReferrals: recentReferrals || []
+        recentReferrals: recentReferrals || [],
+        tiers: tiers || []
       });
     }
 
@@ -121,7 +129,8 @@ export async function GET(
       success: true,
       config,
       stats: stats || [],
-      recentReferrals: recentReferrals || []
+      recentReferrals: recentReferrals || [],
+      tiers: tiers || []
     });
   } catch (error) {
     console.error('Error in referral config API:', error);
@@ -212,6 +221,38 @@ export async function PATCH(
     if (upsertError) {
       console.error('Error saving referral config:', upsertError);
       return NextResponse.json({ error: 'Failed to save config' }, { status: 500 });
+    }
+
+    // Handle tiers if provided
+    if (body.tiers && Array.isArray(body.tiers)) {
+      // Delete existing tiers for this guild
+      await supabase
+        .from('discord_referral_tiers')
+        .delete()
+        .eq('guild_id', guildId);
+
+      // Insert new tiers
+      if (body.tiers.length > 0) {
+        const tiersToInsert = body.tiers.map((tier: any, index: number) => ({
+          guild_id: guildId,
+          tier_name: tier.tier_name || `Tier ${index + 1}`,
+          min_invites: tier.min_invites || 0,
+          role_id: tier.role_id || null,
+          coins: tier.coins || 0,
+          xp: tier.xp || 0,
+          order_index: tier.order_index !== undefined ? tier.order_index : index,
+          enabled: tier.enabled !== undefined ? tier.enabled : true
+        }));
+
+        const { error: tiersError } = await supabase
+          .from('discord_referral_tiers')
+          .insert(tiersToInsert);
+
+        if (tiersError) {
+          console.error('Error saving tiers:', tiersError);
+          return NextResponse.json({ error: 'Failed to save tiers' }, { status: 500 });
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

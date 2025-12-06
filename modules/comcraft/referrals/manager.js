@@ -205,6 +205,9 @@ class DiscordReferralManager {
       // Track referral and give rewards
       await this.trackReferral(guildId, usedInvite.inviter, member.user.id, usedInvite.code, accountAgeDays, true);
       await this.giveRewards(member.guild, usedInvite.inviter, member, config);
+      
+      // Check and give tiered rewards
+      await this.checkAndGiveTieredRewards(member.guild, usedInvite.inviter, guildId);
 
     } catch (error) {
       console.error('[DiscordReferral] Error handling member join:', error);
@@ -455,6 +458,131 @@ class DiscordReferralManager {
       await channel.send({ embeds: [embed] });
     } catch (error) {
       console.error('[DiscordReferral] Error logging referral:', error);
+    }
+  }
+
+  /**
+   * Check and give tiered rewards based on invite count
+   */
+  async checkAndGiveTieredRewards(guild, inviterUserId, guildId) {
+    try {
+      // Get current invite stats
+      const { data: stats } = await this.supabase
+        .from('discord_referral_stats')
+        .select('total_invites')
+        .eq('guild_id', guildId)
+        .eq('inviter_user_id', inviterUserId)
+        .single();
+
+      if (!stats) return;
+
+      const totalInvites = stats.total_invites;
+
+      // Get all enabled tiers for this guild, ordered by min_invites descending
+      const { data: tiers, error: tiersError } = await this.supabase
+        .from('discord_referral_tiers')
+        .select('*')
+        .eq('guild_id', guildId)
+        .eq('enabled', true)
+        .order('min_invites', { ascending: false });
+
+      if (tiersError || !tiers || tiers.length === 0) {
+        return; // No tiers configured
+      }
+
+      // Find the highest tier the user qualifies for
+      let highestTier = null;
+      for (const tier of tiers) {
+        if (totalInvites >= tier.min_invites) {
+          highestTier = tier;
+          break;
+        }
+      }
+
+      if (!highestTier) return; // User doesn't qualify for any tier
+
+      // Get inviter member
+      const inviter = await guild.members.fetch(inviterUserId).catch(() => null);
+      if (!inviter) return;
+
+      // Remove all tier roles that the user shouldn't have anymore
+      // (remove roles from lower tiers)
+      for (const tier of tiers) {
+        if (tier.role_id && tier.min_invites < highestTier.min_invites) {
+          const role = guild.roles.cache.get(tier.role_id);
+          if (role && inviter.roles.cache.has(tier.role_id)) {
+            try {
+              await inviter.roles.remove(role, `Referral tier update - reached ${highestTier.tier_name}`);
+              console.log(`[DiscordReferral] Removed tier role ${role.name} from ${inviter.user.username}`);
+            } catch (error) {
+              console.error(`[DiscordReferral] Error removing tier role:`, error);
+            }
+          }
+        }
+      }
+
+      // Give the highest tier role if not already have it
+      if (highestTier.role_id) {
+        const tierRole = guild.roles.cache.get(highestTier.role_id);
+        if (tierRole && tierRole.editable && tierRole.position < guild.members.me.roles.highest.position) {
+          if (!inviter.roles.cache.has(highestTier.role_id)) {
+            await inviter.roles.add(tierRole, `Referral tier reward - ${highestTier.tier_name} (${totalInvites} invites)`);
+            console.log(`✅ [DiscordReferral] Gave tier role ${tierRole.name} to ${inviter.user.username} (${totalInvites} invites)`);
+          }
+        }
+      }
+
+      // Give tier coins if configured
+      if (highestTier.coins > 0 && global.economyManager) {
+        const result = await global.economyManager.addCoins(
+          guildId,
+          inviterUserId,
+          highestTier.coins,
+          'referral_tier_reward',
+          `Referral tier reward - ${highestTier.tier_name}`
+        );
+        if (result.success) {
+          console.log(`✅ [DiscordReferral] Gave ${highestTier.coins} coins to ${inviter.user.username} for tier ${highestTier.tier_name}`);
+        }
+      }
+
+      // Give tier XP if configured
+      if (highestTier.xp > 0 && global.xpManager) {
+        const guildConfig = await configManager.getGuildConfig(guildId);
+        if (guildConfig && guildConfig.leveling_enabled) {
+          const { data: userLevel } = await this.supabase
+            .from('user_levels')
+            .select('*')
+            .eq('guild_id', guildId)
+            .eq('user_id', inviterUserId)
+            .single();
+
+          if (userLevel) {
+            await this.supabase
+              .from('user_levels')
+              .update({
+                xp: userLevel.xp + highestTier.xp,
+                last_xp_gain: new Date().toISOString()
+              })
+              .eq('id', userLevel.id);
+          } else {
+            await this.supabase
+              .from('user_levels')
+              .insert({
+                guild_id: guildId,
+                user_id: inviterUserId,
+                xp: highestTier.xp,
+                level: 0,
+                total_messages: 0,
+                last_xp_gain: new Date().toISOString()
+              });
+          }
+          console.log(`✅ [DiscordReferral] Gave ${highestTier.xp} XP to ${inviter.user.username} for tier ${highestTier.tier_name}`);
+        }
+      }
+
+    } catch (error) {
+      console.error('[DiscordReferral] Error checking tiered rewards:', error);
     }
   }
 

@@ -16,7 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Save, ArrowLeft, Gift, Users, TrendingUp } from 'lucide-react';
+import { Loader2, Save, ArrowLeft, Gift, Users, TrendingUp, Plus, Trash2, Trophy } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 
@@ -47,6 +47,7 @@ export default function ReferralsDashboard() {
   });
   const [stats, setStats] = useState<any[]>([]);
   const [recentReferrals, setRecentReferrals] = useState<any[]>([]);
+  const [tiers, setTiers] = useState<any[]>([]);
 
   useEffect(() => {
     if (guildId) {
@@ -73,6 +74,7 @@ export default function ReferralsDashboard() {
         setConfig(referralsData.config || config);
         setStats(referralsData.stats || []);
         setRecentReferrals(referralsData.recentReferrals || []);
+        setTiers(referralsData.tiers || []);
       }
 
       if (rolesData.success) {
@@ -100,7 +102,7 @@ export default function ReferralsDashboard() {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/referrals`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify({ ...config, tiers })
       });
 
       const result = await response.json();
@@ -338,6 +340,145 @@ export default function ReferralsDashboard() {
                       />
                     </div>
                   )}
+                </Card>
+
+                {/* Tiered Rewards */}
+                <Card className="p-6 space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold flex items-center gap-2">
+                      <Trophy className="h-6 w-6" />
+                      Tiered Rewards
+                    </h2>
+                    <p className="text-muted-foreground">Reward users with different roles based on their invite count (e.g., 1 invite = Bronze, 5 invites = Silver)</p>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    {tiers.map((tier, index) => (
+                      <Card key={tier.id || index} className="p-4 bg-muted/50">
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <Label>Tier Name</Label>
+                            <Input
+                              value={tier.tier_name || ''}
+                              onChange={(e) => {
+                                const newTiers = [...tiers];
+                                newTiers[index].tier_name = e.target.value;
+                                setTiers(newTiers);
+                              }}
+                              placeholder="e.g., Bronze, Silver, Gold"
+                            />
+                          </div>
+                          <div>
+                            <Label>Minimum Invites</Label>
+                            <Input
+                              type="number"
+                              value={tier.min_invites || 0}
+                              onChange={(e) => {
+                                const newTiers = [...tiers];
+                                newTiers[index].min_invites = parseInt(e.target.value) || 0;
+                                setTiers(newTiers);
+                              }}
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <Label>Role</Label>
+                            <Select
+                              value={tier.role_id || ''}
+                              onValueChange={(value) => {
+                                const newTiers = [...tiers];
+                                newTiers[index].role_id = value;
+                                setTiers(newTiers);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a role..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">None</SelectItem>
+                                {roles.map((role) => (
+                                  <SelectItem key={role.id} value={role.id}>
+                                    @{role.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label>Coins</Label>
+                              <Input
+                                type="number"
+                                value={tier.coins || 0}
+                                onChange={(e) => {
+                                  const newTiers = [...tiers];
+                                  newTiers[index].coins = parseInt(e.target.value) || 0;
+                                  setTiers(newTiers);
+                                }}
+                                min="0"
+                              />
+                            </div>
+                            <div>
+                              <Label>XP</Label>
+                              <Input
+                                type="number"
+                                value={tier.xp || 0}
+                                onChange={(e) => {
+                                  const newTiers = [...tiers];
+                                  newTiers[index].xp = parseInt(e.target.value) || 0;
+                                  setTiers(newTiers);
+                                }}
+                                min="0"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4">
+                          <div className="flex items-center gap-3">
+                            <Label htmlFor={`tier-enabled-${index}`}>Enabled</Label>
+                            <Switch
+                              id={`tier-enabled-${index}`}
+                              checked={tier.enabled !== false}
+                              onCheckedChange={(checked) => {
+                                const newTiers = [...tiers];
+                                newTiers[index].enabled = checked;
+                                setTiers(newTiers);
+                              }}
+                            />
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              const newTiers = tiers.filter((_, i) => i !== index);
+                              setTiers(newTiers);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setTiers([...tiers, {
+                          tier_name: '',
+                          min_invites: 0,
+                          role_id: null,
+                          coins: 0,
+                          xp: 0,
+                          enabled: true,
+                          order_index: tiers.length
+                        }]);
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Tier
+                    </Button>
+                  </div>
                 </Card>
 
                 {/* Settings */}
