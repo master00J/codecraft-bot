@@ -53,7 +53,7 @@ export async function PATCH(
     const { data: suggestion, error } = await supabaseAdmin
       .from('suggestions')
       .update(updates)
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single()
 
@@ -107,7 +107,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('suggestions')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       console.error('Error deleting suggestion:', error)

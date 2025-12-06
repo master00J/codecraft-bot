@@ -23,7 +23,7 @@ export async function POST(
     // @ts-ignore
     const discordUserId = session.user.discordId
 
-    const quoteId = params.id
+    const quoteId = id
 
     // Get quote with order info
     const { data: quote, error: quoteError } = await supabaseAdmin

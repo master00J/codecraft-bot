@@ -36,7 +36,7 @@ export async function PATCH(
     const { data: method, error } = await supabaseAdmin
       .from('payment_methods')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single()
 
@@ -74,7 +74,7 @@ export async function DELETE(
     const { data: payments, error: checkError } = await supabaseAdmin
       .from('payments')
       .select('id')
-      .eq('payment_method_id', params.id)
+      .eq('payment_method_id', id)
       .limit(1)
 
     if (checkError) {
@@ -91,7 +91,7 @@ export async function DELETE(
           is_active: false,
           updated_at: new Date().toISOString()
         })
-        .eq('id', params.id)
+        .eq('id', id)
 
       if (error) throw error
 
@@ -105,7 +105,7 @@ export async function DELETE(
       const { error } = await supabaseAdmin
         .from('payment_methods')
         .delete()
-        .eq('id', params.id)
+        .eq('id', id)
 
       if (error) throw error
 
@@ -123,4 +123,3 @@ export async function DELETE(
     }, { status: 500 })
   }
 }
-

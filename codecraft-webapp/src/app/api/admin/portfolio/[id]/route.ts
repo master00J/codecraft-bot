@@ -29,7 +29,7 @@ export async function PATCH(
     const { error } = await supabaseAdmin
       .from('portfolio')
       .update(body)
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 
@@ -62,7 +62,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('portfolio')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 

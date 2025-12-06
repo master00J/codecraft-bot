@@ -20,7 +20,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const orderId = params.id
+    const orderId = id
 
     if (!orderId) {
       return NextResponse.json({ error: 'Order ID required' }, { status: 400 })

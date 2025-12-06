@@ -34,7 +34,7 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const orderId = params.id
+    const orderId = id
 
     // Get order (must belong to user)
     const { data: order, error: orderError } = await supabaseAdmin

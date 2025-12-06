@@ -17,7 +17,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const quoteId = params.id
+    const quoteId = id
     const body = await request.json()
     const { discordId } = body
 

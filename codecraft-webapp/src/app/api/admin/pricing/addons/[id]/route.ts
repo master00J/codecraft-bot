@@ -30,7 +30,7 @@ export async function PATCH(
     const { error } = await supabaseAdmin
       .from('pricing_addons')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 
@@ -63,7 +63,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('pricing_addons')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 
