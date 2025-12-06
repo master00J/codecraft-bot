@@ -1353,6 +1353,140 @@ exec node index.js
     }
   }
 
+  // Update start.sh script on existing server with improved git pull
+  async updateStartupScript(serverUuid: string, repoUrl: string = 'https://github.com/master00J/codecraft-bot', branch: string = 'main', githubToken?: string): Promise<void> {
+    try {
+      console.log(`🔄 Updating start.sh script on server ${serverUuid}...`)
+      
+      // Build git clone URL with token if provided
+      let cloneUrl = repoUrl
+      if (githubToken && repoUrl.includes('github.com')) {
+        cloneUrl = repoUrl.replace('https://', `https://${githubToken}@`)
+      }
+      
+      const scriptContent = `#!/bin/bash
+# Auto-deploy bot files from GitHub and start bot
+cd /home/container
+
+# Load environment variables from .env if it exists
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
+# Improved git pull with conflict resolution
+if [ -d .git ]; then
+    echo "📥 Pulling latest code from GitHub..."
+    
+    # Configure git to avoid merge conflicts
+    git config pull.rebase false 2>/dev/null || true
+    git config pull.ff only 2>/dev/null || true
+    
+    # Fetch latest changes first
+    git fetch origin ${branch} 2>&1 || {
+        echo "⚠️  Git fetch failed, checking remote configuration..."
+        git remote set-url origin ${repoUrl.replace('.git', '')} 2>/dev/null || true
+        git fetch origin ${branch} 2>&1 || echo "⚠️  Still failed to fetch"
+    }
+    
+    # Check if there are local changes
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        echo "⚠️  Local changes detected, resetting them..."
+        git reset --hard HEAD 2>/dev/null || true
+    fi
+    
+    # Try to pull with different strategies
+    if ! git pull origin ${branch} 2>&1; then
+        echo "⚠️  Standard pull failed, trying reset strategy..."
+        
+        # Reset to remote state (discard local changes)
+        git fetch origin ${branch} 2>&1
+        git reset --hard origin/${branch} 2>&1 || {
+            echo "⚠️  Reset failed, trying checkout..."
+            git checkout -f ${branch} 2>/dev/null || true
+            git reset --hard origin/${branch} 2>&1 || true
+        }
+        
+        echo "✅ Code reset to latest version from GitHub"
+    else
+        echo "✅ Successfully pulled latest code"
+    fi
+    
+    # Clean up any untracked files that might cause issues
+    git clean -fd 2>/dev/null || true
+fi
+
+# Clone repository if index.js doesn't exist
+if [ ! -f index.js ]; then
+    echo "📦 Cloning bot files from GitHub..."
+    ${githubToken ? `GIT_ASKPASS=echo GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch ${branch} ${cloneUrl} /tmp/bot-files 2>/dev/null || true` : `git clone --depth 1 --branch ${branch} ${cloneUrl} /tmp/bot-files 2>/dev/null || true`}
+    
+    if [ -d /tmp/bot-files ]; then
+        # Copy bot files (index.js for auto-start)
+        cp -r /tmp/bot-files/index.js ./index.js 2>/dev/null || true
+        cp -r /tmp/bot-files/modules . 2>/dev/null || true
+        cp -r /tmp/bot-files/package*.json . 2>/dev/null || true
+        cp -r /tmp/bot-files/*.json . 2>/dev/null || true
+        
+        # Initialize git repository for future pulls
+        git init 2>/dev/null || true
+        git remote add origin ${repoUrl.replace('.git', '')} 2>/dev/null || git remote set-url origin ${repoUrl.replace('.git', '')} 2>/dev/null || true
+        
+        # Cleanup
+        rm -rf /tmp/bot-files
+        echo "✅ Bot files deployed"
+    fi
+fi
+
+# Always check and install dependencies if package.json exists
+if [ -f package.json ]; then
+    if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ]; then
+        echo "📦 Installing dependencies from package.json..."
+        npm install --production 2>&1 || {
+            echo "⚠️  npm install failed, trying with --legacy-peer-deps..."
+            npm install --production --legacy-peer-deps 2>&1 || echo "⚠️  Some packages may have failed to install"
+        }
+        echo "✅ Dependencies installed"
+    else
+        echo "✅ Dependencies already installed"
+    fi
+fi
+
+# Start bot
+echo "🚀 Starting bot..."
+exec node index.js
+`
+      
+      await this.uploadFile(serverUuid, 'start.sh', scriptContent)
+      
+      // Make it executable
+      try {
+        await this.request(
+          `/servers/${serverUuid}/files/chmod`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              root: '/home/container',
+              files: ['start.sh'],
+              mode: '755'
+            })
+          },
+          'client'
+        )
+      } catch (chmodError: any) {
+        // Chmod might not work on some Pterodactyl setups, that's okay
+        if (chmodError?.status !== 422) {
+          console.warn(`⚠️  Could not set execute permissions on start.sh (non-critical)`)
+        }
+      }
+      
+      console.log(`✅ start.sh script updated successfully on server ${serverUuid}`)
+      console.log(`ℹ️  Restart the server to use the new script`)
+    } catch (error: any) {
+      console.error(`❌ Failed to update start.sh script:`, error.message)
+      throw error
+    }
+  }
+
   // Install Node.js packages via Pterodactyl API
   async installNodePackages(serverUuid: string, packages: string[]): Promise<void> {
     try {
