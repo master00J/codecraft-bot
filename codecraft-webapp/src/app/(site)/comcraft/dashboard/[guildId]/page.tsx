@@ -1668,6 +1668,16 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                     </Card>
                   </Link>
 
+                  <Link href={`/comcraft/dashboard/${guildId}/referrals`}>
+                    <Card className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-purple-500/50 h-full hover:scale-105 duration-200">
+                      <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-5">
+                        <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">🎁</div>
+                        <h3 className="font-semibold text-base mb-1">Referrals</h3>
+                        <p className="text-xs text-muted-foreground">Invite rewards</p>
+                      </div>
+                    </Card>
+                  </Link>
+
                   {/* Tab Switchers */}
                   <Card 
                     className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-primary/50 h-full hover:scale-105 duration-200"
