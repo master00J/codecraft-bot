@@ -230,6 +230,13 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     defaultEnabled: false,
     requiredTier: 'Premium',
   },
+  {
+    id: 'maid_jobs',
+    label: 'Maid Jobs',
+    description: 'Allow users to clock in, clean channels, and earn rewards with roleplay messages and role upgrades.',
+    defaultEnabled: false,
+    requiredTier: 'Premium',
+  },
 ];
 
 const LIMIT_DEFINITIONS: LimitDefinition[] = [
