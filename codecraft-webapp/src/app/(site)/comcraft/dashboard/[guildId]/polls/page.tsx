@@ -439,6 +439,7 @@ export default function PollsConfig() {
               allow_change_vote: true,
               max_votes: 1,
               require_roles: [],
+              weighted_voting: {},
               reminder_enabled: false
             });
           }}
@@ -804,6 +805,7 @@ export default function PollsConfig() {
                             allow_change_vote: true,
                             max_votes: 1,
                             require_roles: [],
+                            weighted_voting: {},
                             reminder_enabled: false
                           });
                         }}

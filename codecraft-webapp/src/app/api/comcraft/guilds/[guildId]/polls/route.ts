@@ -147,7 +147,7 @@ export async function GET(
         // JSON format
         const totalWeightedVotes = poll.poll_options.reduce((sum: number, opt: any) => sum + (parseFloat(opt.vote_count) || 0), 0);
 
-        const exportData = {
+        const exportData: any = {
           poll: {
             id: poll.id,
             title: poll.title,
