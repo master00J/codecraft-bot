@@ -60,6 +60,34 @@ function createMessageCreateHandler({
       }
     }
 
+    // Auto-clean channel for maid jobs (optional: if user is clocked in and sends message in new channel)
+    if (global.maidJobManager && message.guild && message.author && !message.author.bot) {
+      try {
+        // Check if user has active maid session
+        const session = await global.maidJobManager.getActiveSession(message.guild.id, message.author.id);
+        if (session) {
+          // Check if this channel was already cleaned in this session
+          const { data: existingCleaning } = await global.maidJobManager.supabase
+            .from('maid_cleanings')
+            .select('id')
+            .eq('session_id', session.id)
+            .eq('channel_id', message.channel.id)
+            .single()
+            .catch(() => ({ data: null }));
+
+          // If not cleaned yet, auto-clean (optional feature - can be disabled per guild)
+          if (!existingCleaning) {
+            const config = await global.maidJobManager.getConfig(message.guild.id);
+            // Only auto-clean if enabled (could add auto_clean_on_message to config)
+            // For now, users must use /maid clean command manually
+          }
+        }
+      } catch (error) {
+        // Silent fail - don't break message processing if maid job check fails
+        // console.error('[MessageCreate] Error checking maid job:', error.message);
+      }
+    }
+
     // Auto-moderation check
     const violations = await autoMod.checkMessage(message);
     if (violations) {

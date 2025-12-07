@@ -376,6 +376,20 @@ try {
   console.warn('Poll Manager not available:', error.message);
 }
 
+// Initialize Maid Job Manager
+let maidJobManager = null;
+try {
+  const MaidJobManager = require('./modules/comcraft/maid-jobs/manager');
+  if (MaidJobManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    maidJobManager = new MaidJobManager(client);
+    maidJobManager.setManagers(economyManager, xpManager);
+    global.maidJobManager = maidJobManager;
+    console.log('✅ Maid Job Manager initialized');
+  }
+} catch (error) {
+  console.warn('Maid Job Manager not available:', error.message);
+}
+
 const {
   runGuildAiPrompt,
   handleAskAiCommand,
@@ -1912,6 +1926,27 @@ client.on('interactionCreate', async (interaction) => {
         
         const { handlePollCommand } = require('./modules/comcraft/polls/commands');
         await handlePollCommand(interaction, global.pollManager);
+        break;
+      }
+
+      // ============ MAID JOB COMMANDS ============
+      case 'maid': {
+        if (!global.maidJobManager) {
+          return interaction.reply({
+            content: '❌ Maid job system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'maid_jobs',
+          'Premium'
+        );
+        if (!allowed) break;
+        
+        const { handleMaidCommand } = require('./modules/comcraft/maid-jobs/commands');
+        await handleMaidCommand(interaction, global.maidJobManager);
         break;
       }
 
@@ -7140,6 +7175,17 @@ async function registerCommands(clientInstance) {
         return createPollCommands();
       } catch (error) {
         console.warn('Failed to load poll commands:', error);
+        return [];
+      }
+    })(),
+
+    // Maid Job commands
+    ...(function() {
+      try {
+        const { createMaidJobCommands } = require('./modules/comcraft/maid-jobs/commands');
+        return createMaidJobCommands();
+      } catch (error) {
+        console.warn('Failed to load maid job commands:', error);
         return [];
       }
     })(),
