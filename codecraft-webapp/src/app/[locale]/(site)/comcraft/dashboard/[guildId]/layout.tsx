@@ -37,6 +37,9 @@ import {
   Check,
   X
 } from 'lucide-react';
+
+// Use Sparkles as icon for Maid Jobs
+const SparklesIcon = Sparkles;
 import {
   DndContext,
   closestCenter,
@@ -145,6 +148,7 @@ export default function GuildDashboardLayout({
             'Cam-Only Voice': 'cam_only_voice',
             'Quests': 'quests',
             'Polls': 'polls',
+            'Maid Jobs': 'maid_jobs',
             'AI Assistant': 'ai_assistant',
             'Bot Settings': 'custom_branding',
           };
@@ -259,6 +263,7 @@ export default function GuildDashboardLayout({
     { name: 'Cam-Only Voice', href: `/comcraft/dashboard/${guildId}/cam-only-voice`, icon: Video, tier: featureTiers['Cam-Only Voice'] },
     { name: 'Quests', href: `/comcraft/dashboard/${guildId}/quests`, icon: Target, tier: featureTiers['Quests'] },
     { name: 'Polls', href: `/comcraft/dashboard/${guildId}/polls`, icon: BarChart3, tier: featureTiers['Polls'] },
+    { name: 'Maid Jobs', href: `/comcraft/dashboard/${guildId}/maid-jobs`, icon: SparklesIcon, tier: featureTiers['Maid Jobs'] },
     { name: 'Referrals', href: `/comcraft/dashboard/${guildId}/referrals`, icon: Gift, tier: featureTiers['Referrals'] },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
