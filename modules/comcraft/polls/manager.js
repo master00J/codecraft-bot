@@ -15,6 +15,8 @@ class PollManager {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
     this.schedulerHandle = null;
+    this.realTimeUpdateHandles = new Map(); // Map of pollId -> interval handle
+    this.activePollsCache = new Map(); // Cache for active polls being updated
   }
 
   startScheduler() {
@@ -26,6 +28,8 @@ class PollManager {
       try {
         await this.processExpiredPolls();
         await this.sendReminders();
+        await this.processUnpostedPolls();
+        await this.updateActivePollMessages();
       } catch (error) {
         console.error('Poll scheduler error:', error);
       }
@@ -34,6 +38,53 @@ class PollManager {
     // Run every minute to check for expired polls and reminders
     setTimeout(run, 30 * 1000);
     this.schedulerHandle = setInterval(run, 60 * 1000);
+
+    // Start real-time updates for active polls (every 30 seconds)
+    this.startRealTimeUpdates();
+  }
+
+  startRealTimeUpdates() {
+    // Clear existing intervals
+    for (const handle of this.realTimeUpdateHandles.values()) {
+      clearInterval(handle);
+    }
+    this.realTimeUpdateHandles.clear();
+
+    // Set up interval to update active polls
+    setInterval(async () => {
+      try {
+        await this.updateActivePollMessages();
+      } catch (error) {
+        console.error('Error in real-time poll updates:', error);
+      }
+    }, 30 * 1000); // Every 30 seconds
+  }
+
+  async updateActivePollMessages() {
+    try {
+      const { data: activePolls } = await this.supabase
+        .from('polls')
+        .select('id')
+        .eq('status', 'active')
+        .not('message_id', 'is', null)
+        .limit(50);
+
+      if (!activePolls || activePolls.length === 0) {
+        return;
+      }
+
+      // Update each active poll's message
+      for (const poll of activePolls) {
+        try {
+          await this.updatePollMessage(poll.id, false);
+        } catch (error) {
+          // Silently fail for individual polls to not break others
+          console.error(`Failed to update poll ${poll.id}:`, error.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating active poll messages:', error);
+    }
   }
 
   stopScheduler() {
@@ -213,7 +264,56 @@ class PollManager {
     return poll;
   }
 
-  async vote(pollId, userId, optionIds) {
+  async checkUserCanVote(poll, userId, guild) {
+    // Check role requirements
+    if (poll.require_roles && poll.require_roles.length > 0) {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        throw new Error('Could not find member in server');
+      }
+
+      const hasRequiredRole = poll.require_roles.some(roleId => 
+        member.roles.cache.has(roleId)
+      );
+
+      if (!hasRequiredRole) {
+        const roleNames = await Promise.all(
+          poll.require_roles.map(async (roleId) => {
+            const role = guild.roles.cache.get(roleId);
+            return role ? role.name : `Role ${roleId}`;
+          })
+        );
+        throw new Error(`You need one of these roles to vote: ${roleNames.join(', ')}`);
+      }
+    }
+
+    return true;
+  }
+
+  async calculateVoteWeight(poll, userId, guild) {
+    // Default weight is 1.0
+    let weight = 1.0;
+
+    // Check weighted voting
+    if (poll.weighted_voting && typeof poll.weighted_voting === 'object') {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (member) {
+        // Check each role and find highest weight
+        for (const [roleId, roleWeight] of Object.entries(poll.weighted_voting)) {
+          if (member.roles.cache.has(roleId)) {
+            const weightValue = typeof roleWeight === 'number' ? roleWeight : parseFloat(roleWeight) || 1.0;
+            if (weightValue > weight) {
+              weight = weightValue;
+            }
+          }
+        }
+      }
+    }
+
+    return weight;
+  }
+
+  async vote(pollId, userId, optionIds, guild = null) {
     try {
       const poll = await this.getPoll(pollId);
       if (!poll) {
@@ -227,6 +327,20 @@ class PollManager {
       if (poll.expires_at && new Date(poll.expires_at) < new Date()) {
         throw new Error('Poll has expired');
       }
+
+      // Get guild if not provided
+      if (!guild) {
+        guild = this.client.guilds.cache.get(poll.guild_id);
+        if (!guild) {
+          throw new Error('Guild not found');
+        }
+      }
+
+      // Check role requirements
+      await this.checkUserCanVote(poll, userId, guild);
+
+      // Calculate vote weight
+      const voteWeight = await this.calculateVoteWeight(poll, userId, guild);
 
       // Check if user already voted
       const { data: existingVote } = await this.supabase
@@ -261,23 +375,24 @@ class PollManager {
           .eq('user_id', userId);
       }
 
-      // Insert new vote
+      // Insert new vote with weight
       const { error } = await this.supabase
         .from('poll_votes')
         .insert({
           poll_id: pollId,
           user_id: userId,
-          option_ids: optionIds
+          option_ids: optionIds,
+          vote_weight: voteWeight // Store weight for weighted voting
         });
 
       if (error) {
         throw new Error(error.message);
       }
 
-      // Update vote counts
+      // Update vote counts with weighted voting
       await this.updatePollCounts(pollId);
 
-      return { success: true, changed: !!existingVote };
+      return { success: true, changed: !!existingVote, weight: voteWeight };
     } catch (error) {
       console.error('Error voting:', error);
       throw error;
@@ -285,33 +400,38 @@ class PollManager {
   }
 
   async updatePollCounts(pollId) {
-    // This is handled by database triggers, but we can manually update if needed
     const poll = await this.getPoll(pollId);
     if (!poll) return;
 
-    // Update option vote counts
-    for (const option of poll.poll_options) {
-      const { data: votes } = await this.supabase
-        .from('poll_votes')
-        .select('option_ids')
-        .eq('poll_id', pollId);
+    // Get all votes with weights
+    const { data: votes } = await this.supabase
+      .from('poll_votes')
+      .select('option_ids, vote_weight')
+      .eq('poll_id', pollId);
 
-      const voteCount = votes?.filter(vote => 
-        vote.option_ids.includes(option.id)
-      ).length || 0;
+    // Update option vote counts with weighted voting
+    for (const option of poll.poll_options) {
+      let weightedCount = 0;
+      
+      if (votes && votes.length > 0) {
+        for (const vote of votes) {
+          if (vote.option_ids && vote.option_ids.includes(option.id)) {
+            const weight = vote.vote_weight || 1.0;
+            weightedCount += weight;
+          }
+        }
+      }
+
+      // Round to 2 decimal places for display
+      weightedCount = Math.round(weightedCount * 100) / 100;
 
       await this.supabase
         .from('poll_options')
-        .update({ vote_count: voteCount })
+        .update({ vote_count: weightedCount })
         .eq('id', option.id);
     }
 
-    // Update total votes
-    const { data: votes } = await this.supabase
-      .from('poll_votes')
-      .select('user_id')
-      .eq('poll_id', pollId);
-
+    // Update total votes (unique voters)
     const uniqueVoters = new Set(votes?.map(v => v.user_id) || []).size;
 
     await this.supabase
@@ -369,20 +489,29 @@ class PollManager {
       embed.setDescription(pollData.description);
     }
 
+    // Calculate total weighted votes for percentage calculation
+    const totalWeightedVotes = pollData.poll_options.reduce((sum, opt) => sum + (parseFloat(opt.vote_count) || 0), 0);
+
     // Build options display
     const optionsText = pollData.poll_options.map((opt, index) => {
-      const percentage = pollData.total_votes > 0 
-        ? ((opt.vote_count / pollData.total_votes) * 100).toFixed(1)
+      const voteCount = parseFloat(opt.vote_count) || 0;
+      const percentage = totalWeightedVotes > 0 
+        ? ((voteCount / totalWeightedVotes) * 100).toFixed(1)
         : 0;
       
-      const barLength = showResults ? Math.floor((opt.vote_count / (pollData.total_votes || 1)) * 10) : 0;
-      const bar = showResults ? '█'.repeat(barLength) + '░'.repeat(10 - barLength) : '';
+      const barLength = showResults ? Math.floor((voteCount / (totalWeightedVotes || 1)) * 20) : 0;
+      const bar = showResults ? '█'.repeat(barLength) + '░'.repeat(20 - barLength) : '';
       
       const emoji = opt.emoji ? `${opt.emoji} ` : '';
-      const count = showResults ? ` **${opt.vote_count}** (${percentage}%)` : '';
+      // Show weighted count if different from integer
+      const countDisplay = showResults 
+        ? voteCount % 1 === 0 
+          ? ` **${voteCount}** (${percentage}%)` 
+          : ` **${voteCount.toFixed(2)}** (${percentage}%)`
+        : '';
       const progress = showResults ? `\n${bar}` : '';
       
-      return `${emoji}**${String.fromCharCode(65 + index)}.** ${opt.option_text}${count}${progress}`;
+      return `${emoji}**${String.fromCharCode(65 + index)}.** ${opt.option_text}${countDisplay}${progress}`;
     }).join('\n\n');
 
     embed.addFields({
@@ -391,12 +520,36 @@ class PollManager {
       inline: false
     });
 
+    // Add role requirements info if present
+    if (pollData.require_roles && pollData.require_roles.length > 0 && !showResults) {
+      const guild = this.client.guilds.cache.get(pollData.guild_id);
+      if (guild) {
+        const roleNames = pollData.require_roles
+          .map(roleId => {
+            const role = guild.roles.cache.get(roleId);
+            return role ? role.name : null;
+          })
+          .filter(Boolean);
+        
+        if (roleNames.length > 0) {
+          embed.addFields({
+            name: '🔒 Required Roles',
+            value: roleNames.join(', '),
+            inline: true
+          });
+        }
+      }
+    }
+
     // Footer info
     const footerParts = [];
-    footerParts.push(`Total Votes: ${pollData.total_votes || 0}`);
+    footerParts.push(`Total Voters: ${pollData.total_votes || 0}`);
     footerParts.push(`Type: ${pollData.poll_type === 'multiple' ? 'Multiple Choice' : 'Single Choice'}`);
     if (pollData.voting_type === 'anonymous') {
       footerParts.push('Anonymous');
+    }
+    if (pollData.weighted_voting && Object.keys(pollData.weighted_voting).length > 0) {
+      footerParts.push('Weighted');
     }
     
     embed.setFooter({ text: footerParts.join(' • ') });
@@ -642,6 +795,253 @@ class PollManager {
     } catch (error) {
       console.error('Error processing unposted polls:', error);
     }
+  }
+
+  /**
+   * Export poll results to CSV format
+   */
+  async exportPollResultsCSV(pollId) {
+    const poll = await this.getPollWithResults(pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+
+    const lines = [];
+    lines.push(`Poll: ${poll.title}`);
+    lines.push(`Status: ${poll.status}`);
+    lines.push(`Total Voters: ${poll.total_votes || 0}`);
+    lines.push(`Created: ${poll.created_at}`);
+    lines.push('');
+    lines.push('Option, Votes, Percentage');
+
+    const totalWeightedVotes = poll.poll_options.reduce((sum, opt) => sum + (parseFloat(opt.vote_count) || 0), 0);
+
+    for (const option of poll.poll_options) {
+      const voteCount = parseFloat(option.vote_count) || 0;
+      const percentage = totalWeightedVotes > 0 
+        ? ((voteCount / totalWeightedVotes) * 100).toFixed(2)
+        : '0.00';
+      
+      lines.push(`"${option.option_text}",${voteCount},${percentage}%`);
+    }
+
+    if (poll.voting_type === 'public' && poll.votes) {
+      lines.push('');
+      lines.push('Voter ID, Options Voted, Vote Weight');
+      for (const vote of poll.votes) {
+        const optionTexts = vote.option_ids
+          .map(optId => {
+            const opt = poll.poll_options.find(o => o.id === optId);
+            return opt ? opt.option_text : 'Unknown';
+          })
+          .join('; ');
+        
+        lines.push(`${vote.user_id},"${optionTexts}",${vote.vote_weight || 1.0}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Export poll results to JSON format
+   */
+  async exportPollResultsJSON(pollId) {
+    const poll = await this.getPollWithResults(pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+
+    const totalWeightedVotes = poll.poll_options.reduce((sum, opt) => sum + (parseFloat(opt.vote_count) || 0), 0);
+
+    const exportData = {
+      poll: {
+        id: poll.id,
+        title: poll.title,
+        description: poll.description,
+        status: poll.status,
+        poll_type: poll.poll_type,
+        voting_type: poll.voting_type,
+        total_voters: poll.total_votes || 0,
+        total_weighted_votes: totalWeightedVotes,
+        created_at: poll.created_at,
+        expires_at: poll.expires_at,
+        closed_at: poll.closed_at
+      },
+      options: poll.poll_options.map(opt => {
+        const voteCount = parseFloat(opt.vote_count) || 0;
+        const percentage = totalWeightedVotes > 0 
+          ? (voteCount / totalWeightedVotes) * 100
+          : 0;
+
+        return {
+          id: opt.id,
+          text: opt.option_text,
+          emoji: opt.emoji,
+          votes: voteCount,
+          percentage: parseFloat(percentage.toFixed(2)),
+          order: opt.option_order
+        };
+      })
+    };
+
+    if (poll.voting_type === 'public' && poll.votes) {
+      exportData.votes = poll.votes.map(vote => ({
+        user_id: vote.user_id,
+        option_ids: vote.option_ids,
+        vote_weight: vote.vote_weight || 1.0,
+        voted_at: vote.voted_at
+      }));
+    }
+
+    return JSON.stringify(exportData, null, 2);
+  }
+
+  /**
+   * Get poll templates for a guild
+   */
+  async getPollTemplates(guildId, limit = 50) {
+    const { data, error } = await this.supabase
+      .from('poll_templates')
+      .select('*')
+      .eq('guild_id', guildId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Error fetching poll templates:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Create a poll from a template
+   */
+  async createPollFromTemplate(templateId, guildId, channelId, userId) {
+    const { data: template, error } = await this.supabase
+      .from('poll_templates')
+      .select('*')
+      .eq('id', templateId)
+      .eq('guild_id', guildId)
+      .single();
+
+    if (error || !template) {
+      throw new Error('Template not found');
+    }
+
+    const options = template.default_options.map((text, index) => ({
+      text,
+      emoji: null,
+      order: index
+    }));
+
+    return await this.createPoll(guildId, channelId, userId, {
+      title: template.title,
+      description: template.description_text,
+      pollType: template.poll_type,
+      votingType: template.voting_type,
+      options,
+      requireRoles: template.require_roles || [],
+      weightedVoting: template.weighted_voting || {},
+      allowChangeVote: true,
+      maxVotes: template.poll_type === 'multiple' ? options.length : 1
+    });
+  }
+
+  /**
+   * Save a poll as a template
+   */
+  async savePollAsTemplate(pollId, name, description = null) {
+    const poll = await this.getPoll(pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+
+    const { data: template, error } = await this.supabase
+      .from('poll_templates')
+      .insert({
+        guild_id: poll.guild_id,
+        created_by: poll.created_by,
+        name,
+        description,
+        title: poll.title,
+        description_text: poll.description,
+        poll_type: poll.poll_type,
+        voting_type: poll.voting_type,
+        default_options: poll.poll_options.map(opt => opt.option_text),
+        require_roles: poll.require_roles || [],
+        weighted_voting: poll.weighted_voting || {}
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return template;
+  }
+
+  /**
+   * Get poll analytics for a guild
+   */
+  async getPollAnalytics(guildId, startDate = null, endDate = null) {
+    let query = this.supabase
+      .from('polls')
+      .select(`
+        *,
+        poll_options(*)
+      `)
+      .eq('guild_id', guildId);
+
+    if (startDate) {
+      query = query.gte('created_at', startDate);
+    }
+    if (endDate) {
+      query = query.lte('created_at', endDate);
+    }
+
+    const { data: polls, error } = await query;
+
+    if (error) {
+      console.error('Error fetching poll analytics:', error);
+      return null;
+    }
+
+    const analytics = {
+      total_polls: polls?.length || 0,
+      active_polls: polls?.filter(p => p.status === 'active').length || 0,
+      closed_polls: polls?.filter(p => p.status === 'closed').length || 0,
+      total_votes: polls?.reduce((sum, p) => sum + (p.total_votes || 0), 0) || 0,
+      average_votes_per_poll: 0,
+      most_popular_polls: [],
+      polls_by_type: {
+        single: polls?.filter(p => p.poll_type === 'single').length || 0,
+        multiple: polls?.filter(p => p.poll_type === 'multiple').length || 0
+      },
+      polls_by_voting_type: {
+        public: polls?.filter(p => p.voting_type === 'public').length || 0,
+        anonymous: polls?.filter(p => p.voting_type === 'anonymous').length || 0
+      }
+    };
+
+    if (analytics.total_polls > 0) {
+      analytics.average_votes_per_poll = (analytics.total_votes / analytics.total_polls).toFixed(2);
+      
+      // Get most popular polls (top 5 by votes)
+      analytics.most_popular_polls = polls
+        .sort((a, b) => (b.total_votes || 0) - (a.total_votes || 0))
+        .slice(0, 5)
+        .map(p => ({
+          id: p.id,
+          title: p.title,
+          votes: p.total_votes || 0
+        }));
+    }
+
+    return analytics;
   }
 }
 

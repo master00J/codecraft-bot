@@ -4431,16 +4431,29 @@ async function handlePollButtonInteraction(interaction) {
           return interaction.editReply({ content: '❌ This poll is not active!' });
         }
 
-        // Vote
-        const result = await global.pollManager.vote(pollId, interaction.user.id, [optionId]);
+        // Get guild for role checks
+        const guild = interaction.guild;
+        if (!guild) {
+          return interaction.editReply({ content: '❌ Guild not found!' });
+        }
+
+        // Vote with role checks and weighted voting
+        const result = await global.pollManager.vote(pollId, interaction.user.id, [optionId], guild);
         
-        // Update message
+        // Update message immediately
         await global.pollManager.updatePollMessage(pollId);
 
+        let responseMessage = result.changed 
+          ? '✅ Vote updated successfully!'
+          : '✅ Vote recorded!';
+        
+        // Show weight if different from 1.0
+        if (result.weight && result.weight !== 1.0) {
+          responseMessage += ` (Weight: ${result.weight}x)`;
+        }
+
         await interaction.editReply({
-          content: result.changed 
-            ? '✅ Vote updated successfully!'
-            : '✅ Vote recorded!'
+          content: responseMessage
         });
       } catch (error) {
         await interaction.editReply({

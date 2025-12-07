@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Trash2, Edit, Plus, BarChart3, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Trash2, Edit, Plus, BarChart3, Clock, CheckCircle2, XCircle, Download, FileText, Save, TrendingUp, Users, Shield } from 'lucide-react';
 
 interface Poll {
   id: string;
@@ -65,13 +65,21 @@ export default function PollsConfig() {
     allow_change_vote: true,
     max_votes: 1,
     require_roles: [] as string[],
+    weighted_voting: {} as Record<string, number>,
     reminder_enabled: false
   });
+
+  const [roles, setRoles] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<any>(null);
 
   useEffect(() => {
     if (guildId) {
       fetchPolls();
       fetchChannels();
+      fetchRoles();
+      fetchTemplates();
+      fetchAnalytics();
     }
   }, [guildId, activeTab]);
 
@@ -117,6 +125,50 @@ export default function PollsConfig() {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/discord/roles`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.roles) {
+          setRoles(data.roles.filter((r: any) => !r.managed || r.name === '@everyone'));
+        } else if (Array.isArray(data.roles)) {
+          setRoles(data.roles.filter((r: any) => !r.managed || r.name === '@everyone'));
+        } else {
+          setRoles([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      setRoles([]);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/polls/templates`);
+      if (response.ok) {
+        const data = await response.json();
+        setTemplates(data.templates || []);
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      setTemplates([]);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/polls?action=analytics`);
+      if (response.ok) {
+        const data = await response.json();
+        setAnalytics(data.analytics);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    }
+  };
+
   const savePoll = async () => {
     if (!newPoll.title || !newPoll.channel_id || newPoll.options.filter(o => o.trim()).length < 2) {
       toast({
@@ -148,6 +200,7 @@ export default function PollsConfig() {
         allow_change_vote: newPoll.allow_change_vote,
         max_votes: newPoll.max_votes,
         require_roles: newPoll.require_roles,
+        weighted_voting: newPoll.weighted_voting,
         reminder_enabled: newPoll.reminder_enabled
       };
 
@@ -176,6 +229,7 @@ export default function PollsConfig() {
           allow_change_vote: true,
           max_votes: 1,
           require_roles: [],
+          weighted_voting: {},
           reminder_enabled: false
         });
         setCreatingNewPoll(false);
@@ -278,6 +332,81 @@ export default function PollsConfig() {
     });
   };
 
+  const exportPoll = async (pollId: string, format: 'json' | 'csv') => {
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/polls?id=${pollId}&action=export&format=${format}`);
+      if (response.ok) {
+        if (format === 'csv') {
+          const text = await response.text();
+          const blob = new Blob([text], { type: 'text/csv' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `poll-${pollId}.csv`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        } else {
+          const data = await response.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `poll-${pollId}.json`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        }
+        toast({
+          title: 'Success',
+          description: `Poll exported as ${format.toUpperCase()}`,
+        });
+      } else {
+        throw new Error('Export failed');
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to export poll',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const saveAsTemplate = async (pollId: string) => {
+    const poll = polls.find(p => p.id === pollId);
+    if (!poll) return;
+
+    const name = prompt('Template name:');
+    if (!name) return;
+
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/polls/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poll_id: pollId,
+          name,
+          description: poll.description || null
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Template saved successfully',
+        });
+        fetchTemplates();
+      } else {
+        throw new Error('Failed to save template');
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save template',
+        variant: 'destructive'
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -319,11 +448,53 @@ export default function PollsConfig() {
         </Button>
       </div>
 
+      {analytics && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Polls</p>
+                <p className="text-2xl font-bold">{analytics.total_polls}</p>
+              </div>
+              <BarChart3 className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Active Polls</p>
+                <p className="text-2xl font-bold">{analytics.active_polls}</p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Votes</p>
+                <p className="text-2xl font-bold">{analytics.total_votes}</p>
+              </div>
+              <Users className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Avg Votes/Poll</p>
+                <p className="text-2xl font-bold">{analytics.average_votes_per_poll}</p>
+              </div>
+              <BarChart3 className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </Card>
+        </div>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="active">Active</TabsTrigger>
           <TabsTrigger value="closed">Closed</TabsTrigger>
           <TabsTrigger value="all">All</TabsTrigger>
+          {templates.length > 0 && <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>}
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4">
@@ -503,13 +674,111 @@ export default function PollsConfig() {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="reminder_enabled"
-                        checked={newPoll.reminder_enabled}
-                        onCheckedChange={(checked) => setNewPoll({ ...newPoll, reminder_enabled: checked })}
-                      />
-                      <Label htmlFor="reminder_enabled">Enable reminder (1 hour before expiry)</Label>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="reminder_enabled"
+                          checked={newPoll.reminder_enabled}
+                          onCheckedChange={(checked) => setNewPoll({ ...newPoll, reminder_enabled: checked })}
+                        />
+                        <Label htmlFor="reminder_enabled">Enable reminder (1 hour before expiry)</Label>
+                      </div>
+
+                      <div>
+                        <Label>Required Roles (Optional)</Label>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Users need at least one of these roles to vote
+                        </p>
+                        <Select
+                          onValueChange={(roleId) => {
+                            if (!newPoll.require_roles.includes(roleId)) {
+                              setNewPoll({
+                                ...newPoll,
+                                require_roles: [...newPoll.require_roles, roleId]
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select role to require" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roles.filter(r => !newPoll.require_roles.includes(r.id)).map((role) => (
+                              <SelectItem key={role.id} value={role.id}>
+                                {role.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {newPoll.require_roles.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {newPoll.require_roles.map((roleId) => {
+                              const role = roles.find(r => r.id === roleId);
+                              return role ? (
+                                <Badge key={roleId} variant="secondary" className="flex items-center gap-1">
+                                  {role.name}
+                                  <button
+                                    onClick={() => {
+                                      setNewPoll({
+                                        ...newPoll,
+                                        require_roles: newPoll.require_roles.filter(r => r !== roleId)
+                                      });
+                                    }}
+                                    className="ml-1"
+                                  >
+                                    <XCircle className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label>Weighted Voting (Optional)</Label>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Assign vote weights to roles (e.g., admins vote counts as 2x)
+                        </p>
+                        <div className="space-y-2">
+                          {roles.filter(r => r.name !== '@everyone').slice(0, 10).map((role) => (
+                            <div key={role.id} className="flex items-center gap-2">
+                              <Label htmlFor={`weight_${role.id}`} className="flex-1">
+                                {role.name}:
+                              </Label>
+                              <Input
+                                id={`weight_${role.id}`}
+                                type="number"
+                                step="0.1"
+                                min="0.1"
+                                max="10"
+                                className="w-20"
+                                placeholder="1.0"
+                                value={newPoll.weighted_voting[role.id] || ''}
+                                onChange={(e) => {
+                                  const weight = parseFloat(e.target.value) || 0;
+                                  if (weight > 0) {
+                                    setNewPoll({
+                                      ...newPoll,
+                                      weighted_voting: {
+                                        ...newPoll.weighted_voting,
+                                        [role.id]: weight
+                                      }
+                                    });
+                                  } else {
+                                    const newWeights = { ...newPoll.weighted_voting };
+                                    delete newWeights[role.id];
+                                    setNewPoll({
+                                      ...newPoll,
+                                      weighted_voting: newWeights
+                                    });
+                                  }
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex gap-2 pt-4">
@@ -583,6 +852,32 @@ export default function PollsConfig() {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => exportPoll(poll.id, 'json')}
+                          title="Export as JSON"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => exportPoll(poll.id, 'csv')}
+                          title="Export as CSV"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                        {poll.status === 'active' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => saveAsTemplate(poll.id)}
+                            title="Save as template"
+                          >
+                            <Save className="h-4 w-4" />
+                          </Button>
+                        )}
                         {poll.status === 'active' && (
                           <Button
                             variant="outline"
@@ -636,6 +931,69 @@ export default function PollsConfig() {
                 ))}
               </div>
             </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-4">
+          {templates.length === 0 ? (
+            <Card className="p-8 text-center">
+              <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">No templates found</h3>
+              <p className="text-muted-foreground mb-4">
+                Save polls as templates to quickly reuse them later.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {templates.map((template) => (
+                <Card key={template.id} className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">{template.name}</h3>
+                      {template.description && (
+                        <p className="text-sm text-muted-foreground mb-2">{template.description}</p>
+                      )}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Title: {template.title}</span>
+                        <span>•</span>
+                        <span>{template.poll_type === 'multiple' ? 'Multiple' : 'Single'} Choice</span>
+                        <span>•</span>
+                        <span>{template.default_options.length} options</span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        // Use template to create new poll
+                        const templatePoll = {
+                          title: template.title,
+                          description: template.description_text || '',
+                          poll_type: template.poll_type,
+                          voting_type: template.voting_type,
+                          options: template.default_options.map((text: string) => ({ text })),
+                          require_roles: template.require_roles || [],
+                          weighted_voting: template.weighted_voting || {}
+                        };
+                        setNewPoll({
+                          ...templatePoll,
+                          channel_id: '',
+                          expires_at: '',
+                          expires_in_hours: '',
+                          allow_change_vote: true,
+                          max_votes: template.poll_type === 'multiple' ? template.default_options.length : 1,
+                          reminder_enabled: false
+                        });
+                        setCreatingNewPoll(true);
+                        setActiveTab('active');
+                      }}
+                    >
+                      Use Template
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
           )}
         </TabsContent>
       </Tabs>

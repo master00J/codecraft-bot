@@ -78,6 +78,177 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const pollId = searchParams.get('id');
     const status = searchParams.get('status') || 'all'; // all, active, closed
+    const action = searchParams.get('action'); // export, analytics
+
+    // Handle export requests
+    if (pollId && action === 'export') {
+      const format = searchParams.get('format') || 'json'; // json, csv
+
+      const { data: poll, error } = await supabaseAdmin
+        .from('polls')
+        .select(`
+          *,
+          poll_options(*),
+          poll_votes(*)
+        `)
+        .eq('id', pollId)
+        .eq('guild_id', guildId)
+        .single();
+
+      if (error || !poll) {
+        return NextResponse.json({ error: 'Poll not found' }, { status: 404 });
+      }
+
+      // Sort options
+      poll.poll_options = poll.poll_options.sort((a: any, b: any) => a.option_order - b.option_order);
+
+      if (format === 'csv') {
+        const lines: string[] = [];
+        lines.push(`Poll: ${poll.title}`);
+        lines.push(`Status: ${poll.status}`);
+        lines.push(`Total Voters: ${poll.total_votes || 0}`);
+        lines.push(`Created: ${poll.created_at}`);
+        lines.push('');
+        lines.push('Option, Votes, Percentage');
+
+        const totalWeightedVotes = poll.poll_options.reduce((sum: number, opt: any) => sum + (parseFloat(opt.vote_count) || 0), 0);
+
+        for (const option of poll.poll_options) {
+          const voteCount = parseFloat(option.vote_count) || 0;
+          const percentage = totalWeightedVotes > 0 
+            ? ((voteCount / totalWeightedVotes) * 100).toFixed(2)
+            : '0.00';
+          
+          lines.push(`"${option.option_text}",${voteCount},${percentage}%`);
+        }
+
+        if (poll.voting_type === 'public' && poll.poll_votes) {
+          lines.push('');
+          lines.push('Voter ID, Options Voted, Vote Weight');
+          for (const vote of poll.poll_votes) {
+            const optionTexts = vote.option_ids
+              .map((optId: string) => {
+                const opt = poll.poll_options.find((o: any) => o.id === optId);
+                return opt ? opt.option_text : 'Unknown';
+              })
+              .join('; ');
+            
+            lines.push(`${vote.user_id},"${optionTexts}",${vote.vote_weight || 1.0}`);
+          }
+        }
+
+        return new NextResponse(lines.join('\n'), {
+          headers: {
+            'Content-Type': 'text/csv',
+            'Content-Disposition': `attachment; filename="poll-${pollId}.csv"`
+          }
+        });
+      } else {
+        // JSON format
+        const totalWeightedVotes = poll.poll_options.reduce((sum: number, opt: any) => sum + (parseFloat(opt.vote_count) || 0), 0);
+
+        const exportData = {
+          poll: {
+            id: poll.id,
+            title: poll.title,
+            description: poll.description,
+            status: poll.status,
+            poll_type: poll.poll_type,
+            voting_type: poll.voting_type,
+            total_voters: poll.total_votes || 0,
+            total_weighted_votes: totalWeightedVotes,
+            created_at: poll.created_at,
+            expires_at: poll.expires_at,
+            closed_at: poll.closed_at
+          },
+          options: poll.poll_options.map((opt: any) => {
+            const voteCount = parseFloat(opt.vote_count) || 0;
+            const percentage = totalWeightedVotes > 0 
+              ? (voteCount / totalWeightedVotes) * 100
+              : 0;
+
+            return {
+              id: opt.id,
+              text: opt.option_text,
+              emoji: opt.emoji,
+              votes: voteCount,
+              percentage: parseFloat(percentage.toFixed(2)),
+              order: opt.option_order
+            };
+          })
+        };
+
+        if (poll.voting_type === 'public' && poll.poll_votes) {
+          exportData.votes = poll.poll_votes.map((vote: any) => ({
+            user_id: vote.user_id,
+            option_ids: vote.option_ids,
+            vote_weight: vote.vote_weight || 1.0,
+            voted_at: vote.voted_at
+          }));
+        }
+
+        return NextResponse.json(exportData);
+      }
+    }
+
+    // Handle analytics requests
+    if (action === 'analytics') {
+      const startDate = searchParams.get('start_date');
+      const endDate = searchParams.get('end_date');
+
+      let query = supabaseAdmin
+        .from('polls')
+        .select(`
+          *,
+          poll_options(*)
+        `)
+        .eq('guild_id', guildId);
+
+      if (startDate) {
+        query = query.gte('created_at', startDate);
+      }
+      if (endDate) {
+        query = query.lte('created_at', endDate);
+      }
+
+      const { data: polls, error } = await query;
+
+      if (error) {
+        return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
+      }
+
+      const analytics = {
+        total_polls: polls?.length || 0,
+        active_polls: polls?.filter((p: any) => p.status === 'active').length || 0,
+        closed_polls: polls?.filter((p: any) => p.status === 'closed').length || 0,
+        total_votes: polls?.reduce((sum: number, p: any) => sum + (p.total_votes || 0), 0) || 0,
+        average_votes_per_poll: 0,
+        most_popular_polls: [] as any[],
+        polls_by_type: {
+          single: polls?.filter((p: any) => p.poll_type === 'single').length || 0,
+          multiple: polls?.filter((p: any) => p.poll_type === 'multiple').length || 0
+        },
+        polls_by_voting_type: {
+          public: polls?.filter((p: any) => p.voting_type === 'public').length || 0,
+          anonymous: polls?.filter((p: any) => p.voting_type === 'anonymous').length || 0
+        }
+      };
+
+      if (analytics.total_polls > 0) {
+        analytics.average_votes_per_poll = parseFloat((analytics.total_votes / analytics.total_polls).toFixed(2));
+        
+        analytics.most_popular_polls = polls
+          .sort((a: any, b: any) => (b.total_votes || 0) - (a.total_votes || 0))
+          .slice(0, 5)
+          .map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            votes: p.total_votes || 0
+          }));
+      }
+
+      return NextResponse.json({ analytics });
+    }
 
     if (pollId) {
       // Get single poll with options and results

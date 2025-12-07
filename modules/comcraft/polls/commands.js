@@ -64,6 +64,18 @@ function createPollCommands() {
               .setDescription('Channel to post poll in (default: current channel)')
               .setRequired(false)
           )
+          .addBooleanOption((option) =>
+            option
+              .setName('reminder')
+              .setDescription('Send reminder 1 hour before expiry')
+              .setRequired(false)
+          )
+          .addRoleOption((option) =>
+            option
+              .setName('require-role')
+              .setDescription('Role required to vote (can be used multiple times)')
+              .setRequired(false)
+          )
       )
       .addSubcommand((subcommand) =>
         subcommand
@@ -168,6 +180,8 @@ async function handlePollCreate(interaction, pollManager) {
   const votingType = interaction.options.getString('voting') || 'public';
   const duration = interaction.options.getInteger('duration');
   const channel = interaction.options.getChannel('channel') || interaction.channel;
+  const reminderEnabled = interaction.options.getBoolean('reminder') || false;
+  const requireRole = interaction.options.getRole('require-role');
 
   // Validate channel
   if (!channel.isTextBased()) {
@@ -221,7 +235,9 @@ async function handlePollCreate(interaction, pollManager) {
         options,
         expiresAt,
         allowChangeVote: true,
-        maxVotes: pollType === 'multiple' ? options.length : 1
+        maxVotes: pollType === 'multiple' ? options.length : 1,
+        requireRoles: requireRole ? [requireRole.id] : [],
+        reminderEnabled
       }
     );
 
