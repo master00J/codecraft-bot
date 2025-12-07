@@ -1467,9 +1467,9 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                 <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <div className={`w-3 h-3 rounded-full ${config.guild.leveling_enabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                   <div>
-                    <div className="font-semibold">Leveling Systeem</div>
+                    <div className="font-semibold">Leveling System</div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {config.guild.leveling_enabled ? 'Actief' : 'Inactief'}
+                      {config.guild.leveling_enabled ? 'Active' : 'Inactive'}
                     </div>
                   </div>
                 </div>
@@ -1477,9 +1477,9 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                 <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <div className={`w-3 h-3 rounded-full ${config.guild.moderation_enabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                   <div>
-                    <div className="font-semibold">Moderatie</div>
+                    <div className="font-semibold">Moderation</div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {config.guild.moderation_enabled ? 'Actief' : 'Inactief'}
+                      {config.guild.moderation_enabled ? 'Active' : 'Inactive'}
                     </div>
                   </div>
                 </div>
@@ -1489,7 +1489,7 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                   <div>
                     <div className="font-semibold">Streaming</div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {streams.length > 0 ? `Actief (${streams.length} stream${streams.length > 1 ? 's' : ''})` : 'Inactief'}
+                      {streams.length > 0 ? `Active (${streams.length} stream${streams.length > 1 ? 's' : ''})` : 'Inactive'}
                     </div>
                   </div>
                 </div>
