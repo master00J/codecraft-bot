@@ -154,19 +154,23 @@ export default function GuildDashboardLayout({
           };
 
           // Determine the minimum tier required for each feature
-          const tiers = data.tiers.sort((a: any, b: any) => a.sort_order - b.sort_order);
+          // Only check active tiers, sorted by sort_order (lowest first)
+          const activeTiers = data.tiers
+            .filter((tier: any) => tier.is_active !== false)
+            .sort((a: any, b: any) => a.sort_order - b.sort_order);
           
           const newFeatureTiers: Record<string, string> = {};
           
           Object.entries(featureMap).forEach(([menuItem, featureKey]) => {
-            // Find the first tier where this feature is enabled
-            for (const tier of tiers) {
+            // Find the first (lowest) active tier where this feature is enabled
+            for (const tier of activeTiers) {
               const features = tier.features as Record<string, boolean> | undefined;
               if (features && features[featureKey] === true) {
                 newFeatureTiers[menuItem] = tier.display_name;
                 break;
               }
             }
+            // If no tier has this feature enabled, don't set it (will show no badge)
           });
           
           setFeatureTiers(newFeatureTiers);
@@ -177,6 +181,13 @@ export default function GuildDashboardLayout({
     }
 
     fetchFeatureTiers();
+    
+    // Refresh feature tiers every 5 minutes to reflect admin changes
+    const interval = setInterval(() => {
+      fetchFeatureTiers();
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch menu order
