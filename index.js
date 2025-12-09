@@ -8869,17 +8869,26 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
 
     // Use the appropriate DiscordManager for the bot client
     // Clear require cache to ensure we get the latest version
-    delete require.cache[require.resolve('./modules/comcraft/discord-manager')];
-    const DiscordManager = require('./modules/comcraft/discord-manager');
+    const discordManagerPath = require.resolve('./modules/comcraft/discord-manager');
+    delete require.cache[discordManagerPath];
+    const DiscordManager = require(discordManagerPath);
     const manager = new DiscordManager(botClient);
+    
+    // Debug: Log all available methods
+    const allMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(manager));
+    const asyncMethods = allMethods.filter(name => typeof manager[name] === 'function' && name !== 'constructor');
+    console.log(`[Threads API] DiscordManager loaded from: ${discordManagerPath}`);
+    console.log(`[Threads API] Available async methods:`, asyncMethods);
+    console.log(`[Threads API] getThreads type:`, typeof manager.getThreads);
     
     // Verify the method exists
     if (typeof manager.getThreads !== 'function') {
-      console.error(`[Threads API] getThreads is not a function. Available methods:`, Object.getOwnPropertyNames(Object.getPrototypeOf(manager)));
+      console.error(`[Threads API] getThreads is not a function. All methods:`, allMethods);
       return res.status(500).json({
         success: false,
         error: 'getThreads method not found on DiscordManager',
-        threads: []
+        threads: [],
+        availableMethods: asyncMethods
       });
     }
     
