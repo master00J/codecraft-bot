@@ -713,6 +713,114 @@ class UserProfileManager {
 
     return true;
   }
+
+  /**
+   * Get user's completed profile for a form
+   * @param {string} formId - Form ID
+   * @param {string} userId - User ID
+   * @returns {Object|null} - The most recent completed response
+   */
+  async getUserProfile(formId, userId) {
+    const { data: responses } = await this.supabase
+      .from('user_profiles_responses')
+      .select('*')
+      .eq('form_id', formId)
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(1);
+
+    if (responses && responses.length > 0) {
+      return responses[0];
+    }
+
+    return null;
+  }
+
+  /**
+   * Get all completed profiles for a form
+   * @param {string} formId - Form ID
+   * @param {number} limit - Maximum number of profiles to return
+   * @returns {Array} - Array of completed responses
+   */
+  async getFormProfiles(formId, limit = 50) {
+    const { data: responses } = await this.supabase
+      .from('user_profiles_responses')
+      .select('*')
+      .eq('form_id', formId)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(limit);
+
+    return responses || [];
+  }
+
+  /**
+   * Build profile embed for display
+   * @param {Object} form - Form object
+   * @param {Object} response - Response object
+   * @param {Object} user - Discord user/member object
+   * @returns {EmbedBuilder} - Discord embed
+   */
+  buildProfileEmbed(form, response, user) {
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setAuthor({
+        name: `${user.user?.displayName || user.displayName || 'Unknown'} (${user.user?.id || user.id})`,
+        iconURL: user.user?.displayAvatarURL?.({ dynamic: true, size: 256 }) || user.displayAvatarURL?.({ dynamic: true, size: 256 }) || undefined
+      });
+
+    // Add submission info if available
+    if (response.completed_at) {
+      embed.addFields({
+        name: '📊 Submission Info',
+        value: `**Submitted:** <t:${Math.floor(new Date(response.completed_at).getTime() / 1000)}:R>`,
+        inline: false
+      });
+    }
+
+    // Add User Answer section
+    let answerFields = [];
+    for (const question of form.questions) {
+      const selectedOptionIds = response.responses[question.id] || [];
+      if (selectedOptionIds.length === 0) {
+        continue; // Skip unanswered questions
+      }
+
+      const selectedOptions = question.options.filter(opt => 
+        selectedOptionIds.includes(opt.id)
+      );
+
+      const answerText = selectedOptions
+        .map(opt => opt.text)
+        .join(', ');
+
+      answerFields.push({
+        name: question.text,
+        value: answerText || '*No answer*',
+        inline: false
+      });
+    }
+
+    if (answerFields.length > 0) {
+      embed.addFields({ name: '\u200B', value: '**User Answer**', inline: false });
+      embed.addFields(...answerFields);
+    } else {
+      embed.setDescription('*No answers provided*');
+    }
+
+    if (response.thread_id && form.channel_id) {
+      embed.addFields({
+        name: '🔗 Profile Thread',
+        value: `[View Full Profile](https://discord.com/channels/${form.guild_id}/${form.channel_id}/${response.thread_id})`,
+        inline: false
+      });
+    }
+
+    embed.setTimestamp(response.completed_at ? new Date(response.completed_at) : new Date());
+
+    return embed;
+  }
 }
 
 module.exports = UserProfileManager;
