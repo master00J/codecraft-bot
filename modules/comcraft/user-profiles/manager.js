@@ -738,49 +738,68 @@ class UserProfileManager {
 
       embed.setTimestamp(completedAt);
 
-      // Create thread
+      // Get or create shared thread for this form
       let thread;
-      const threadName = form.thread_name_template
-        .replace('{username}', user.user.username)
-        .replace('{displayName}', user.displayName)
-        .slice(0, 100);
       
-      if (formMessage) {
-        // Check if message already has a thread
+      // Check if form already has a thread_id stored
+      if (form.thread_id) {
         try {
-          // Try to fetch existing thread if any
-          if (formMessage.thread) {
-            // Message already has a thread, create new thread in channel instead
-            console.log(`[Profile Manager] Message ${formMessage.id} already has a thread, creating new thread in channel`);
-            thread = await channel.threads.create({
-              name: threadName,
-              autoArchiveDuration: 1440,
-            });
-          } else {
-            // Try to start thread from message
+          // Try to fetch existing thread
+          thread = await channel.threads.fetch(form.thread_id);
+          if (!thread) {
+            // Thread doesn't exist anymore, create new one
+            console.log(`[Profile Manager] Thread ${form.thread_id} no longer exists, creating new shared thread`);
+            form.thread_id = null;
+          }
+        } catch (error) {
+          // Thread not found, create new one
+          console.log(`[Profile Manager] Could not fetch thread ${form.thread_id}, creating new shared thread:`, error.message);
+          form.thread_id = null;
+        }
+      }
+      
+      // If no thread exists yet, create one
+      if (!thread) {
+        // Use a generic name for the shared thread (remove user-specific template)
+        const threadName = (form.thread_name_template || 'User Profiles')
+          .replace('{username}', 'Profiles')
+          .replace('{displayName}', 'Profiles')
+          .replace(/Profile$/, 'Profiles') // Change singular to plural if needed
+          .slice(0, 100);
+        
+        if (formMessage && !formMessage.thread) {
+          // Try to start thread from form message (first submission)
+          try {
             thread = await formMessage.startThread({
               name: threadName,
               autoArchiveDuration: 1440, // 24 hours
             });
-          }
-        } catch (error) {
-          // If startThread fails (e.g., message already has thread), create thread in channel
-          if (error.message && error.message.includes('thread')) {
-            console.log(`[Profile Manager] Cannot start thread from message (already has thread), creating in channel instead`);
+            console.log(`[Profile Manager] Created shared thread from form message: ${thread.id}`);
+          } catch (error) {
+            // If startThread fails, create thread in channel
+            console.log(`[Profile Manager] Could not start thread from message, creating in channel instead:`, error.message);
             thread = await channel.threads.create({
               name: threadName,
               autoArchiveDuration: 1440,
             });
-          } else {
-            throw error;
+            console.log(`[Profile Manager] Created shared thread in channel: ${thread.id}`);
           }
+        } else {
+          // No form message or message already has thread, create thread in channel
+          thread = await channel.threads.create({
+            name: threadName,
+            autoArchiveDuration: 1440,
+          });
+          console.log(`[Profile Manager] Created shared thread in channel: ${thread.id}`);
         }
+        
+        // Save thread_id to form
+        await this.supabase
+          .from('user_profiles_forms')
+          .update({ thread_id: thread.id })
+          .eq('id', formId);
       } else {
-        // No form message, create thread from channel
-        thread = await channel.threads.create({
-          name: threadName,
-          autoArchiveDuration: 1440,
-        });
+        console.log(`[Profile Manager] Using existing shared thread: ${thread.id}`);
       }
 
       // Post profile embed in thread
@@ -1135,10 +1154,11 @@ class UserProfileManager {
       embed.setDescription('*No answers provided*');
     }
 
-    if (response.thread_id && form.channel_id) {
+    // Link to the shared thread (all profiles are in the same thread)
+    if (form.thread_id && form.channel_id) {
       embed.addFields({
         name: '🔗 Profile Thread',
-        value: `[View Full Profile](https://discord.com/channels/${form.guild_id}/${form.channel_id}/${response.thread_id})`,
+        value: `[View All Profiles](https://discord.com/channels/${form.guild_id}/${form.channel_id}/${form.thread_id})`,
         inline: false
       });
     }
