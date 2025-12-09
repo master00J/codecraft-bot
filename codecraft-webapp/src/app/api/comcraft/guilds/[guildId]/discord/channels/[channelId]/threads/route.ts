@@ -59,7 +59,15 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    console.log(`[Threads API] Fetching threads for channel ${channelId} in guild ${guildId}`);
     const result = await callBotAPI(`/api/discord/${guildId}/channels/${channelId}/threads`);
+    console.log(`[Threads API] Bot API response:`, result);
+    
+    // Ensure threads is always an array
+    if (result.success && !Array.isArray(result.threads)) {
+      result.threads = [];
+    }
+    
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error fetching threads:', error);

@@ -297,23 +297,50 @@ class DiscordManager {
       // Fetch all active threads
       const activeThreads = await channel.threads.fetchActive();
       
-      // Fetch archived threads (requires manual fetching per thread or using fetchArchived)
-      // For now, we'll just return active threads as they're the most useful
-      const threads = activeThreads.threads.map(thread => ({
+      // Also try to fetch archived threads
+      let archivedThreads = [];
+      try {
+        const archived = await channel.threads.fetchArchived({ fetchAll: false, limit: 50 });
+        archivedThreads = archived.threads.map(thread => ({
+          id: thread.id,
+          name: thread.name,
+          type: thread.type,
+          parentId: thread.parentId,
+          archived: true,
+          locked: thread.locked,
+          memberCount: thread.memberCount,
+          messageCount: thread.messageCount,
+          createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
+        }));
+      } catch (error) {
+        console.warn(`[Discord Manager] Could not fetch archived threads for channel ${channelId}:`, error.message);
+      }
+      
+      // Combine active and archived threads
+      const activeThreadsList = Array.from(activeThreads.threads.values()).map(thread => ({
         id: thread.id,
         name: thread.name,
         type: thread.type,
         parentId: thread.parentId,
-        archived: thread.archived,
+        archived: thread.archived || false,
         locked: thread.locked,
         memberCount: thread.memberCount,
         messageCount: thread.messageCount,
         createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
       }));
 
+      const allThreads = [...activeThreadsList, ...archivedThreads];
+      
+      // Remove duplicates (in case a thread appears in both)
+      const uniqueThreads = Array.from(
+        new Map(allThreads.map(thread => [thread.id, thread])).values()
+      );
+
+      console.log(`[Discord Manager] Found ${activeThreadsList.length} active and ${archivedThreads.length} archived threads in channel ${channelId}`);
+
       return {
         success: true,
-        threads: threads.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        threads: uniqueThreads.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       };
     } catch (error) {
       console.error('Error getting threads:', error);

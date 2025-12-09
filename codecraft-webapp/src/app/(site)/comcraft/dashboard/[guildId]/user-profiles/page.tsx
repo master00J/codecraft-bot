@@ -126,15 +126,16 @@ export default function UserProfilesConfig() {
 
     setLoadingThreads(true);
     try {
+      console.log(`[User Profiles] Fetching threads for channel ${channelId} in guild ${guildId}`);
       const response = await fetch(`/api/comcraft/guilds/${guildId}/discord/channels/${channelId}/threads`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.threads) {
-          setThreads(data.threads || []);
-        } else {
-          setThreads([]);
-        }
+      const data = await response.json();
+      console.log(`[User Profiles] Threads API response:`, data);
+      
+      if (response.ok && data.success && Array.isArray(data.threads)) {
+        setThreads(data.threads);
+        console.log(`[User Profiles] Loaded ${data.threads.length} threads`);
       } else {
+        console.warn(`[User Profiles] Failed to load threads:`, data.error || 'Unknown error');
         setThreads([]);
       }
     } catch (error) {
