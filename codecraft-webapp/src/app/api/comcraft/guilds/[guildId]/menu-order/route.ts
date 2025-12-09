@@ -7,29 +7,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getGuildAccess } from '@/lib/comcraft/access-control';
 
 export const dynamic = 'force-dynamic';
 
 const supabase = supabaseAdmin;
-
-async function getGuildAccess(guildId: string, discordId: string) {
-  // Check if user has access to this guild
-  const { data: guild } = await supabase
-    .from('guild_configs')
-    .select('owner_discord_id')
-    .eq('guild_id', guildId)
-    .single();
-
-  if (!guild) {
-    throw NextResponse.json({ error: 'Guild not found' }, { status: 404 });
-  }
-
-  if (guild.owner_discord_id !== discordId) {
-    throw NextResponse.json({ error: 'Access denied' }, { status: 403 });
-  }
-
-  return true;
-}
 
 export async function GET(
   request: NextRequest,
@@ -51,7 +33,10 @@ export async function GET(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await getGuildAccess(guildId, discordId);
+    const access = await getGuildAccess(guildId, discordId);
+    if (!access.allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
 
     // Get menu order from guild config
     const { data: config, error } = await supabase
@@ -68,10 +53,7 @@ export async function GET(
     return NextResponse.json({ 
       menuOrder: config?.menu_order || null 
     });
-  } catch (error) {
-    if (error instanceof NextResponse) {
-      return error;
-    }
+  } catch (error: any) {
     console.error('Error in menu order GET:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -97,7 +79,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    await getGuildAccess(guildId, discordId);
+    const access = await getGuildAccess(guildId, discordId);
+    if (!access.allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { menuOrder } = body;
@@ -118,10 +103,7 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true, menuOrder });
-  } catch (error) {
-    if (error instanceof NextResponse) {
-      return error;
-    }
+  } catch (error: any) {
     console.error('Error in menu order PATCH:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

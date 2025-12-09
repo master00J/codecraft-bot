@@ -43,42 +43,60 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all guilds where user is authorized (via guild_authorized_users)
-    const { data: authorizedGuilds, error: authError } = await supabase
+    // First get the guild IDs, then fetch the configs separately
+    const { data: authorizedGuildIds, error: authError } = await supabase
       .from('guild_authorized_users')
-      .select(`
-        guild_id,
-        guild_configs (
+      .select('guild_id')
+      .eq('discord_id', discordId);
+
+    let authorizedGuilds: any[] = [];
+    if (!authError && authorizedGuildIds && authorizedGuildIds.length > 0) {
+      const authorizedIds = authorizedGuildIds.map((a: any) => a.guild_id);
+      const { data: authorizedGuildsData, error: authorizedGuildsError } = await supabase
+        .from('guild_configs')
+        .select(`
           guild_id,
           guild_name,
           guild_icon_url,
           subscription_tier,
           subscription_active,
           license_id
-        )
-      `)
-      .eq('discord_id', discordId);
+        `)
+        .in('guild_id', authorizedIds);
 
-    if (authError) {
+      if (!authorizedGuildsError && authorizedGuildsData) {
+        authorizedGuilds = authorizedGuildsData;
+      }
+    } else if (authError) {
       console.warn('Error fetching authorized guilds:', authError);
     }
 
     // Get all guilds where user is authorized (via authorized_users table - legacy)
-    const { data: legacyAuthorizedGuilds, error: legacyAuthError } = await supabase
+    // First get the guild IDs, then fetch the configs separately
+    const { data: legacyAuthorizedGuildIds, error: legacyAuthError } = await supabase
       .from('authorized_users')
-      .select(`
-        guild_id,
-        guild_configs (
+      .select('guild_id')
+      .eq('user_id', discordId);
+
+    let legacyAuthorizedGuilds: any[] = [];
+    if (!legacyAuthError && legacyAuthorizedGuildIds && legacyAuthorizedGuildIds.length > 0) {
+      const legacyIds = legacyAuthorizedGuildIds.map((a: any) => a.guild_id);
+      const { data: legacyGuildsData, error: legacyGuildsError } = await supabase
+        .from('guild_configs')
+        .select(`
           guild_id,
           guild_name,
           guild_icon_url,
           subscription_tier,
           subscription_active,
           license_id
-        )
-      `)
-      .eq('user_id', discordId);
+        `)
+        .in('guild_id', legacyIds);
 
-    if (legacyAuthError) {
+      if (!legacyGuildsError && legacyGuildsData) {
+        legacyAuthorizedGuilds = legacyGuildsData;
+      }
+    } else if (legacyAuthError) {
       console.warn('Error fetching legacy authorized guilds:', legacyAuthError);
     }
 
@@ -91,16 +109,16 @@ export async function GET(request: NextRequest) {
     });
 
     // Add authorized guilds (new table)
-    (authorizedGuilds || []).forEach((auth: any) => {
-      if (auth.guild_configs && !guildMap.has(auth.guild_id)) {
-        guildMap.set(auth.guild_id, auth.guild_configs);
+    (authorizedGuilds || []).forEach((guild: any) => {
+      if (guild && !guildMap.has(guild.guild_id)) {
+        guildMap.set(guild.guild_id, guild);
       }
     });
 
     // Add authorized guilds (legacy table)
-    (legacyAuthorizedGuilds || []).forEach((auth: any) => {
-      if (auth.guild_configs && !guildMap.has(auth.guild_id)) {
-        guildMap.set(auth.guild_id, auth.guild_configs);
+    (legacyAuthorizedGuilds || []).forEach((guild: any) => {
+      if (guild && !guildMap.has(guild.guild_id)) {
+        guildMap.set(guild.guild_id, guild);
       }
     });
 
