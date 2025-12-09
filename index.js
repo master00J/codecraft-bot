@@ -1666,9 +1666,27 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      // Profile button handlers
-      if (interaction.customId.startsWith('profile_checkbox:') || 
-          interaction.customId.startsWith('profile_submit:')) {
+      // Profile select menu and button handlers
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith('profile_select:')) {
+        if (!global.profileManager) {
+          return interaction.reply({
+            content: '❌ Profile system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'user_profiles',
+          'Premium'
+        );
+        if (!allowed) return;
+        
+        await handleProfileSelectMenuInteraction(interaction);
+        return;
+      }
+
+      if (interaction.customId.startsWith('profile_submit:')) {
         if (!global.profileManager) {
           return interaction.reply({
             content: '❌ Profile system is not available at this time.',
@@ -4639,6 +4657,59 @@ async function handlePollButtonInteraction(interaction) {
   }
 }
 
+/**
+ * Handle profile select menu interactions
+ */
+async function handleProfileSelectMenuInteraction(interaction) {
+  try {
+    if (!global.profileManager) {
+      return interaction.reply({
+        content: '❌ Profile system is not available.',
+        ephemeral: true
+      });
+    }
+
+    // Format: profile_select:{formId}:{questionId}
+    const parts = interaction.customId.split(':');
+    const formId = parts[1];
+    const questionId = parts[2];
+    const selectedValues = interaction.values || [];
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const form = await global.profileManager.getForm(formId);
+    if (!form) {
+      return interaction.editReply({ content: '❌ Form not found!' });
+    }
+
+    if (form.guild_id !== interaction.guildId) {
+      return interaction.editReply({ content: '❌ That form belongs to a different server!' });
+    }
+
+    if (!form.enabled) {
+      return interaction.editReply({ content: '❌ This form is currently disabled!' });
+    }
+
+    // Update selections
+    await global.profileManager.updateSelectMenuSelections(formId, questionId, selectedValues, interaction.user.id);
+
+    // Update form message to show visual feedback
+    await global.profileManager.updateFormMessage(formId, interaction.user.id);
+
+    await interaction.editReply({
+      content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected)`
+    });
+  } catch (error) {
+    console.error('Error handling profile select menu:', error);
+    await interaction.editReply({
+      content: `❌ ${error.message}`
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Handle profile button interactions (submit button only)
+ */
 async function handleProfileButtonInteraction(interaction) {
   try {
     if (!global.profileManager) {
@@ -4650,44 +4721,7 @@ async function handleProfileButtonInteraction(interaction) {
 
     const customId = interaction.customId;
 
-    if (customId.startsWith('profile_checkbox:')) {
-      // Format: profile_checkbox:{formId}:{questionId}:{optionId}
-      const parts = customId.split(':');
-      const formId = parts[1];
-      const questionId = parts[2];
-      const optionId = parts[3];
-
-      try {
-        await interaction.deferReply({ ephemeral: true });
-
-        const form = await global.profileManager.getForm(formId);
-        if (!form) {
-          return interaction.editReply({ content: '❌ Form not found!' });
-        }
-
-        if (form.guild_id !== interaction.guildId) {
-          return interaction.editReply({ content: '❌ That form belongs to a different server!' });
-        }
-
-        if (!form.enabled) {
-          return interaction.editReply({ content: '❌ This form is currently disabled!' });
-        }
-
-        // Toggle checkbox
-        await global.profileManager.toggleCheckbox(formId, questionId, optionId, interaction.user.id);
-
-        // Update form message to show visual feedback
-        await global.profileManager.updateFormMessage(formId, interaction.user.id);
-
-        await interaction.editReply({
-          content: '✅ Selection updated!'
-        });
-      } catch (error) {
-        await interaction.editReply({
-          content: `❌ ${error.message}`
-        }).catch(() => {});
-      }
-    } else if (customId.startsWith('profile_submit:')) {
+    if (customId.startsWith('profile_submit:')) {
       // Format: profile_submit:{formId}
       const formId = customId.replace('profile_submit:', '');
 

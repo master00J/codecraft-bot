@@ -4,6 +4,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   ComponentType
 } = require('discord.js');
 
@@ -70,94 +72,72 @@ class UserProfileManager {
       const embed = new EmbedBuilder()
         .setTitle(`📋 ${form.form_name}`)
         .setColor(0x5865F2)
-        .setDescription(form.description || 'Fill out your profile by selecting the options below:')
-        .setFooter({ text: 'Click the checkboxes to select your answers, then click "Submit Profile" when done' })
+        .setDescription(form.description || 'Fill out your profile by selecting your answers from the dropdowns below, then click "Submit Profile" when done.')
+        .setFooter({ text: 'Use the dropdowns to select your answers, then click "Submit Profile" when done' })
         .setTimestamp();
 
-      // Build form content with checkboxes
-      let formContent = '';
+      // Build components with select menus
       const components = [];
 
-      // Discord limits: max 5 action rows, max 5 buttons per row = 25 buttons total
-      let totalButtons = 0;
-      const MAX_BUTTONS = 25;
-
-      for (const question of form.questions) {
-        formContent += `\n**${question.text}**\n`;
+      // Discord limits: max 5 action rows (one per question + submit button)
+      // Max 25 options per select menu
+      const MAX_QUESTIONS = 4; // Leave room for submit button
+      
+      for (let i = 0; i < Math.min(form.questions.length, MAX_QUESTIONS); i++) {
+        const question = form.questions[i];
         
-        let questionRow = new ActionRowBuilder();
-        let buttonsInRow = 0;
-        
-        for (const option of question.options) {
-          // Check if we've reached the button limit (max 25 buttons total, max 5 rows)
-          if (totalButtons >= MAX_BUTTONS || components.length >= 5) {
-            console.warn(`Button/row limit reached. Skipping remaining options.`);
-            break;
-          }
-
-          // Discord button label limit is 80 characters
-          const label = option.text.length > 80 ? option.text.substring(0, 77) + '...' : option.text;
+        // Discord select menu max: 25 options
+        const menuOptions = question.options.slice(0, 25).map(option => {
+          const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
+          const description = option.description 
+            ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
+            : undefined;
           
-          // Max 5 buttons per row
-          if (buttonsInRow >= 5) {
-            // Start a new row for this question
-            components.push(questionRow);
-            questionRow = new ActionRowBuilder();
-            buttonsInRow = 0;
+          const menuOption = new StringSelectMenuOptionBuilder()
+            .setLabel(label)
+            .setValue(`${question.id}:${option.id}`); // Format: questionId:optionId
+          
+          if (description) {
+            menuOption.setDescription(description);
           }
           
-          // Create checkbox-style label: [ ] Option or [✓] Option
-          const checkboxPrefix = '[ ] ';
-          // Account for checkbox prefix in label length (4 chars for "[ ] ")
-          const maxOptionLength = 76; // 80 - 4 = 76
-          const truncatedText = option.text.length > maxOptionLength 
-            ? option.text.substring(0, maxOptionLength - 3) + '...' 
-            : option.text;
-          const checkboxLabel = checkboxPrefix + truncatedText;
-          
-          const button = new ButtonBuilder()
-            .setCustomId(`profile_checkbox:${form.id}:${question.id}:${option.id}`)
-            .setLabel(checkboxLabel)
-            .setStyle(ButtonStyle.Secondary);
-          
-          questionRow.addComponents(button);
-          buttonsInRow++;
-          totalButtons++;
-        }
-        
-        if (questionRow.components.length > 0 && components.length < 5) {
-          components.push(questionRow);
-        }
-        formContent += '\n';
+          return menuOption;
+        });
+
+        if (menuOptions.length === 0) continue;
+
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`profile_select:${form.id}:${question.id}`)
+          .setPlaceholder(`Select options for: ${question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text}`)
+          .setMinValues(0) // Allow deselecting all
+          .setMaxValues(menuOptions.length) // Allow selecting all options
+          .addOptions(menuOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+        components.push(row);
       }
 
-      // Add submit button (only if we haven't reached the 5 row limit)
-      if (components.length < 5) {
-        const submitRow = new ActionRowBuilder()
-          .addComponents(
-            new ButtonBuilder()
-              .setCustomId(`profile_submit:${form.id}`)
-              .setLabel('Submit Profile')
-              .setStyle(ButtonStyle.Success)
-          );
-        components.push(submitRow);
-      } else {
-        console.warn('[Profile Manager] Cannot add submit button - reached maximum action rows (5)');
-        throw new Error('Form has too many questions/options. Maximum 5 action rows allowed (including submit button).');
+      // Add submit button (always last)
+      const submitRow = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`profile_submit:${form.id}`)
+            .setLabel('Submit Profile')
+            .setStyle(ButtonStyle.Success)
+        );
+      components.push(submitRow);
+
+      // Validate we have at least one question
+      if (components.length === 1) { // Only submit button
+        throw new Error('Form must have at least one question with options.');
       }
 
-      // Validate we have at least one component (submit button)
-      if (components.length === 0) {
-        throw new Error('No components to send. Form must have at least one question with options.');
+      // Warn if questions were skipped
+      if (form.questions.length > MAX_QUESTIONS) {
+        console.warn(`[Profile Manager] Form has ${form.questions.length} questions, but only ${MAX_QUESTIONS} are supported. Skipping remaining questions.`);
       }
 
-      // Ensure we don't exceed Discord's limit of 5 action rows (shouldn't happen now, but double-check)
-      if (components.length > 5) {
-        console.warn(`[Profile Manager] Too many action rows (${components.length}), limiting to 5`);
-        components = components.slice(0, 5);
-      }
-
-      console.log(`[Profile Manager] Sending message with ${components.length} action rows, ${totalButtons} buttons total`);
+      console.log(`[Profile Manager] Sending message with ${components.length} action rows (${components.length - 1} questions + submit button)`);
 
       const message = await channel.send({
         embeds: [embed],
@@ -453,67 +433,57 @@ class UserProfileManager {
       const message = await channel.messages.fetch(form.message_id).catch(() => null);
       if (!message) return null;
 
-      // Rebuild components with visual feedback
+      // Rebuild components with select menus (showing current selections)
       const components = [];
-      let totalButtons = 0;
-      const MAX_BUTTONS = 25;
+      const MAX_QUESTIONS = 4;
 
-      for (const question of form.questions) {
-        if (components.length >= 5) break; // Max 5 rows
-        
-        let questionRow = new ActionRowBuilder();
+      for (let i = 0; i < Math.min(form.questions.length, MAX_QUESTIONS); i++) {
+        const question = form.questions[i];
         const questionSelections = selectedOptions[question.id] || [];
-        let buttonsInRow = 0;
         
-        for (const option of question.options) {
-          if (totalButtons >= MAX_BUTTONS || components.length >= 5) break;
+        // Build menu options with default values for selected ones
+        const menuOptions = question.options.slice(0, 25).map(option => {
+          const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
+          const description = option.description 
+            ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
+            : undefined;
           
-          const isSelected = questionSelections.includes(option.id);
+          const menuOption = new StringSelectMenuOptionBuilder()
+            .setLabel(label)
+            .setValue(`${question.id}:${option.id}`)
+            .setDefault(questionSelections.includes(option.id)); // Show as selected if user has chosen it
           
-          // Create checkbox-style label: [✓] for selected, [ ] for unselected
-          const checkboxPrefix = isSelected ? '[✓] ' : '[ ] ';
-          // Account for checkbox prefix in label length (4 chars for "[ ] " or "[✓] ")
-          const maxOptionLength = 76; // 80 - 4 = 76
-          const truncatedText = option.text.length > maxOptionLength 
-            ? option.text.substring(0, maxOptionLength - 3) + '...' 
-            : option.text;
-          const checkboxLabel = checkboxPrefix + truncatedText;
-          
-          // Max 5 buttons per row
-          if (buttonsInRow >= 5) {
-            components.push(questionRow);
-            questionRow = new ActionRowBuilder();
-            buttonsInRow = 0;
+          if (description) {
+            menuOption.setDescription(description);
           }
           
-          const button = new ButtonBuilder()
-            .setCustomId(`profile_checkbox:${form.id}:${question.id}:${option.id}`)
-            .setLabel(checkboxLabel)
-            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary);
-          
-          questionRow.addComponents(button);
-          buttonsInRow++;
-          totalButtons++;
-        }
-        
-        if (questionRow.components.length > 0 && components.length < 5) {
-          components.push(questionRow);
-        }
+          return menuOption;
+        });
+
+        if (menuOptions.length === 0) continue;
+
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`profile_select:${form.id}:${question.id}`)
+          .setPlaceholder(`Select options for: ${question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text}`)
+          .setMinValues(0)
+          .setMaxValues(menuOptions.length)
+          .addOptions(menuOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+        components.push(row);
       }
 
-      // Add submit button (only if we haven't reached the limit)
-      if (components.length < 5) {
-        const submitRow = new ActionRowBuilder()
-          .addComponents(
-            new ButtonBuilder()
-              .setCustomId(`profile_submit:${form.id}`)
-              .setLabel('Submit Profile')
-              .setStyle(ButtonStyle.Success)
-          );
-        components.push(submitRow);
-      }
+      // Add submit button
+      const submitRow = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`profile_submit:${form.id}`)
+            .setLabel('Submit Profile')
+            .setStyle(ButtonStyle.Success)
+        );
+      components.push(submitRow);
 
-      // Update message (only if components changed)
+      // Update message with current selections
       await message.edit({
         components: components
       });
