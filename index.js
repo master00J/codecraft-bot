@@ -8924,6 +8924,41 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
         console.log(`[Threads API] File contains 'getThreads':`, hasGetThreads);
         if (hasGetThreads) {
           console.error(`[Threads API] WARNING: getThreads exists in file but not in loaded class! This suggests a syntax error or caching issue.`);
+          console.error(`[Threads API] Attempting to manually add getThreads method...`);
+          
+          // Try to manually add the method by re-evaluating the class
+          // This is a workaround for caching issues
+          try {
+            delete require.cache[discordManagerPath];
+            // Force reload by clearing module wrapper cache
+            const Module = require('module');
+            const originalRequire = Module.prototype.require;
+            Module.prototype.require = function(...args) {
+              if (args[0] === './modules/comcraft/discord-manager' || args[0].includes('discord-manager')) {
+                delete require.cache[require.resolve(args[0])];
+              }
+              return originalRequire.apply(this, args);
+            };
+            
+            // Try one more time with fresh require
+            const FreshDiscordManager = require(discordManagerPath);
+            const freshManager = new FreshDiscordManager(botClient);
+            
+            if (typeof freshManager.getThreads === 'function') {
+              console.log(`[Threads API] Successfully loaded getThreads after forced reload!`);
+              // Use the fresh manager instead
+              const result = await freshManager.getThreads(guildId, channelId);
+              if (!result.success) {
+                console.error(`[Threads API] Error from DiscordManager:`, result.error);
+                return res.status(500).json(result);
+              }
+              return res.json(result);
+            }
+            
+            Module.prototype.require = originalRequire;
+          } catch (reloadError) {
+            console.error(`[Threads API] Failed to reload:`, reloadError);
+          }
         }
       } catch (readError) {
         console.error(`[Threads API] Could not read file to verify:`, readError.message);
@@ -8931,7 +8966,7 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
       
       return res.status(500).json({
         success: false,
-        error: 'getThreads method not found on DiscordManager',
+        error: 'getThreads method not found on DiscordManager. Please ensure the bot code is updated and restarted.',
         threads: [],
         availableMethods: asyncMethods
       });
