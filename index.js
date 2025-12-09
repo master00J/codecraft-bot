@@ -1666,26 +1666,7 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      // Profile select menu and button handlers
-      if (interaction.isStringSelectMenu() && interaction.customId.startsWith('profile_select:')) {
-        if (!global.profileManager) {
-          return interaction.reply({
-            content: '❌ Profile system is not available at this time.',
-            ephemeral: true
-          });
-        }
-        const allowed = await featureGate.checkFeatureOrReply(
-          interaction,
-          interaction.guild?.id,
-          'user_profiles',
-          'Premium'
-        );
-        if (!allowed) return;
-        
-        await handleProfileSelectMenuInteraction(interaction);
-        return;
-      }
-
+      // Profile submit button handler
       if (interaction.customId.startsWith('profile_submit:')) {
         if (!global.profileManager) {
           return interaction.reply({
@@ -1777,6 +1758,26 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
+    // Profile select menu handler (must be checked early)
+    if (interaction.customId.startsWith('profile_select:')) {
+      if (!global.profileManager) {
+        return interaction.reply({
+          content: '❌ Profile system is not available at this time.',
+          ephemeral: true
+        });
+      }
+      const allowed = await featureGate.checkFeatureOrReply(
+        interaction,
+        interaction.guild?.id,
+        'user_profiles',
+        'Premium'
+      );
+      if (!allowed) return;
+      
+      await handleProfileSelectMenuInteraction(interaction);
+      return;
+    }
+
     // Handle roulette bet type selection
     // IMPORTANT: Show modal IMMEDIATELY (no deferReply before modal!)
     if (interaction.customId.startsWith('roulette_bettype_')) {
