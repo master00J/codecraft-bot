@@ -417,10 +417,6 @@ class DiscordManager {
         threads: []
       };
     }
-    } catch (error) {
-      console.error('Error getting threads:', error);
-      return { success: false, error: error.message };
-    }
   }
 
   /**
