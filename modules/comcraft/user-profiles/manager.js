@@ -655,7 +655,7 @@ class UserProfileManager {
         .eq('id', response.id);
 
       // Create a new in_progress response so user can submit again
-      await this.supabase
+      const { error: insertError } = await this.supabase
         .from('user_profiles_responses')
         .insert({
           form_id: formId,
@@ -663,11 +663,12 @@ class UserProfileManager {
           user_id: userId,
           responses: {},
           status: 'in_progress'
-        })
-        .catch(err => {
-          // Ignore error if insert fails (might be duplicate, but that's ok)
-          console.warn('Could not create new response for next submission:', err.message);
         });
+      
+      if (insertError) {
+        // Ignore error if insert fails (might be duplicate, but that's ok)
+        console.warn('Could not create new response for next submission:', insertError.message);
+      }
 
       return { thread, threadMessage };
     } catch (error) {
