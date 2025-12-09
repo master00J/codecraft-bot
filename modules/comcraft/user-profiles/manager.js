@@ -154,12 +154,33 @@ class UserProfileManager {
         throw new Error('Form must have at least one question with options.');
       }
 
-      // Warn if questions were skipped
-      if (form.questions.length > MAX_QUESTIONS) {
-        console.warn(`[Profile Manager] Form has ${form.questions.length} questions, but only ${MAX_QUESTIONS} are supported. Skipping remaining questions.`);
+      // Warn if questions were skipped due to Discord's 5 action row limit
+      const totalQuestionsUsed = components.length - 1; // Subtract submit button row
+      if (form.questions.length > 0) {
+        // Count how many questions we could fit
+        let questionsFitted = 0;
+        let rowsUsed = 0;
+        for (let i = 0; i < form.questions.length && rowsUsed < 4; i++) {
+          const question = form.questions[i];
+          if (question.options.length === 0) continue;
+          
+          const optionChunks = Math.ceil(question.options.length / MAX_OPTIONS_PER_MENU);
+          const rowsNeeded = optionChunks;
+          
+          if (rowsUsed + rowsNeeded <= 4) {
+            questionsFitted++;
+            rowsUsed += rowsNeeded;
+          } else {
+            break;
+          }
+        }
+        
+        if (questionsFitted < form.questions.length) {
+          console.warn(`[Profile Manager] Form has ${form.questions.length} questions, but only ${questionsFitted} could fit within Discord's 5 action row limit (4 for questions + 1 for submit button). Remaining questions will not be displayed.`);
+        }
       }
 
-      console.log(`[Profile Manager] Sending message with ${components.length} action rows (${components.length - 1} questions + submit button)`);
+      console.log(`[Profile Manager] Sending message with ${components.length} action rows (${totalQuestionsUsed} question menus + submit button)`);
 
       // Check if form already has a message posted
       let message;
