@@ -47,6 +47,29 @@ class DiscordManager {
   }
 
   /**
+   * Check if a user has a specific role
+   */
+  async checkUserHasRole(guildId, userId, roleId) {
+    try {
+      const guild = this.client.guilds.cache.get(guildId);
+      if (!guild) {
+        return { success: false, error: 'Guild not found' };
+      }
+
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        return { success: false, error: 'User not found in guild' };
+      }
+
+      const hasRole = member.roles.cache.has(roleId);
+      return { success: true, hasRole };
+    } catch (error) {
+      console.error('Error checking user role:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Create a new role
    */
   async createRole(guildId, options = {}) {

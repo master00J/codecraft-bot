@@ -8766,6 +8766,43 @@ app.delete('/api/discord/:guildId/roles/:roleId', async (req, res) => {
   }
 });
 
+// Check if user has a specific role
+app.get('/api/discord/:guildId/users/:userId/roles/:roleId', async (req, res) => {
+  try {
+    const { guildId, userId, roleId } = req.params;
+    
+    // Check if this guild uses a custom bot
+    let botClient = client;
+    let guild = client.guilds.cache.get(guildId);
+    
+    if (!guild && customBotManager) {
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+        guild = customBot.guilds.cache.get(guildId);
+        console.log(`🤖 [User Role Check API] Using custom bot for guild ${guildId}`);
+      }
+    }
+
+    if (!guild) {
+      return res.json({ 
+        success: false, 
+        error: 'Guild not found. Make sure the bot (main or custom) is in the server.' 
+      });
+    }
+
+    // Use the appropriate DiscordManager for the bot client
+    const DiscordManager = require('./modules/comcraft/discord-manager');
+    const manager = new DiscordManager(botClient);
+    const result = await manager.checkUserHasRole(guildId, userId, roleId);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error in user role check API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
 // Get guild channels
 app.get('/api/discord/:guildId/channels', async (req, res) => {
   try {
