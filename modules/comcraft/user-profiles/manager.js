@@ -144,7 +144,7 @@ class UserProfileManager {
         .addComponents(
           new ButtonBuilder()
             .setCustomId(`profile_submit:${form.id}`)
-            .setLabel('Submit Profile')
+            .setLabel('Submit')
             .setStyle(ButtonStyle.Success)
         );
       components.push(submitRow);
