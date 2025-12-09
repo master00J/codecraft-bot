@@ -116,7 +116,7 @@ class UserProfileManager {
           const checkboxLabel = checkboxPrefix + truncatedText;
           
           const button = new ButtonBuilder()
-            .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
+            .setCustomId(`profile_checkbox:${form.id}:${question.id}:${option.id}`)
             .setLabel(checkboxLabel)
             .setStyle(ButtonStyle.Secondary);
           
@@ -136,7 +136,7 @@ class UserProfileManager {
         const submitRow = new ActionRowBuilder()
           .addComponents(
             new ButtonBuilder()
-              .setCustomId(`profile_submit_${form.id}`)
+              .setCustomId(`profile_submit:${form.id}`)
               .setLabel('Submit Profile')
               .setStyle(ButtonStyle.Success)
           );
@@ -487,7 +487,7 @@ class UserProfileManager {
           }
           
           const button = new ButtonBuilder()
-            .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
+            .setCustomId(`profile_checkbox:${form.id}:${question.id}:${option.id}`)
             .setLabel(checkboxLabel)
             .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary);
           
@@ -506,7 +506,7 @@ class UserProfileManager {
         const submitRow = new ActionRowBuilder()
           .addComponents(
             new ButtonBuilder()
-              .setCustomId(`profile_submit_${form.id}`)
+              .setCustomId(`profile_submit:${form.id}`)
               .setLabel('Submit Profile')
               .setStyle(ButtonStyle.Success)
           );

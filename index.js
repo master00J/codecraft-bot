@@ -1667,8 +1667,8 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       // Profile button handlers
-      if (interaction.customId.startsWith('profile_checkbox_') || 
-          interaction.customId.startsWith('profile_submit_')) {
+      if (interaction.customId.startsWith('profile_checkbox:') || 
+          interaction.customId.startsWith('profile_submit:')) {
         if (!global.profileManager) {
           return interaction.reply({
             content: '❌ Profile system is not available at this time.',
@@ -4650,12 +4650,12 @@ async function handleProfileButtonInteraction(interaction) {
 
     const customId = interaction.customId;
 
-    if (customId.startsWith('profile_checkbox_')) {
-      // Format: profile_checkbox_{formId}_{questionId}_{optionId}
-      const parts = customId.split('_');
-      const formId = parts[2];
-      const questionId = parts[3];
-      const optionId = parts[4];
+    if (customId.startsWith('profile_checkbox:')) {
+      // Format: profile_checkbox:{formId}:{questionId}:{optionId}
+      const parts = customId.split(':');
+      const formId = parts[1];
+      const questionId = parts[2];
+      const optionId = parts[3];
 
       try {
         await interaction.deferReply({ ephemeral: true });
@@ -4687,9 +4687,9 @@ async function handleProfileButtonInteraction(interaction) {
           content: `❌ ${error.message}`
         }).catch(() => {});
       }
-    } else if (customId.startsWith('profile_submit_')) {
-      // Format: profile_submit_{formId}
-      const formId = customId.replace('profile_submit_', '');
+    } else if (customId.startsWith('profile_submit:')) {
+      // Format: profile_submit:{formId}
+      const formId = customId.replace('profile_submit:', '');
 
       try {
         await interaction.deferReply({ ephemeral: true });
