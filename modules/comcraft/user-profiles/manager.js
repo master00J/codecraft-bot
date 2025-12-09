@@ -285,6 +285,68 @@ class UserProfileManager {
   }
 
   /**
+   * Update select menu selections for a question
+   * @param {string} formId - Form ID
+   * @param {string} questionId - Question ID
+   * @param {string[]} selectedValues - Array of values in format "questionId:optionId"
+   * @param {string} userId - User ID
+   */
+  async updateSelectMenuSelections(formId, questionId, selectedValues, userId) {
+    try {
+      const form = await this.getForm(formId);
+      if (!form) {
+        throw new Error('Form not found');
+      }
+
+      const response = await this.getOrCreateResponse(formId, form.guild_id, userId);
+
+      if (!response) {
+        throw new Error('Failed to get or create response');
+      }
+
+      const currentResponses = response.responses || {};
+      
+      // Parse selected values (format: questionId:optionId)
+      // Filter to only include values that match the current questionId
+      const selectedOptionIds = selectedValues
+        .filter(value => {
+          const parts = value.split(':');
+          // Value format is questionId:optionId, so check if questionId matches
+          return parts.length === 2 && parts[0] === questionId;
+        })
+        .map(value => {
+          const parts = value.split(':');
+          return parts[1]; // Return just the optionId
+        });
+
+      // Update responses for this question
+      const updatedResponses = {
+        ...currentResponses,
+        [questionId]: selectedOptionIds
+      };
+
+      // Update response in database
+      const { error } = await this.supabase
+        .from('user_profiles_responses')
+        .update({
+          responses: updatedResponses,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', response.id);
+
+      if (error) {
+        console.error('Error updating select menu selections in database:', error);
+        throw new Error(error.message);
+      }
+
+      return updatedResponses;
+    } catch (error) {
+      console.error('Error updating select menu selections:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Toggle checkbox selection
    */
   async toggleCheckbox(formId, questionId, optionId, userId) {
