@@ -86,7 +86,11 @@ class UserProfileManager {
       for (let i = 0; i < Math.min(form.questions.length, MAX_QUESTIONS); i++) {
         const question = form.questions[i];
         
-        // Discord select menu max: 25 options
+        // Discord select menu max: 25 options per menu
+        if (question.options.length > 25) {
+          console.warn(`[Profile Manager] Question "${question.text}" has ${question.options.length} options, but Discord limits select menus to 25. Only the first 25 will be shown.`);
+        }
+        
         const menuOptions = question.options.slice(0, 25).map(option => {
           const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
           const description = option.description 
