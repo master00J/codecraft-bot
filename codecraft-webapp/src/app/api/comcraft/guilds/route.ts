@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Discord ID not found' }, { status: 400 });
     }
 
-    // Get all guilds where user is owner with license information
-    const { data: guilds, error } = await supabase
+    // Get all guilds where user is owner
+    const { data: ownedGuilds, error: ownedError } = await supabase
       .from('guild_configs')
       .select(`
         guild_id,
@@ -35,16 +35,85 @@ export async function GET(request: NextRequest) {
         subscription_active,
         license_id
       `)
-      .eq('owner_discord_id', discordId)
-      .order('guild_name', { ascending: true });
+      .eq('owner_discord_id', discordId);
 
-    if (error) {
-      console.error('Error fetching guilds:', error);
+    if (ownedError) {
+      console.error('Error fetching owned guilds:', ownedError);
       return NextResponse.json({ error: 'Failed to fetch guilds' }, { status: 500 });
     }
 
+    // Get all guilds where user is authorized (via guild_authorized_users)
+    const { data: authorizedGuilds, error: authError } = await supabase
+      .from('guild_authorized_users')
+      .select(`
+        guild_id,
+        guild_configs (
+          guild_id,
+          guild_name,
+          guild_icon_url,
+          subscription_tier,
+          subscription_active,
+          license_id
+        )
+      `)
+      .eq('discord_id', discordId);
+
+    if (authError) {
+      console.warn('Error fetching authorized guilds:', authError);
+    }
+
+    // Get all guilds where user is authorized (via authorized_users table - legacy)
+    const { data: legacyAuthorizedGuilds, error: legacyAuthError } = await supabase
+      .from('authorized_users')
+      .select(`
+        guild_id,
+        guild_configs (
+          guild_id,
+          guild_name,
+          guild_icon_url,
+          subscription_tier,
+          subscription_active,
+          license_id
+        )
+      `)
+      .eq('user_id', discordId);
+
+    if (legacyAuthError) {
+      console.warn('Error fetching legacy authorized guilds:', legacyAuthError);
+    }
+
+    // Combine all guilds and deduplicate
+    const guildMap = new Map<string, any>();
+    
+    // Add owned guilds
+    (ownedGuilds || []).forEach((guild: any) => {
+      guildMap.set(guild.guild_id, guild);
+    });
+
+    // Add authorized guilds (new table)
+    (authorizedGuilds || []).forEach((auth: any) => {
+      if (auth.guild_configs && !guildMap.has(auth.guild_id)) {
+        guildMap.set(auth.guild_id, auth.guild_configs);
+      }
+    });
+
+    // Add authorized guilds (legacy table)
+    (legacyAuthorizedGuilds || []).forEach((auth: any) => {
+      if (auth.guild_configs && !guildMap.has(auth.guild_id)) {
+        guildMap.set(auth.guild_id, auth.guild_configs);
+      }
+    });
+
+    // Get authorized roles for this user (requires bot API check, but we'll include guilds with authorized roles anyway)
+    // Note: We can't check Discord roles server-side without the bot API, so we'll include all guilds
+    // where the user might have an authorized role. The actual role check happens in the access control helper.
+
+    const guilds = Array.from(guildMap.values()).sort((a: any, b: any) => 
+      (a.guild_name || '').localeCompare(b.guild_name || '')
+    );
+
     // Get all guild IDs for vote tier unlock check
-    const guildIds = (guilds || []).map((g: any) => g.guild_id);
+    const guildIds = guilds.map((g: any) => g.guild_id);
     
     // Fetch active vote tier unlocks for these guilds
     // Get all active unlocks, then filter by expiry in code (to handle NULL expires_at)

@@ -9,6 +9,8 @@ import { Link } from '@/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { useSession } from 'next-auth/react';
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -80,12 +82,15 @@ export default function GuildDashboardLayout({
   const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
   const guildId = params.guildId as string;
   const [currentHash, setCurrentHash] = useState<string>('');
   const [featureTiers, setFeatureTiers] = useState<Record<string, string>>({});
   const [menuOrder, setMenuOrder] = useState<string[] | null>(null);
   const [isReorderMode, setIsReorderMode] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -371,6 +376,34 @@ export default function GuildDashboardLayout({
     // For other routes (like /tickets, /analytics), check if pathname starts with the href
     return pathname.startsWith(hrefPath);
   };
+
+  // Show loading while checking access
+  if (checkingAccess) {
+    return (
+      <div className="flex min-h-screen bg-[#0f1419] items-center justify-center">
+        <div className="text-center">
+          <div className="text-gray-400 mb-2">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied if no access
+  if (hasAccess === false) {
+    return (
+      <div className="flex min-h-screen bg-[#0f1419] items-center justify-center">
+        <div className="text-center max-w-md p-8">
+          <h1 className="text-2xl font-bold text-white mb-4">Access Denied</h1>
+          <p className="text-gray-400 mb-6">
+            You don't have permission to access this server's dashboard.
+          </p>
+          <Link href="/comcraft/dashboard">
+            <Button>Go to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[#0f1419]">

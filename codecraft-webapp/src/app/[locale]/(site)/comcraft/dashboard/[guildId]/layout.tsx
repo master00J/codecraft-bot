@@ -9,6 +9,8 @@ import { Link } from '@/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { useSession } from 'next-auth/react';
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -82,6 +84,7 @@ export default function GuildDashboardLayout({
   const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
   const guildId = params.guildId as string;
   const locale = params.locale as string;
   const [currentHash, setCurrentHash] = useState<string>('');
@@ -89,6 +92,8 @@ export default function GuildDashboardLayout({
   const [menuOrder, setMenuOrder] = useState<string[] | null>(null);
   const [isReorderMode, setIsReorderMode] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   
   const sensors = useSensors(
     useSensor(PointerSensor),
