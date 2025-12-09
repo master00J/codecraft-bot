@@ -102,37 +102,14 @@ export async function POST(request: NextRequest) {
     const cancelUrl = `${baseUrl}/comcraft/donation/cancel?paymentId=${paymentData?.id || 'none'}`;
 
     const params = new URLSearchParams();
-    // Add all available Stripe payment method types
+    // Use same payment methods as checkout page
     // Stripe will automatically show available methods based on customer location and currency
     const paymentMethodTypes = [
-      'card',              // Credit/debit cards
-      'paypal',            // PayPal
-      'link',              // Stripe Link (saved payment methods)
-      'bancontact',        // Belgium
-      'ideal',             // Netherlands
-      'eps',               // Austria
-      'giropay',           // Germany
-      'p24',               // Przelewy24 (Poland) - correct format
-      'blik',              // Poland
-      'sofort',            // Germany, Austria, Belgium
-      'sepa_debit',        // SEPA Direct Debit (EU)
-      'klarna',            // Buy now, pay later (EU, US)
-      'affirm',            // Buy now, pay later (US)
-      'cashapp',           // Cash App Pay (US)
-      'us_bank_account',   // ACH Direct Debit (US)
-      'acss_debit',        // Pre-authorized debits (Canada)
-      'alipay',            // Alipay (China)
-      'wechat_pay',        // WeChat Pay (China)
-      'grabpay',           // GrabPay (Southeast Asia)
-      'fpx',               // FPX (Malaysia)
-      'customer_balance',  // Customer balance (for stored credits)
-      'bacs_debit',        // BACS Direct Debit (UK)
-      'au_becs_debit',     // BECS Direct Debit (Australia)
-      'revolut_pay',       // Revolut Pay
-      'mobilepay',         // MobilePay
-      'swish',             // Swish (Sweden)
-      'twint',             // TWINT (Switzerland)
-      'satispay',          // Satispay (Italy)
+      'card',        // Kaart (Credit/debit cards)
+      'bancontact',  // Bancontact (Belgium)
+      'ideal',       // iDEAL (Netherlands)
+      'eps',         // EPS (Austria)
+      'paypal',      // PayPal
     ];
     paymentMethodTypes.forEach((type, index) => {
       params.append(`payment_method_types[${index}]`, type);
