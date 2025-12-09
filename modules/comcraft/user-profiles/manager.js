@@ -183,6 +183,7 @@ class UserProfileManager {
   async getForm(formId) {
     const { data: form, error } = await this.supabase
       .from('user_profiles_forms')
+      .select('*')
       .eq('id', formId)
       .single();
 
