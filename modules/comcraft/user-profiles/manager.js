@@ -323,7 +323,21 @@ class UserProfileManager {
       .single();
 
     if (error || !form) {
+      console.error('[Profile Manager] Error fetching form:', error);
       return null;
+    }
+
+    // Ensure questions is always an array
+    if (form.questions && !Array.isArray(form.questions)) {
+      console.warn('[Profile Manager] Form questions is not an array, attempting to parse:', typeof form.questions);
+      try {
+        form.questions = typeof form.questions === 'string' ? JSON.parse(form.questions) : [];
+      } catch (parseError) {
+        console.error('[Profile Manager] Failed to parse questions:', parseError);
+        form.questions = [];
+      }
+    } else if (!form.questions) {
+      form.questions = [];
     }
 
     return form;
