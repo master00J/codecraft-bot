@@ -104,16 +104,20 @@ export async function POST(request: NextRequest) {
     const params = new URLSearchParams();
     // Use same payment methods as checkout page
     // Stripe will automatically show available methods based on customer location and currency
+    // Google Pay and Apple Pay are automatically available when 'card' is enabled
     const paymentMethodTypes = [
-      'card',        // Kaart (Credit/debit cards)
+      'card',        // Kaart (Credit/debit cards) - also enables Google Pay & Apple Pay
+      'paypal',      // PayPal
       'bancontact',  // Bancontact (Belgium)
       'ideal',       // iDEAL (Netherlands)
       'eps',         // EPS (Austria)
-      'paypal',      // PayPal
     ];
     paymentMethodTypes.forEach((type, index) => {
       params.append(`payment_method_types[${index}]`, type);
     });
+    
+    // Enable Google Pay and Apple Pay via payment method options
+    params.append('payment_method_options[card][request_three_d_secure]', 'automatic');
 
     params.append('mode', 'payment');
     params.append('success_url', successUrl);

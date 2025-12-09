@@ -135,10 +135,14 @@ async function initiateStripe(config: PaymentProviderConfig, options: InitiateOp
   
   // Add multiple payment method types
   // Stripe will automatically show available payment methods based on the customer's location and currency
-  const paymentMethodTypes = ['card', 'paypal', 'bancontact', 'ideal', 'eps', 'blik'];
+  // Google Pay and Apple Pay are automatically available when 'card' is enabled
+  const paymentMethodTypes = ['card', 'paypal', 'bancontact', 'ideal', 'eps'];
   paymentMethodTypes.forEach((type, index) => {
     params.append(`payment_method_types[${index}]`, type);
   });
+  
+  // Enable Google Pay and Apple Pay via payment method options
+  params.append('payment_method_options[card][request_three_d_secure]', 'automatic');
   
   params.append('mode', 'payment');
   params.append('success_url', successUrl);
