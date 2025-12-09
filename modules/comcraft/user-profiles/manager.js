@@ -446,14 +446,29 @@ class UserProfileManager {
 
       // Rebuild components with visual feedback
       const components = [];
+      let totalButtons = 0;
+      const MAX_BUTTONS = 25;
+
       for (const question of form.questions) {
-        const questionRow = new ActionRowBuilder();
+        if (components.length >= 5) break; // Max 5 rows
+        
+        let questionRow = new ActionRowBuilder();
         const questionSelections = selectedOptions[question.id] || [];
+        let buttonsInRow = 0;
         
         for (const option of question.options) {
+          if (totalButtons >= MAX_BUTTONS || components.length >= 5) break;
+          
           const isSelected = questionSelections.includes(option.id);
           // Discord button label limit is 80 characters
           const label = option.text.length > 80 ? option.text.substring(0, 77) + '...' : option.text;
+          
+          // Max 5 buttons per row
+          if (buttonsInRow >= 5) {
+            components.push(questionRow);
+            questionRow = new ActionRowBuilder();
+            buttonsInRow = 0;
+          }
           
           const button = new ButtonBuilder()
             .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
@@ -461,19 +476,26 @@ class UserProfileManager {
             .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary);
           
           questionRow.addComponents(button);
+          buttonsInRow++;
+          totalButtons++;
         }
-        components.push(questionRow);
+        
+        if (questionRow.components.length > 0 && components.length < 5) {
+          components.push(questionRow);
+        }
       }
 
-      // Add submit button
-      const submitRow = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId(`profile_submit_${form.id}`)
-            .setLabel('Submit Profile')
-            .setStyle(ButtonStyle.Success)
-        );
-      components.push(submitRow);
+      // Add submit button (only if we haven't reached the limit)
+      if (components.length < 5) {
+        const submitRow = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`profile_submit_${form.id}`)
+              .setLabel('Submit Profile')
+              .setStyle(ButtonStyle.Success)
+          );
+        components.push(submitRow);
+      }
 
       // Update message (only if components changed)
       await message.edit({
