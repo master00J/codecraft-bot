@@ -9,20 +9,6 @@ const supabaseAdmin = createClient(
 );
 
 async function getGuildAccess(guildId: string, discordId: string) {
-  const { data: guild, error: guildError } = await supabaseAdmin
-    .from('guild_configs')
-    .select('owner_discord_id')
-    .eq('guild_id', guildId)
-    .maybeSingle();
-
-  if (guildError || !guild) {
-    return { allowed: false, reason: 'Guild not found' };
-  }
-
-  if (guild.owner_discord_id === discordId) {
-    return { allowed: true };
-  }
-
   // Check guild_authorized_users table (uses discord_id)
   const { data: authorizedGuild } = await supabaseAdmin
     .from('guild_authorized_users')
@@ -44,6 +30,20 @@ async function getGuildAccess(guildId: string, discordId: string) {
     .maybeSingle();
 
   if (authorized) {
+    return { allowed: true };
+  }
+
+  const { data: guild, error: guildError } = await supabaseAdmin
+    .from('guild_configs')
+    .select('owner_discord_id')
+    .eq('guild_id', guildId)
+    .maybeSingle();
+
+  if (guildError || !guild) {
+    return { allowed: false, reason: 'Guild not found' };
+  }
+
+  if (guild.owner_discord_id === discordId) {
     return { allowed: true };
   }
 

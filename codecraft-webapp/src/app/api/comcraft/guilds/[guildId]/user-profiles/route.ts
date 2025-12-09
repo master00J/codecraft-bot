@@ -9,54 +9,81 @@ const supabaseAdmin = createClient(
 );
 
 async function getGuildAccess(guildId: string, discordId: string) {
+  console.log(`[User Profiles Access] Checking access for guildId: ${guildId}, discordId: ${discordId}`);
+  
   const { data: guild, error: guildError } = await supabaseAdmin
     .from('guild_configs')
     .select('owner_discord_id')
     .eq('guild_id', guildId)
     .maybeSingle();
 
-  if (guildError || !guild) {
+  if (guildError) {
+    console.error(`[User Profiles Access] Guild lookup error:`, guildError);
+    return { allowed: false, reason: 'Guild lookup error' };
+  }
+  
+  if (!guild) {
+    console.log(`[User Profiles Access] Guild not found: ${guildId}`);
     return { allowed: false, reason: 'Guild not found' };
   }
 
+  console.log(`[User Profiles Access] Guild owner: ${guild.owner_discord_id}, Requesting user: ${discordId}`);
+  
   if (guild.owner_discord_id === discordId) {
+    console.log(`[User Profiles Access] Access granted: User is guild owner`);
     return { allowed: true };
   }
 
   // Check guild_authorized_users table (uses discord_id)
-  const { data: authorizedGuild } = await supabaseAdmin
+  const { data: authorizedGuild, error: authGuildError } = await supabaseAdmin
     .from('guild_authorized_users')
     .select('role')
     .eq('guild_id', guildId)
     .eq('discord_id', discordId)
     .maybeSingle();
 
+  if (authGuildError) {
+    console.warn(`[User Profiles Access] Error checking guild_authorized_users:`, authGuildError);
+  }
+
   if (authorizedGuild) {
+    console.log(`[User Profiles Access] Access granted: User found in guild_authorized_users with role: ${authorizedGuild.role}`);
     return { allowed: true };
   }
 
   // Check authorized_users table (uses user_id)
-  const { data: authorized } = await supabaseAdmin
+  const { data: authorized, error: authError } = await supabaseAdmin
     .from('authorized_users')
     .select('user_id')
     .eq('guild_id', guildId)
     .eq('user_id', discordId)
     .maybeSingle();
 
+  if (authError) {
+    console.warn(`[User Profiles Access] Error checking authorized_users:`, authError);
+  }
+
   if (authorized) {
+    console.log(`[User Profiles Access] Access granted: User found in authorized_users`);
     return { allowed: true };
   }
 
-  const { data: user } = await supabaseAdmin
+  const { data: user, error: userError } = await supabaseAdmin
     .from('users')
     .select('is_admin')
     .eq('discord_id', discordId)
     .maybeSingle();
 
+  if (userError) {
+    console.warn(`[User Profiles Access] Error checking user admin status:`, userError);
+  }
+
   if (user?.is_admin) {
+    console.log(`[User Profiles Access] Access granted: User is platform admin`);
     return { allowed: true };
   }
 
+  console.log(`[User Profiles Access] Access denied: No matching permissions found`);
   return { allowed: false, reason: 'Access denied' };
 }
 
