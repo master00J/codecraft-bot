@@ -8904,6 +8904,8 @@ app.post('/api/profile/post-message', async (req, res) => {
   try {
     const { formId, guildId } = req.body;
 
+    console.log(`[Profile API] Received request: formId=${formId}, guildId=${guildId}`);
+
     if (!formId || !guildId) {
       return res.status(400).json({ 
         success: false, 
@@ -8912,6 +8914,7 @@ app.post('/api/profile/post-message', async (req, res) => {
     }
 
     if (!global.profileManager) {
+      console.error('[Profile API] Profile manager not available');
       return res.status(503).json({ 
         success: false, 
         error: 'Profile system is not available' 
@@ -8919,13 +8922,18 @@ app.post('/api/profile/post-message', async (req, res) => {
     }
 
     // Get form from database
+    console.log(`[Profile API] Fetching form ${formId} from database`);
     const form = await global.profileManager.getForm(formId);
     if (!form) {
+      console.error(`[Profile API] Form ${formId} not found`);
       return res.status(404).json({ 
         success: false, 
         error: 'Form not found' 
       });
     }
+
+    console.log(`[Profile API] Form found: ${form.form_name}, guild_id: ${form.guild_id}, channel_id: ${form.channel_id}`);
+    console.log(`[Profile API] Questions count: ${Array.isArray(form.questions) ? form.questions.length : 'NOT AN ARRAY'}`);
 
     if (form.guild_id !== guildId) {
       return res.status(403).json({ 
@@ -8934,17 +8942,34 @@ app.post('/api/profile/post-message', async (req, res) => {
       });
     }
 
+    // Validate questions structure
+    if (!Array.isArray(form.questions) || form.questions.length === 0) {
+      console.error('[Profile API] Invalid questions structure:', form.questions);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Form has no questions or invalid question structure' 
+      });
+    }
+
     // Get guild and channel
+    console.log(`[Profile API] Fetching guild ${guildId}`);
     const guild = client.guilds.cache.get(guildId);
     if (!guild) {
+      console.error(`[Profile API] Guild ${guildId} not found in cache`);
       return res.status(404).json({ 
         success: false, 
         error: 'Guild not found. Make sure the bot is in the server.' 
       });
     }
 
-    const channel = await guild.channels.fetch(form.channel_id).catch(() => null);
+    console.log(`[Profile API] Fetching channel ${form.channel_id}`);
+    const channel = await guild.channels.fetch(form.channel_id).catch((err) => {
+      console.error(`[Profile API] Error fetching channel:`, err);
+      return null;
+    });
+    
     if (!channel) {
+      console.error(`[Profile API] Channel ${form.channel_id} not found`);
       return res.status(404).json({ 
         success: false, 
         error: 'Channel not found' 
@@ -8958,16 +8983,37 @@ app.post('/api/profile/post-message', async (req, res) => {
       });
     }
 
+    // Check bot permissions
+    const botMember = guild.members.me;
+    if (!botMember) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Bot member not found in guild' 
+      });
+    }
+
+    const permissions = channel.permissionsFor(botMember);
+    if (!permissions.has(['SendMessages', 'EmbedLinks'])) {
+      console.error(`[Profile API] Missing permissions. Has SendMessages: ${permissions.has('SendMessages')}, Has EmbedLinks: ${permissions.has('EmbedLinks')}`);
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Bot missing permissions: SendMessages, EmbedLinks' 
+      });
+    }
+
     // Post the form message
+    console.log(`[Profile API] Posting form message to channel ${channel.id}`);
     try {
       const message = await global.profileManager.postFormMessage(form, channel);
+      console.log(`[Profile API] Message posted successfully: ${message.id}`);
 
       res.json({ 
         success: true, 
         messageId: message.id 
       });
     } catch (postError) {
-      console.error('Error posting form message to Discord:', postError);
+      console.error('[Profile API] Error posting form message to Discord:', postError);
+      console.error('[Profile API] Error stack:', postError.stack);
       res.status(500).json({ 
         success: false, 
         error: postError.message || 'Failed to post message to Discord channel. Check bot permissions.' 
@@ -8975,7 +9021,8 @@ app.post('/api/profile/post-message', async (req, res) => {
       return;
     }
   } catch (error) {
-    console.error('Error in profile post-message API:', error);
+    console.error('[Profile API] Error in profile post-message API:', error);
+    console.error('[Profile API] Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
       error: error.message || 'Internal server error' 

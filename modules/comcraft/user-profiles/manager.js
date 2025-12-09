@@ -134,10 +134,25 @@ class UserProfileManager {
         );
       components.push(submitRow);
 
+      // Validate we have at least one component (submit button)
+      if (components.length === 0) {
+        throw new Error('No components to send. Form must have at least one question with options.');
+      }
+
+      // Ensure we don't exceed Discord's limit of 5 action rows
+      if (components.length > 5) {
+        console.warn(`[Profile Manager] Too many action rows (${components.length}), limiting to 5`);
+        components = components.slice(0, 5);
+      }
+
+      console.log(`[Profile Manager] Sending message with ${components.length} action rows, ${totalButtons} buttons total`);
+
       const message = await channel.send({
         embeds: [embed],
         components: components
       });
+
+      console.log(`[Profile Manager] Message sent successfully: ${message.id}`);
 
       // Update form with message ID
       await this.supabase
@@ -147,7 +162,12 @@ class UserProfileManager {
 
       return message;
     } catch (error) {
-      console.error('Error posting form message:', error);
+      console.error('[Profile Manager] Error posting form message:', error);
+      console.error('[Profile Manager] Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       throw error;
     }
   }
