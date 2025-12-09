@@ -190,7 +190,7 @@ async function handleProfileView(interaction, profileManager) {
       const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       const userObj = member || targetUser;
 
-      const embed = profileManager.buildProfileEmbed(form, profile, userObj);
+      const embed = await profileManager.buildProfileEmbed(form, profile, userObj);
       embed.setTitle(`📋 ${form.form_name} - ${userObj.displayName || userObj.username}'s Profile`);
 
       await interaction.editReply({ embeds: [embed] });
@@ -234,7 +234,7 @@ async function handleProfileView(interaction, profileManager) {
     const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     const userObj = member || targetUser;
 
-    const embed = profileManager.buildProfileEmbed(latestForm, latestProfile, userObj);
+    const embed = await profileManager.buildProfileEmbed(latestForm, latestProfile, userObj);
     embed.setTitle(`📋 ${latestForm.form_name} - ${userObj.displayName || userObj.username}'s Profile`);
 
     await interaction.editReply({ embeds: [embed] });

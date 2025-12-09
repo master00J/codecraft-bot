@@ -762,7 +762,7 @@ class UserProfileManager {
    * @param {Object} user - Discord user/member object
    * @returns {EmbedBuilder} - Discord embed
    */
-  buildProfileEmbed(form, response, user) {
+  async buildProfileEmbed(form, response, user) {
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setAuthor({
@@ -770,11 +770,37 @@ class UserProfileManager {
         iconURL: user.user?.displayAvatarURL?.({ dynamic: true, size: 256 }) || user.displayAvatarURL?.({ dynamic: true, size: 256 }) || undefined
       });
 
-    // Add submission info if available
+    // Calculate submission count and duration (same as in submitProfile)
+    const { count: submissionCount } = await this.supabase
+      .from('user_profiles_responses')
+      .select('*', { count: 'exact', head: true })
+      .eq('form_id', form.id)
+      .eq('user_id', user.user?.id || user.id)
+      .eq('status', 'completed')
+      .lte('completed_at', response.completed_at || new Date().toISOString());
+
+    const submissionNumber = submissionCount || 1;
+
+    // Get ordinal suffix
+    const getOrdinal = (n) => {
+      const s = ['th', 'st', 'nd', 'rd'];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    };
+
+    // Calculate duration
+    const createdAt = new Date(response.created_at);
+    const completedAt = response.completed_at ? new Date(response.completed_at) : new Date();
+    const durationSeconds = Math.floor((completedAt - createdAt) / 1000);
+
+    // Add submission info (same format as in thread)
     if (response.completed_at) {
       embed.addFields({
         name: '📊 Submission Info',
-        value: `**Submitted:** <t:${Math.floor(new Date(response.completed_at).getTime() / 1000)}:R>`,
+        value: 
+          `**Count:** This is user ${getOrdinal(submissionNumber)} submission\n` +
+          `**Duration:** Spent ${durationSeconds} seconds to answer\n` +
+          `**Status:** Accepted by ${user.user?.displayName || user.displayName || 'Unknown'} (${user.user?.id || user.id}) <t:${Math.floor(completedAt.getTime() / 1000)}:R>`,
         inline: false
       });
     }
