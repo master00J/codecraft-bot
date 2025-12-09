@@ -4707,11 +4707,11 @@ async function handleProfileSelectMenuInteraction(interaction) {
     try {
       await global.profileManager.updateSelectMenuSelections(formId, questionId, selectedValues, interaction.user.id);
 
-      // Update form message to show visual feedback
-      await global.profileManager.updateFormMessage(formId, interaction.user.id);
+      // Don't update the form message - keep it clean for all users
+      // Each user's selections are stored in the database and will be shown when they submit
 
       await interaction.editReply({
-        content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected)`
+        content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected for this question)`
       });
     } catch (updateError) {
       console.error('[Profile] Error updating selections:', updateError);
