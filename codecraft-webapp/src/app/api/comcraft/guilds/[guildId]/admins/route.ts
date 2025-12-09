@@ -5,6 +5,80 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
+// GET - Fetch all authorized users for a guild
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ guildId: string }> }
+) {
+  const { guildId } = await params;
+
+  try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // @ts-ignore
+    const requestingUserId = session.user.discordId
+
+    // Check if requesting user is owner or platform admin
+    const { data: guild } = await supabaseAdmin
+      .from('guild_configs')
+      .select('owner_discord_id')
+      .eq('guild_id', guildId)
+      .single()
+
+    if (!guild) {
+      return NextResponse.json({ error: 'Guild not found' }, { status: 404 })
+    }
+
+    // Check if user is platform admin
+    const { data: platformUser } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('discord_id', requestingUserId)
+      .maybeSingle()
+
+    const isPlatformAdmin = platformUser?.is_admin === true
+    const isGuildOwner = guild.owner_discord_id === requestingUserId
+
+    if (!isPlatformAdmin && !isGuildOwner) {
+      return NextResponse.json({ error: 'Only guild owner or platform admin can view admins' }, { status: 403 })
+    }
+
+    // Get all authorized users
+    const { data: authorizedUsers, error } = await supabaseAdmin
+      .from('guild_authorized_users')
+      .select('*')
+      .eq('guild_id', guildId)
+      .order('added_at', { ascending: false })
+
+    if (error) {
+      throw error
+    }
+
+    // Also include owner in the list
+    const ownerEntry = {
+      id: null,
+      guild_id: guildId,
+      discord_id: guild.owner_discord_id,
+      role: 'owner',
+      added_by: null,
+      added_at: null
+    }
+
+    return NextResponse.json({
+      success: true,
+      authorizedUsers: [ownerEntry, ...(authorizedUsers || [])]
+    })
+
+  } catch (error) {
+    console.error('Error fetching authorized users:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 // Add admin to guild
 export async function POST(
   request: NextRequest,

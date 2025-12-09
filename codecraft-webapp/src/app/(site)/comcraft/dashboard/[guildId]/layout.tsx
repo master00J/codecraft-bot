@@ -43,7 +43,8 @@ import {
   X,
   Sparkles as SparklesIcon,
   FileText,
-  Heart
+  Heart,
+  UserCog
 } from 'lucide-react';
 import {
   DndContext,
@@ -280,6 +281,7 @@ export default function GuildDashboardLayout({
     { name: 'Referrals', href: `/comcraft/dashboard/${guildId}/referrals`, icon: Gift, tier: featureTiers['Referrals'] },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
+    { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },
   ];
 
   // Apply menu order if available
