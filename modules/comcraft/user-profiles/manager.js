@@ -157,6 +157,11 @@ class UserProfileManager {
           // Text/Number type - use button to open modal
           if (remainingRows <= 0) break;
           
+          if (!question.text) {
+            console.warn(`[Profile Manager] Question ${question.id || i} has no text, skipping`);
+            continue;
+          }
+          
           const buttonLabel = question.text.length > 80 
             ? question.text.substring(0, 77) + '...' 
             : question.text;
@@ -202,16 +207,24 @@ class UserProfileManager {
 
       // Warn if questions were skipped due to Discord's 5 action row limit
       const totalQuestionsUsed = components.length - 1; // Subtract submit button row
-      if (form.questions.length > 0) {
+      if (form.questions && form.questions.length > 0) {
         // Count how many questions we could fit
         let questionsFitted = 0;
         let rowsUsed = 0;
         for (let i = 0; i < form.questions.length && rowsUsed < 4; i++) {
           const question = form.questions[i];
-          if (question.options.length === 0) continue;
+          const questionType = question.type || 'dropdown';
           
-          const optionChunks = Math.ceil(question.options.length / MAX_OPTIONS_PER_MENU);
-          const rowsNeeded = optionChunks;
+          let rowsNeeded = 1; // Default: 1 row per question
+          
+          if (questionType === 'dropdown') {
+            if (!question.options || question.options.length === 0) continue;
+            const optionChunks = Math.ceil(question.options.length / MAX_OPTIONS_PER_MENU);
+            rowsNeeded = optionChunks;
+          } else if (questionType === 'text' || questionType === 'number') {
+            // Text/number questions take 1 row (but might be combined with buttons)
+            rowsNeeded = 1;
+          }
           
           if (rowsUsed + rowsNeeded <= 4) {
             questionsFitted++;
