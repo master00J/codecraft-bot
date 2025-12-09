@@ -390,6 +390,19 @@ try {
   console.warn('Maid Job Manager not available:', error.message);
 }
 
+// Initialize User Profile Manager
+let profileManager = null;
+try {
+  const UserProfileManager = require('./modules/comcraft/user-profiles/manager');
+  if (UserProfileManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    profileManager = new UserProfileManager(client);
+    global.profileManager = profileManager;
+    console.log('✅ User Profile Manager initialized');
+  }
+} catch (error) {
+  console.warn('User Profile Manager not available:', error.message);
+}
+
 const {
   runGuildAiPrompt,
   handleAskAiCommand,
@@ -1653,6 +1666,27 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
+      // Profile button handlers
+      if (interaction.customId.startsWith('profile_checkbox_') || 
+          interaction.customId.startsWith('profile_submit_')) {
+        if (!global.profileManager) {
+          return interaction.reply({
+            content: '❌ Profile system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'user_profiles',
+          'Premium'
+        );
+        if (!allowed) return;
+        
+        await handleProfileButtonInteraction(interaction);
+        return;
+      }
+
       // Event RSVP button handlers
       if (interaction.customId.startsWith('event_rsvp_')) {
         if (global.eventManager) {
@@ -1926,6 +1960,26 @@ client.on('interactionCreate', async (interaction) => {
         
         const { handlePollCommand } = require('./modules/comcraft/polls/commands');
         await handlePollCommand(interaction, global.pollManager);
+        break;
+      }
+
+      // ============ PROFILE COMMANDS ============
+      case 'profile': {
+        if (!global.profileManager) {
+          return interaction.reply({
+            content: '❌ Profile system is not available at this time.',
+            ephemeral: true
+          });
+        }
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'user_profiles',
+          'Premium'
+        );
+        if (!allowed) break;
+        const { handleProfileCommand } = require('./modules/comcraft/user-profiles/commands');
+        await handleProfileCommand(interaction, global.profileManager);
         break;
       }
 
@@ -4585,6 +4639,95 @@ async function handlePollButtonInteraction(interaction) {
   }
 }
 
+async function handleProfileButtonInteraction(interaction) {
+  try {
+    if (!global.profileManager) {
+      return interaction.reply({
+        content: '❌ Profile system is not available.',
+        ephemeral: true
+      });
+    }
+
+    const customId = interaction.customId;
+
+    if (customId.startsWith('profile_checkbox_')) {
+      // Format: profile_checkbox_{formId}_{questionId}_{optionId}
+      const parts = customId.split('_');
+      const formId = parts[2];
+      const questionId = parts[3];
+      const optionId = parts[4];
+
+      try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const form = await global.profileManager.getForm(formId);
+        if (!form) {
+          return interaction.editReply({ content: '❌ Form not found!' });
+        }
+
+        if (form.guild_id !== interaction.guildId) {
+          return interaction.editReply({ content: '❌ That form belongs to a different server!' });
+        }
+
+        if (!form.enabled) {
+          return interaction.editReply({ content: '❌ This form is currently disabled!' });
+        }
+
+        // Toggle checkbox
+        await global.profileManager.toggleCheckbox(formId, questionId, optionId, interaction.user.id);
+
+        // Update form message to show visual feedback
+        await global.profileManager.updateFormMessage(formId, interaction.user.id);
+
+        await interaction.editReply({
+          content: '✅ Selection updated!'
+        });
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error.message}`
+        }).catch(() => {});
+      }
+    } else if (customId.startsWith('profile_submit_')) {
+      // Format: profile_submit_{formId}
+      const formId = customId.replace('profile_submit_', '');
+
+      try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const form = await global.profileManager.getForm(formId);
+        if (!form) {
+          return interaction.editReply({ content: '❌ Form not found!' });
+        }
+
+        if (form.guild_id !== interaction.guildId) {
+          return interaction.editReply({ content: '❌ That form belongs to a different server!' });
+        }
+
+        if (!form.enabled) {
+          return interaction.editReply({ content: '❌ This form is currently disabled!' });
+        }
+
+        // Submit profile and create thread
+        const result = await global.profileManager.submitProfile(formId, interaction.user.id, interaction.guild);
+
+        await interaction.editReply({
+          content: `✅ Profile submitted successfully! Check ${result.thread.toString()}`
+        });
+      } catch (error) {
+        await interaction.editReply({
+          content: `❌ ${error.message}`
+        }).catch(() => {});
+      }
+    }
+  } catch (error) {
+    console.error('Error handling profile button:', error);
+    await interaction.reply({
+      content: '❌ An error occurred while processing your request.',
+      ephemeral: true
+    }).catch(() => {});
+  }
+}
+
 /**
  * Handle verification button - removes unverified role when user verifies
  */
@@ -7179,6 +7322,17 @@ async function registerCommands(clientInstance) {
       }
     })(),
 
+    // Profile commands
+    ...(function() {
+      try {
+        const { createProfileCommands } = require('./modules/comcraft/user-profiles/commands');
+        return createProfileCommands();
+      } catch (error) {
+        console.warn('Failed to load profile commands:', error);
+        return [];
+      }
+    })(),
+
     // Maid Job commands
     ...(function() {
       try {
@@ -8745,7 +8899,81 @@ app.post('/api/discord/:guildId/quick-setup/:type', async (req, res) => {
   }
 });
 
-// Check bot permissions
+// Post profile form message to Discord
+app.post('/api/profile/post-message', async (req, res) => {
+  try {
+    const { formId, guildId } = req.body;
+
+    if (!formId || !guildId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields: formId, guildId' 
+      });
+    }
+
+    if (!global.profileManager) {
+      return res.status(503).json({ 
+        success: false, 
+        error: 'Profile system is not available' 
+      });
+    }
+
+    // Get form from database
+    const form = await global.profileManager.getForm(formId);
+    if (!form) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Form not found' 
+      });
+    }
+
+    if (form.guild_id !== guildId) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Form does not belong to this guild' 
+      });
+    }
+
+    // Get guild and channel
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Guild not found. Make sure the bot is in the server.' 
+      });
+    }
+
+    const channel = await guild.channels.fetch(form.channel_id).catch(() => null);
+    if (!channel) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Channel not found' 
+      });
+    }
+
+    if (!channel.isTextBased()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Channel must be a text channel' 
+      });
+    }
+
+    // Post the form message
+    const message = await global.profileManager.postFormMessage(form, channel);
+
+    res.json({ 
+      success: true, 
+      messageId: message.id 
+    });
+  } catch (error) {
+    console.error('Error in profile post-message API:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Internal server error' 
+    });
+  }
+});
+
 app.get('/api/discord/:guildId/permissions', async (req, res) => {
   try {
     const { guildId } = req.params;
