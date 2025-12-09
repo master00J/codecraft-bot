@@ -435,7 +435,7 @@ export default function GuildDashboardLayout({
           <p className="text-gray-400 mb-6">
             You don't have permission to access this server's dashboard.
           </p>
-          <Link href={`/${locale}/comcraft/dashboard`}>
+          <Link href="/comcraft/dashboard">
             <Button>Go to Dashboard</Button>
           </Link>
         </div>

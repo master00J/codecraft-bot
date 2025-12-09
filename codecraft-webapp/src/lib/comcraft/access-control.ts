@@ -51,10 +51,16 @@ export async function getGuildAccess(guildId: string, discordId: string) {
     .maybeSingle();
 
   if (guildError || !guild) {
+    console.warn(`[Access Control] Guild ${guildId} not found or error:`, guildError);
     return { allowed: false, reason: 'Guild not found' };
   }
 
-  if (guild.owner_discord_id === discordId) {
+  // Normalize both IDs to strings for comparison
+  const ownerId = String(guild.owner_discord_id);
+  const userId = String(discordId);
+
+  if (ownerId === userId) {
+    console.log(`[Access Control] User ${discordId} is owner of guild ${guildId}`);
     return { allowed: true };
   }
 
