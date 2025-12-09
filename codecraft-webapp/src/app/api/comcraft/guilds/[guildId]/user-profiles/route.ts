@@ -23,11 +23,24 @@ async function getGuildAccess(guildId: string, discordId: string) {
     return { allowed: true };
   }
 
-  const { data: authorized } = await supabaseAdmin
+  // Check guild_authorized_users table (uses discord_id)
+  const { data: authorizedGuild } = await supabaseAdmin
     .from('guild_authorized_users')
     .select('role')
     .eq('guild_id', guildId)
     .eq('discord_id', discordId)
+    .maybeSingle();
+
+  if (authorizedGuild) {
+    return { allowed: true };
+  }
+
+  // Check authorized_users table (uses user_id)
+  const { data: authorized } = await supabaseAdmin
+    .from('authorized_users')
+    .select('user_id')
+    .eq('guild_id', guildId)
+    .eq('user_id', discordId)
     .maybeSingle();
 
   if (authorized) {
