@@ -200,6 +200,7 @@ class UserProfileManager {
   async getForms(guildId) {
     const { data: forms, error } = await this.supabase
       .from('user_profiles_forms')
+      .select('*')
       .eq('guild_id', guildId)
       .order('created_at', { ascending: false });
 
