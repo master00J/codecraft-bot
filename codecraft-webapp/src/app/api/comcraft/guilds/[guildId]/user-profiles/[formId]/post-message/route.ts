@@ -131,18 +131,36 @@ export async function POST(
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ success: false, error: 'Unknown error' }));
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        return NextResponse.json(
+          { error: errorText || 'Failed to post message to Discord' },
+          { status: response.status }
+        );
+      }
       return NextResponse.json(
-        { error: errorData.error || 'Failed to post message to Discord' },
+        { error: errorData.error || errorData.message || 'Failed to post message to Discord' },
         { status: response.status }
       );
     }
 
-    const data = await response.json();
-
-    if (!data.success) {
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      console.error('Error parsing bot API response:', error);
       return NextResponse.json(
-        { error: data.error || 'Failed to post message to Discord' },
+        { error: 'Invalid response from bot API' },
+        { status: 500 }
+      );
+    }
+
+    if (!data || !data.success) {
+      return NextResponse.json(
+        { error: data?.error || data?.message || 'Failed to post message to Discord' },
         { status: 500 }
       );
     }

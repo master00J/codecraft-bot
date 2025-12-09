@@ -8959,12 +8959,21 @@ app.post('/api/profile/post-message', async (req, res) => {
     }
 
     // Post the form message
-    const message = await global.profileManager.postFormMessage(form, channel);
+    try {
+      const message = await global.profileManager.postFormMessage(form, channel);
 
-    res.json({ 
-      success: true, 
-      messageId: message.id 
-    });
+      res.json({ 
+        success: true, 
+        messageId: message.id 
+      });
+    } catch (postError) {
+      console.error('Error posting form message to Discord:', postError);
+      res.status(500).json({ 
+        success: false, 
+        error: postError.message || 'Failed to post message to Discord channel. Check bot permissions.' 
+      });
+      return;
+    }
   } catch (error) {
     console.error('Error in profile post-message API:', error);
     res.status(500).json({ 

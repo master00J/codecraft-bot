@@ -78,20 +78,48 @@ class UserProfileManager {
       let formContent = '';
       const components = [];
 
+      // Discord limits: max 5 action rows, max 5 buttons per row = 25 buttons total
+      let totalButtons = 0;
+      const MAX_BUTTONS = 25;
+
       for (const question of form.questions) {
         formContent += `\n**${question.text}**\n`;
         
-        const questionRow = new ActionRowBuilder();
+        let questionRow = new ActionRowBuilder();
+        let buttonsInRow = 0;
+        
         for (const option of question.options) {
+          // Check if we've reached the button limit (max 25 buttons total, max 5 rows)
+          if (totalButtons >= MAX_BUTTONS || components.length >= 5) {
+            console.warn(`Button/row limit reached. Skipping remaining options.`);
+            break;
+          }
+
+          // Discord button label limit is 80 characters
+          const label = option.text.length > 80 ? option.text.substring(0, 77) + '...' : option.text;
+          
+          // Max 5 buttons per row
+          if (buttonsInRow >= 5) {
+            // Start a new row for this question
+            components.push(questionRow);
+            questionRow = new ActionRowBuilder();
+            buttonsInRow = 0;
+          }
+          
           const button = new ButtonBuilder()
             .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
-            .setLabel(option.text)
+            .setLabel(label)
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('☐');
           
           questionRow.addComponents(button);
+          buttonsInRow++;
+          totalButtons++;
         }
-        components.push(questionRow);
+        
+        if (questionRow.components.length > 0 && components.length < 5) {
+          components.push(questionRow);
+        }
         formContent += '\n';
       }
 
