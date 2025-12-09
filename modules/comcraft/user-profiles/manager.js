@@ -123,23 +123,28 @@ class UserProfileManager {
         formContent += '\n';
       }
 
-      // Add submit button
-      const submitRow = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId(`profile_submit_${form.id}`)
-            .setLabel('Submit Profile')
-            .setStyle(ButtonStyle.Success)
-            .setEmoji('✅')
-        );
-      components.push(submitRow);
+      // Add submit button (only if we haven't reached the 5 row limit)
+      if (components.length < 5) {
+        const submitRow = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`profile_submit_${form.id}`)
+              .setLabel('Submit Profile')
+              .setStyle(ButtonStyle.Success)
+              .setEmoji('✅')
+          );
+        components.push(submitRow);
+      } else {
+        console.warn('[Profile Manager] Cannot add submit button - reached maximum action rows (5)');
+        throw new Error('Form has too many questions/options. Maximum 5 action rows allowed (including submit button).');
+      }
 
       // Validate we have at least one component (submit button)
       if (components.length === 0) {
         throw new Error('No components to send. Form must have at least one question with options.');
       }
 
-      // Ensure we don't exceed Discord's limit of 5 action rows
+      // Ensure we don't exceed Discord's limit of 5 action rows (shouldn't happen now, but double-check)
       if (components.length > 5) {
         console.warn(`[Profile Manager] Too many action rows (${components.length}), limiting to 5`);
         components = components.slice(0, 5);
