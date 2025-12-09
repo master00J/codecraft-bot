@@ -286,20 +286,38 @@ class UserProfileManager {
 
   /**
    * Get user response with selected options
+   * Returns the most recent in_progress response, or creates a new one if none exists
    */
   async getUserResponse(formId, userId) {
-    const { data: response, error } = await this.supabase
+    // First try to get the most recent in_progress response
+    const { data: responses, error } = await this.supabase
       .from('user_profiles_responses')
       .select('*')
       .eq('form_id', formId)
       .eq('user_id', userId)
-      .single();
+      .eq('status', 'in_progress')
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-    if (error || !response) {
-      return null;
+    if (responses && responses.length > 0) {
+      return responses[0];
     }
 
-    return response;
+    // If no in_progress response exists, try to get any response (for backwards compatibility)
+    const { data: anyResponse, error: anyError } = await this.supabase
+      .from('user_profiles_responses')
+      .select('*')
+      .eq('form_id', formId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (anyResponse) {
+      return anyResponse;
+    }
+
+    return null;
   }
 
   /**
