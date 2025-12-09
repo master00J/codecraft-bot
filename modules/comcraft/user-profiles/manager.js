@@ -817,6 +817,11 @@ class UserProfileManager {
         return null;
       }
 
+      if (!form.questions || !Array.isArray(form.questions)) {
+        console.warn(`[Profile Manager] Form ${formId} has no questions array, skipping update`);
+        return null;
+      }
+
       const response = await this.getUserResponse(formId, userId);
       const selectedOptions = response?.responses || {};
 

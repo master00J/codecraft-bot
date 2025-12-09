@@ -4934,14 +4934,20 @@ async function handleProfileModalInteraction(interaction) {
     // Update user's response
     await global.profileManager.updateInputResponse(formId, questionId, inputValue, interaction.user.id);
 
-    // Update form message to show visual feedback
-    await global.profileManager.updateFormMessage(formId, interaction.user.id);
+    // Update form message to show visual feedback (fail silently if it doesn't work)
+    try {
+      await global.profileManager.updateFormMessage(formId, interaction.user.id);
+    } catch (updateError) {
+      console.warn('[Profile] Could not update form message (non-critical):', updateError.message);
+      // Continue anyway - the response was saved successfully
+    }
 
     await interaction.editReply({
       content: `✅ Answer saved! (${questionType === 'number' ? inputValue : inputValue.length + ' characters'})`
     });
   } catch (error) {
     console.error('[Profile] Error handling modal:', error);
+    console.error('[Profile] Error stack:', error.stack);
     await interaction.editReply({
       content: `❌ ${error.message || 'Failed to save answer. Please try again.'}`
     }).catch(() => {});
