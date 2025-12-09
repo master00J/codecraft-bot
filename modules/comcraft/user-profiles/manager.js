@@ -6,7 +6,10 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  ComponentType
+  ComponentType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require('discord.js');
 
 class UserProfileManager {
@@ -29,14 +32,23 @@ class UserProfileManager {
       }
 
       for (const question of questions) {
-        if (!question.id || !question.text || !Array.isArray(question.options) || question.options.length === 0) {
-          throw new Error('Each question must have an id, text, and at least one option');
+        if (!question.id || !question.text) {
+          throw new Error('Each question must have an id and text');
         }
-        for (const option of question.options) {
-          if (!option.id || !option.text) {
-            throw new Error('Each option must have an id and text');
+        
+        const questionType = question.type || 'dropdown';
+        
+        if (questionType === 'dropdown') {
+          if (!Array.isArray(question.options) || question.options.length === 0) {
+            throw new Error('Dropdown questions must have at least one option');
+          }
+          for (const option of question.options) {
+            if (!option.id || !option.text) {
+              throw new Error('Each option must have an id and text');
+            }
           }
         }
+        // Text and number types don't require options
       }
 
       const { data: form, error } = await this.supabase
@@ -76,66 +88,100 @@ class UserProfileManager {
         .setFooter({ text: 'Use the dropdowns to select your answers, then click "Submit Profile" when done' })
         .setTimestamp();
 
-      // Build components with select menus
+      // Build components with select menus, buttons for text/number inputs
       const components = [];
 
       // Discord limits: max 5 action rows total (including submit button)
       // Max 25 options per select menu
-      // If a question has more than 25 options, we split it into multiple menus
+      // Max 5 buttons per row
       const MAX_OPTIONS_PER_MENU = 25;
+      const MAX_BUTTONS_PER_ROW = 5;
       let remainingRows = 4; // Leave room for submit button
       
       for (let i = 0; i < form.questions.length && remainingRows > 0; i++) {
         const question = form.questions[i];
+        const questionType = question.type || 'dropdown';
         
-        if (question.options.length === 0) continue;
+        if (questionType === 'dropdown') {
+          // Dropdown type - use select menus
+          if (!question.options || question.options.length === 0) continue;
 
-        // Split options into chunks of 25 if needed
-        const optionChunks = [];
-        for (let j = 0; j < question.options.length; j += MAX_OPTIONS_PER_MENU) {
-          optionChunks.push(question.options.slice(j, j + MAX_OPTIONS_PER_MENU));
-        }
-
-        // Create a select menu for each chunk
-        for (let chunkIndex = 0; chunkIndex < optionChunks.length && remainingRows > 0; chunkIndex++) {
-          const chunk = optionChunks[chunkIndex];
-          
-          const menuOptions = chunk.map(option => {
-            const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
-            const description = option.description 
-              ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
-              : undefined;
-            
-            const menuOption = new StringSelectMenuOptionBuilder()
-              .setLabel(label)
-              .setValue(`${question.id}:${option.id}`); // Format: questionId:optionId
-            
-            if (description) {
-              menuOption.setDescription(description);
-            }
-            
-            return menuOption;
-          });
-
-          if (menuOptions.length === 0) continue;
-
-          // Create placeholder text indicating which part this is (if multiple chunks)
-          let placeholder = question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text;
-          if (optionChunks.length > 1) {
-            placeholder = `${placeholder} (Part ${chunkIndex + 1}/${optionChunks.length})`;
+          // Split options into chunks of 25 if needed
+          const optionChunks = [];
+          for (let j = 0; j < question.options.length; j += MAX_OPTIONS_PER_MENU) {
+            optionChunks.push(question.options.slice(j, j + MAX_OPTIONS_PER_MENU));
           }
-          placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
 
-          const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`) // Add chunkIndex to customId
-            .setPlaceholder(`Select options: ${placeholder}`)
-            .setMinValues(0) // Allow deselecting all
-            .setMaxValues(menuOptions.length) // Allow selecting all options in this chunk
-            .addOptions(menuOptions);
+          // Create a select menu for each chunk
+          for (let chunkIndex = 0; chunkIndex < optionChunks.length && remainingRows > 0; chunkIndex++) {
+            const chunk = optionChunks[chunkIndex];
+            
+            const menuOptions = chunk.map(option => {
+              const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
+              const description = option.description 
+                ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
+                : undefined;
+              
+              const menuOption = new StringSelectMenuOptionBuilder()
+                .setLabel(label)
+                .setValue(`${question.id}:${option.id}`); // Format: questionId:optionId
+              
+              if (description) {
+                menuOption.setDescription(description);
+              }
+              
+              return menuOption;
+            });
 
-          const row = new ActionRowBuilder().addComponents(selectMenu);
-          components.push(row);
-          remainingRows--;
+            if (menuOptions.length === 0) continue;
+
+            // Create placeholder text indicating which part this is (if multiple chunks)
+            let placeholder = question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text;
+            if (optionChunks.length > 1) {
+              placeholder = `${placeholder} (Part ${chunkIndex + 1}/${optionChunks.length})`;
+            }
+            placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
+
+            const selectMenu = new StringSelectMenuBuilder()
+              .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`)
+              .setPlaceholder(`Select options: ${placeholder}`)
+              .setMinValues(0)
+              .setMaxValues(menuOptions.length)
+              .addOptions(menuOptions);
+
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+            components.push(row);
+            remainingRows--;
+          }
+        } else if (questionType === 'text' || questionType === 'number') {
+          // Text/Number type - use button to open modal
+          if (remainingRows <= 0) break;
+          
+          const buttonLabel = question.text.length > 80 
+            ? question.text.substring(0, 77) + '...' 
+            : question.text;
+          
+          const button = new ButtonBuilder()
+            .setCustomId(`profile_input:${form.id}:${question.id}`)
+            .setLabel(buttonLabel)
+            .setStyle(ButtonStyle.Primary);
+          
+          // Try to add to existing row if there's space, otherwise create new row
+          let addedToRow = false;
+          if (components.length > 0) {
+            const lastRow = components[components.length - 1];
+            const lastRowComponents = lastRow.components || [];
+            if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
+              lastRow.addComponents(button);
+              addedToRow = true;
+            }
+          }
+          
+          if (!addedToRow) {
+            const row = new ActionRowBuilder().addComponents(button);
+            components.push(row);
+            remainingRows--;
+          }
         }
       }
 
@@ -328,6 +374,47 @@ class UserProfileManager {
   }
 
   /**
+   * Update text/number input response for a question
+   * @param {string} formId - Form ID
+   * @param {string} questionId - Question ID
+   * @param {string} inputValue - The text/number value entered by the user
+   * @param {string} userId - User ID
+   */
+  async updateInputResponse(formId, questionId, inputValue, userId) {
+    try {
+      const form = await this.getForm(formId);
+      if (!form) {
+        throw new Error('Form not found');
+      }
+
+      // Get or create user response
+      const response = await this.getOrCreateResponse(formId, form.guild_id, userId);
+
+      // Update responses object
+      const responses = response.responses || {};
+      responses[questionId] = inputValue; // For text/number, store as string
+
+      // Update in database
+      const { error } = await this.supabase
+        .from('user_profiles_responses')
+        .update({
+          responses: responses,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', response.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[Profile Manager] Error updating input response:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update select menu selections for a question
    * @param {string} formId - Form ID
    * @param {string} questionId - Question ID
@@ -488,16 +575,24 @@ class UserProfileManager {
 
       const response = await this.getUserResponse(formId, userId);
       if (!response || !response.responses || Object.keys(response.responses).length === 0) {
-        throw new Error('No response found. Please select some options first.');
+        throw new Error('No response found. Please fill out the form first.');
       }
 
-      // Check if there are any selected options
-      const hasSelectedOptions = Object.values(response.responses).some(
-        optionIds => Array.isArray(optionIds) && optionIds.length > 0
+      // Check if there are any answers (dropdown selections, text, or number inputs)
+      const hasAnswers = Object.values(response.responses).some(
+        value => {
+          // Check if it's an array (dropdown) with items, or a string (text/number) with content
+          if (Array.isArray(value)) {
+            return value.length > 0;
+          } else if (typeof value === 'string') {
+            return value.trim().length > 0;
+          }
+          return false;
+        }
       );
       
-      if (!hasSelectedOptions) {
-        throw new Error('Please select at least one option before submitting.');
+      if (!hasAnswers) {
+        throw new Error('Please answer at least one question before submitting.');
       }
 
       // Get channel
@@ -565,25 +660,47 @@ class UserProfileManager {
       // Build User Answer section
       let answerFields = [];
       for (const question of form.questions) {
-        const selectedOptionIds = response.responses[question.id] || [];
-        if (selectedOptionIds.length === 0) {
-          continue; // Skip unanswered questions
+        const questionType = question.type || 'dropdown';
+        const questionResponse = response.responses[question.id];
+        
+        // Skip if no answer
+        if (!questionResponse) {
+          continue;
         }
 
-        const selectedOptions = question.options.filter(opt => 
-          selectedOptionIds.includes(opt.id)
-        );
+        let answerText = '';
 
-        // Join all selected options with comma, or show single option
-        const answerText = selectedOptions
-          .map(opt => opt.text)
-          .join(', ');
+        if (questionType === 'dropdown') {
+          // Dropdown type - response is array of option IDs
+          const selectedOptionIds = Array.isArray(questionResponse) ? questionResponse : [];
+          if (selectedOptionIds.length === 0) {
+            continue; // Skip unanswered questions
+          }
 
-        answerFields.push({
-          name: question.text,
-          value: answerText,
-          inline: false
-        });
+          const selectedOptions = (question.options || []).filter(opt => 
+            selectedOptionIds.includes(opt.id)
+          );
+
+          // Join all selected options with comma
+          answerText = selectedOptions
+            .map(opt => opt.text)
+            .join(', ');
+        } else if (questionType === 'text' || questionType === 'number') {
+          // Text/Number type - response is a string
+          if (typeof questionResponse === 'string' && questionResponse.trim().length > 0) {
+            answerText = questionResponse;
+          } else {
+            continue; // Skip empty answers
+          }
+        }
+
+        if (answerText) {
+          answerFields.push({
+            name: question.text,
+            value: answerText.length > 1024 ? answerText.substring(0, 1021) + '...' : answerText,
+            inline: false
+          });
+        }
       }
 
       // Add User Answer section as a field with separator
@@ -700,64 +817,108 @@ class UserProfileManager {
       const message = await channel.messages.fetch(form.message_id).catch(() => null);
       if (!message) return null;
 
-      // Rebuild components with select menus (showing current selections)
+      // Rebuild components (same logic as postFormMessage, but show current values)
       const components = [];
       const MAX_OPTIONS_PER_MENU = 25;
+      const MAX_BUTTONS_PER_ROW = 5;
       let remainingRows = 4; // Leave room for submit button
 
       for (let i = 0; i < form.questions.length && remainingRows > 0; i++) {
         const question = form.questions[i];
-        const questionSelections = selectedOptions[question.id] || [];
+        const questionType = question.type || 'dropdown';
+        const questionValue = selectedOptions[question.id];
         
-        if (question.options.length === 0) continue;
-
-        // Split options into chunks of 25 if needed (same logic as postFormMessage)
-        const optionChunks = [];
-        for (let j = 0; j < question.options.length; j += MAX_OPTIONS_PER_MENU) {
-          optionChunks.push(question.options.slice(j, j + MAX_OPTIONS_PER_MENU));
-        }
-
-        // Create a select menu for each chunk
-        for (let chunkIndex = 0; chunkIndex < optionChunks.length && remainingRows > 0; chunkIndex++) {
-          const chunk = optionChunks[chunkIndex];
+        if (questionType === 'dropdown') {
+          // Dropdown type
+          if (!question.options || question.options.length === 0) continue;
           
-          const menuOptions = chunk.map(option => {
-            const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
-            const description = option.description 
-              ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
-              : undefined;
-            
-            const menuOption = new StringSelectMenuOptionBuilder()
-              .setLabel(label)
-              .setValue(`${question.id}:${option.id}`)
-              .setDefault(questionSelections.includes(option.id)); // Show as selected if user has chosen it
-            
-            if (description) {
-              menuOption.setDescription(description);
-            }
-            
-            return menuOption;
-          });
+          const questionSelections = Array.isArray(questionValue) ? questionValue : [];
 
-          if (menuOptions.length === 0) continue;
-
-          // Create placeholder text indicating which part this is (if multiple chunks)
-          let placeholder = question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text;
-          if (optionChunks.length > 1) {
-            placeholder = `${placeholder} (Part ${chunkIndex + 1}/${optionChunks.length})`;
+          // Split options into chunks of 25 if needed
+          const optionChunks = [];
+          for (let j = 0; j < question.options.length; j += MAX_OPTIONS_PER_MENU) {
+            optionChunks.push(question.options.slice(j, j + MAX_OPTIONS_PER_MENU));
           }
-          placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
 
-          const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`)
-            .setPlaceholder(`Select options: ${placeholder}`)
-            .setMinValues(0)
-            .setMaxValues(menuOptions.length)
-            .addOptions(menuOptions);
+          // Create a select menu for each chunk
+          for (let chunkIndex = 0; chunkIndex < optionChunks.length && remainingRows > 0; chunkIndex++) {
+            const chunk = optionChunks[chunkIndex];
+            
+            const menuOptions = chunk.map(option => {
+              const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
+              const description = option.description 
+                ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
+                : undefined;
+              
+              const menuOption = new StringSelectMenuOptionBuilder()
+                .setLabel(label)
+                .setValue(`${question.id}:${option.id}`)
+                .setDefault(questionSelections.includes(option.id));
+              
+              if (description) {
+                menuOption.setDescription(description);
+              }
+              
+              return menuOption;
+            });
 
-          const row = new ActionRowBuilder().addComponents(selectMenu);
-          components.push(row);
-          remainingRows--;
+            if (menuOptions.length === 0) continue;
+
+            let placeholder = question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text;
+            if (optionChunks.length > 1) {
+              placeholder = `${placeholder} (Part ${chunkIndex + 1}/${optionChunks.length})`;
+            }
+            placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
+
+            const selectMenu = new StringSelectMenuBuilder()
+              .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`)
+              .setPlaceholder(`Select options: ${placeholder}`)
+              .setMinValues(0)
+              .setMaxValues(menuOptions.length)
+              .addOptions(menuOptions);
+
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+            components.push(row);
+            remainingRows--;
+          }
+        } else if (questionType === 'text' || questionType === 'number') {
+          // Text/Number type - show button with value indicator
+          if (remainingRows <= 0) break;
+          
+          let buttonLabel = question.text.length > 80 
+            ? question.text.substring(0, 77) + '...' 
+            : question.text;
+          
+          // Add value indicator if filled
+          if (questionValue && typeof questionValue === 'string') {
+            const valuePreview = questionValue.length > 20 
+              ? questionValue.substring(0, 17) + '...' 
+              : questionValue;
+            buttonLabel = `${buttonLabel}${valuePreview ? `: ${valuePreview}` : ''}`;
+            buttonLabel = buttonLabel.length > 80 ? buttonLabel.substring(0, 77) + '...' : buttonLabel;
+          }
+          
+          const button = new ButtonBuilder()
+            .setCustomId(`profile_input:${form.id}:${question.id}`)
+            .setLabel(buttonLabel)
+            .setStyle(questionValue ? ButtonStyle.Success : ButtonStyle.Primary);
+          
+          // Try to add to existing row if there's space
+          let addedToRow = false;
+          if (components.length > 0) {
+            const lastRow = components[components.length - 1];
+            const lastRowComponents = lastRow.components || [];
+            if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
+              lastRow.addComponents(button);
+              addedToRow = true;
+            }
+          }
+          
+          if (!addedToRow) {
+            const row = new ActionRowBuilder().addComponents(button);
+            components.push(row);
+            remainingRows--;
+          }
         }
       }
 
@@ -893,24 +1054,46 @@ class UserProfileManager {
     // Add User Answer section
     let answerFields = [];
     for (const question of form.questions) {
-      const selectedOptionIds = response.responses[question.id] || [];
-      if (selectedOptionIds.length === 0) {
-        continue; // Skip unanswered questions
+      const questionType = question.type || 'dropdown';
+      const questionResponse = response.responses[question.id];
+      
+      // Skip if no answer
+      if (!questionResponse) {
+        continue;
       }
 
-      const selectedOptions = question.options.filter(opt => 
-        selectedOptionIds.includes(opt.id)
-      );
+      let answerText = '';
 
-      const answerText = selectedOptions
-        .map(opt => opt.text)
-        .join(', ');
+      if (questionType === 'dropdown') {
+        // Dropdown type - response is array of option IDs
+        const selectedOptionIds = Array.isArray(questionResponse) ? questionResponse : [];
+        if (selectedOptionIds.length === 0) {
+          continue; // Skip unanswered questions
+        }
 
-      answerFields.push({
-        name: question.text,
-        value: answerText || '*No answer*',
-        inline: false
-      });
+        const selectedOptions = (question.options || []).filter(opt => 
+          selectedOptionIds.includes(opt.id)
+        );
+
+        answerText = selectedOptions
+          .map(opt => opt.text)
+          .join(', ');
+      } else if (questionType === 'text' || questionType === 'number') {
+        // Text/Number type - response is a string
+        if (typeof questionResponse === 'string' && questionResponse.trim().length > 0) {
+          answerText = questionResponse;
+        } else {
+          continue; // Skip empty answers
+        }
+      }
+
+      if (answerText) {
+        answerFields.push({
+          name: question.text,
+          value: answerText.length > 1024 ? answerText.substring(0, 1021) + '...' : answerText,
+          inline: false
+        });
+      }
     }
 
     if (answerFields.length > 0) {
@@ -931,6 +1114,53 @@ class UserProfileManager {
     embed.setTimestamp(response.completed_at ? new Date(response.completed_at) : new Date());
 
     return embed;
+  }
+
+  /**
+   * Create a modal for text/number input questions
+   */
+  createInputModal(formId, questionId, question) {
+    const questionType = question.type || 'text';
+    const modal = new ModalBuilder()
+      .setCustomId(`profile_modal:${formId}:${questionId}`)
+      .setTitle(question.text.length > 45 ? question.text.substring(0, 42) + '...' : question.text);
+
+    let inputStyle = TextInputStyle.Short;
+    let inputPlaceholder = question.placeholder || (questionType === 'number' ? 'Enter a number' : 'Enter your answer');
+    let inputLabel = question.text.length > 45 ? question.text.substring(0, 42) + '...' : question.text;
+    
+    // Use Paragraph style for longer text fields
+    if (questionType === 'text' && (question.maxLength > 100 || !question.maxLength)) {
+      inputStyle = TextInputStyle.Paragraph;
+    }
+
+    const textInput = new TextInputBuilder()
+      .setCustomId('input_value')
+      .setLabel(inputLabel)
+      .setStyle(inputStyle)
+      .setRequired(question.required || false);
+
+    if (inputPlaceholder) {
+      textInput.setPlaceholder(inputPlaceholder);
+    }
+
+    if (questionType === 'text') {
+      if (question.minLength) {
+        // Note: Discord modals don't support minLength validation, we'll validate in handler
+        textInput.setMinLength(question.minLength);
+      }
+      if (question.maxLength) {
+        textInput.setMaxLength(Math.min(question.maxLength, 4000)); // Discord max is 4000
+      }
+    } else if (questionType === 'number') {
+      // Note: Discord doesn't have a number input type, we'll validate in handler
+      if (question.maxLength) {
+        textInput.setMaxLength(Math.min(question.maxLength, 4000));
+      }
+    }
+
+    modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+    return modal;
   }
 }
 

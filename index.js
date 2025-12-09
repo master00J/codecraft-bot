@@ -1666,8 +1666,8 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      // Profile submit button handler
-      if (interaction.customId.startsWith('profile_submit:')) {
+      // Profile button handlers (submit and input buttons)
+      if (interaction.customId.startsWith('profile_submit:') || interaction.customId.startsWith('profile_input:')) {
         if (!global.profileManager) {
           return interaction.reply({
             content: '❌ Profile system is not available at this time.',
@@ -4738,7 +4738,7 @@ async function handleProfileSelectMenuInteraction(interaction) {
 }
 
 /**
- * Handle profile button interactions (submit button only)
+ * Handle profile button interactions (submit button and input buttons)
  */
 async function handleProfileButtonInteraction(interaction) {
   try {
@@ -4782,12 +4782,168 @@ async function handleProfileButtonInteraction(interaction) {
           content: `❌ ${error.message}`
         }).catch(() => {});
       }
+    } else if (customId.startsWith('profile_input:')) {
+      // Format: profile_input:{formId}:{questionId}
+      // Open modal for text/number input
+      const parts = customId.split(':');
+      if (parts.length < 3) {
+        return interaction.reply({
+          content: '❌ Invalid form interaction. Please try again.',
+          ephemeral: true
+        });
+      }
+
+      const formId = parts[1];
+      const questionId = parts[2];
+
+      try {
+        const form = await global.profileManager.getForm(formId);
+        if (!form) {
+          return interaction.reply({
+            content: '❌ Form not found!',
+            ephemeral: true
+          });
+        }
+
+        if (form.guild_id !== interaction.guildId) {
+          return interaction.reply({
+            content: '❌ That form belongs to a different server!',
+            ephemeral: true
+          });
+        }
+
+        if (!form.enabled) {
+          return interaction.reply({
+            content: '❌ This form is currently disabled!',
+            ephemeral: true
+          });
+        }
+
+        const question = form.questions.find(q => q.id === questionId);
+        if (!question) {
+          return interaction.reply({
+            content: '❌ Question not found!',
+            ephemeral: true
+          });
+        }
+
+        // Create and show modal
+        const modal = global.profileManager.createInputModal(formId, questionId, question);
+        await interaction.showModal(modal);
+      } catch (error) {
+        console.error('[Profile] Error showing input modal:', error);
+        await interaction.reply({
+          content: `❌ ${error.message || 'Failed to open input form. Please try again.'}`,
+          ephemeral: true
+        }).catch(() => {});
+      }
     }
   } catch (error) {
     console.error('Error handling profile button:', error);
     await interaction.reply({
       content: '❌ An error occurred while processing your request.',
       ephemeral: true
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Handle profile modal interactions (text/number input submissions)
+ */
+async function handleProfileModalInteraction(interaction) {
+  try {
+    if (!global.profileManager) {
+      return interaction.reply({
+        content: '❌ Profile system is not available.',
+        ephemeral: true
+      });
+    }
+
+    // Format: profile_modal:{formId}:{questionId}
+    const parts = interaction.customId.split(':');
+    if (parts.length < 3) {
+      console.error('[Profile] Invalid modal customId format:', interaction.customId);
+      return interaction.reply({
+        content: '❌ Invalid form interaction. Please try again.',
+        ephemeral: true
+      });
+    }
+
+    const formId = parts[1];
+    const questionId = parts[2];
+    const inputValue = interaction.fields.getTextInputValue('input_value') || '';
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const form = await global.profileManager.getForm(formId);
+    if (!form) {
+      return interaction.editReply({ content: '❌ Form not found!' });
+    }
+
+    if (form.guild_id !== interaction.guildId) {
+      return interaction.editReply({ content: '❌ That form belongs to a different server!' });
+    }
+
+    if (!form.enabled) {
+      return interaction.editReply({ content: '❌ This form is currently disabled!' });
+    }
+
+    const question = form.questions.find(q => q.id === questionId);
+    if (!question) {
+      return interaction.editReply({ content: '❌ Question not found!' });
+    }
+
+    const questionType = question.type || 'text';
+
+    // Validate input based on question type
+    if (questionType === 'number') {
+      const numValue = parseFloat(inputValue);
+      if (isNaN(numValue)) {
+        return interaction.editReply({
+          content: '❌ Please enter a valid number.'
+        });
+      }
+      if (question.min !== undefined && numValue < question.min) {
+        return interaction.editReply({
+          content: `❌ Number must be at least ${question.min}.`
+        });
+      }
+      if (question.max !== undefined && numValue > question.max) {
+        return interaction.editReply({
+          content: `❌ Number must be at most ${question.max}.`
+        });
+      }
+    } else if (questionType === 'text') {
+      if (question.required && !inputValue.trim()) {
+        return interaction.editReply({
+          content: '❌ This field is required. Please enter a value.'
+        });
+      }
+      if (question.minLength && inputValue.length < question.minLength) {
+        return interaction.editReply({
+          content: `❌ Text must be at least ${question.minLength} characters long.`
+        });
+      }
+      if (question.maxLength && inputValue.length > question.maxLength) {
+        return interaction.editReply({
+          content: `❌ Text must be at most ${question.maxLength} characters long.`
+        });
+      }
+    }
+
+    // Update user's response
+    await global.profileManager.updateInputResponse(formId, questionId, inputValue, interaction.user.id);
+
+    // Update form message to show visual feedback
+    await global.profileManager.updateFormMessage(formId, interaction.user.id);
+
+    await interaction.editReply({
+      content: `✅ Answer saved! (${questionType === 'number' ? inputValue : inputValue.length + ' characters'})`
+    });
+  } catch (error) {
+    console.error('[Profile] Error handling modal:', error);
+    await interaction.editReply({
+      content: `❌ ${error.message || 'Failed to save answer. Please try again.'}`
     }).catch(() => {});
   }
 }

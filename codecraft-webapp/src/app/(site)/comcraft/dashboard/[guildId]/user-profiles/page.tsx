@@ -28,15 +28,25 @@ interface ProfileForm {
   created_at: string;
 }
 
+type QuestionType = 'dropdown' | 'text' | 'number';
+
 interface Question {
   id: string;
   text: string;
-  options: Option[];
+  type: QuestionType; // 'dropdown', 'text', or 'number'
+  options?: Option[]; // Only required for dropdown type
+  placeholder?: string; // For text/number types
+  minLength?: number; // For text type
+  maxLength?: number; // For text type
+  min?: number; // For number type
+  max?: number; // For number type
+  required?: boolean; // Optional, defaults to false
 }
 
 interface Option {
   id: string;
   text: string;
+  description?: string;
 }
 
 export default function UserProfilesConfig() {
@@ -109,6 +119,7 @@ export default function UserProfilesConfig() {
     const newQuestion: Question = {
       id: questionId,
       text: '',
+      type: 'dropdown', // Default to dropdown for backward compatibility
       options: [
         { id: `opt${Date.now()}_1`, text: '' },
         { id: `opt${Date.now()}_2`, text: '' }
@@ -120,23 +131,47 @@ export default function UserProfilesConfig() {
     });
   };
 
-  const updateQuestion = (questionId: string, field: 'text' | 'options', value: any) => {
+  const updateQuestion = (questionId: string, field: keyof Question, value: any) => {
     setNewForm({
       ...newForm,
-      questions: newForm.questions.map(q =>
-        q.id === questionId
-          ? field === 'text'
-            ? { ...q, text: value }
-            : { ...q, options: value }
-          : q
-      )
+      questions: newForm.questions.map(q => {
+        if (q.id !== questionId) return q;
+        
+        const updated = { ...q, [field]: value };
+        
+        // If type changes, reset type-specific fields
+        if (field === 'type') {
+          if (value === 'dropdown') {
+            // Switching to dropdown - ensure options exist
+            updated.options = updated.options || [
+              { id: `opt${Date.now()}_1`, text: '' },
+              { id: `opt${Date.now()}_2`, text: '' }
+            ];
+            // Remove text/number specific fields
+            delete updated.placeholder;
+            delete updated.minLength;
+            delete updated.maxLength;
+            delete updated.min;
+            delete updated.max;
+          } else {
+            // Switching to text/number - remove options
+            delete updated.options;
+          }
+        }
+        
+        return updated;
+      })
     });
   };
 
   const addOption = (questionId: string) => {
+    const question = newForm.questions.find(q => q.id === questionId);
+    if (!question) return;
+    
     const optionId = `opt${Date.now()}`;
+    const currentOptions = (question.type === 'dropdown' && question.options) ? question.options : [];
     updateQuestion(questionId, 'options', [
-      ...newForm.questions.find(q => q.id === questionId)!.options,
+      ...currentOptions,
       { id: optionId, text: '' }
     ]);
   };
@@ -149,9 +184,11 @@ export default function UserProfilesConfig() {
   };
 
   const removeOption = (questionId: string, optionId: string) => {
-    updateQuestion(questionId, 'options', 
-      newForm.questions.find(q => q.id === questionId)!.options.filter(opt => opt.id !== optionId)
-    );
+    const question = newForm.questions.find(q => q.id === questionId);
+    if (!question || !question.options) return;
+    
+    const updatedOptions = question.options.filter(opt => opt.id !== optionId);
+    updateQuestion(questionId, 'options', updatedOptions);
   };
 
   const saveForm = async () => {
@@ -166,22 +203,35 @@ export default function UserProfilesConfig() {
 
     // Validate questions
     for (const question of newForm.questions) {
-      if (!question.text || question.options.length === 0) {
+      if (!question.text) {
         toast({
           title: 'Validation Error',
-          description: 'All questions must have text and at least one option',
+          description: 'All questions must have text',
           variant: 'destructive'
         });
         return;
       }
-      for (const option of question.options) {
-        if (!option.text) {
+      
+      const questionType = question.type || 'dropdown';
+      
+      if (questionType === 'dropdown') {
+        if (!question.options || question.options.length === 0) {
           toast({
             title: 'Validation Error',
-            description: 'All options must have text',
+            description: 'Dropdown questions must have at least one option',
             variant: 'destructive'
           });
           return;
+        }
+        for (const option of question.options) {
+          if (!option.text) {
+            toast({
+              title: 'Validation Error',
+              description: 'All options must have text',
+              variant: 'destructive'
+            });
+            return;
+          }
         }
       }
     }
@@ -293,12 +343,17 @@ export default function UserProfilesConfig() {
 
   const startEditing = (form: ProfileForm) => {
     setEditingForm(form);
+    // Ensure all questions have a type field (default to 'dropdown' for backward compatibility)
+    const questionsWithTypes = form.questions.map(q => ({
+      ...q,
+      type: (q as any).type || 'dropdown'
+    }));
     setNewForm({
       formName: form.form_name,
       description: form.description || '',
       channelId: form.channel_id,
       threadNameTemplate: form.thread_name_template,
-      questions: form.questions
+      questions: questionsWithTypes
     });
     setCreatingNewForm(true);
   };
@@ -387,44 +442,151 @@ export default function UserProfilesConfig() {
             {newForm.questions.map((question, qIdx) => (
               <Card key={question.id} className="p-4 space-y-3">
                 <div className="flex justify-between items-start">
-                  <div className="flex-1 space-y-2">
-                    <Input
-                      value={question.text}
-                      onChange={(e) => updateQuestion(question.id, 'text', e.target.value)}
-                      placeholder={`Question ${qIdx + 1} (e.g., "What country do you live in?")`}
-                    />
-                    <div className="space-y-2">
-                      {question.options.map((option, oIdx) => (
-                        <div key={option.id} className="flex gap-2">
-                          <Input
-                            value={option.text}
-                            onChange={(e) => {
-                              const updatedOptions = question.options.map(opt =>
-                                opt.id === option.id ? { ...opt, text: e.target.value } : opt
-                              );
-                              updateQuestion(question.id, 'options', updatedOptions);
-                            }}
-                            placeholder={`Option ${oIdx + 1} (e.g., "USA")`}
-                          />
-                          {question.options.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeOption(question.id, option.id)}
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => addOption(question.id)}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <Input
+                          value={question.text}
+                          onChange={(e) => updateQuestion(question.id, 'text', e.target.value)}
+                          placeholder={`Question ${qIdx + 1} (e.g., "What country do you live in?")`}
+                        />
+                      </div>
+                      <Select 
+                        value={question.type || 'dropdown'} 
+                        onValueChange={(value: QuestionType) => updateQuestion(question.id, 'type', value)}
                       >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Option
-                      </Button>
+                        <SelectTrigger className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dropdown">Dropdown</SelectItem>
+                          <SelectItem value="text">Text Input</SelectItem>
+                          <SelectItem value="number">Number Input</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Dropdown Type Configuration */}
+                    {(!question.type || question.type === 'dropdown') && (
+                      <div className="space-y-2 pl-4 border-l-2 border-gray-300">
+                        <Label className="text-sm font-medium">Options</Label>
+                        {(question.options || []).map((option, oIdx) => {
+                          const currentOptions = question.options || [];
+                          return (
+                            <div key={option.id} className="flex gap-2">
+                              <Input
+                                value={option.text}
+                                onChange={(e) => {
+                                  const updatedOptions = currentOptions.map(opt =>
+                                    opt.id === option.id ? { ...opt, text: e.target.value } : opt
+                                  );
+                                  updateQuestion(question.id, 'options', updatedOptions);
+                                }}
+                                placeholder={`Option ${oIdx + 1} (e.g., "USA")`}
+                              />
+                              {currentOptions.length > 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeOption(question.id, option.id)}
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addOption(question.id)}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Option
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Text Input Type Configuration */}
+                    {question.type === 'text' && (
+                      <div className="space-y-2 pl-4 border-l-2 border-blue-300">
+                        <div>
+                          <Label className="text-sm font-medium">Placeholder (optional)</Label>
+                          <Input
+                            value={question.placeholder || ''}
+                            onChange={(e) => updateQuestion(question.id, 'placeholder', e.target.value)}
+                            placeholder="e.g., Enter your name"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm font-medium">Min Length</Label>
+                            <Input
+                              type="number"
+                              value={question.minLength || ''}
+                              onChange={(e) => updateQuestion(question.id, 'minLength', e.target.value ? parseInt(e.target.value) : undefined)}
+                              placeholder="e.g., 2"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Max Length</Label>
+                            <Input
+                              type="number"
+                              value={question.maxLength || ''}
+                              onChange={(e) => updateQuestion(question.id, 'maxLength', e.target.value ? parseInt(e.target.value) : undefined)}
+                              placeholder="e.g., 50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Number Input Type Configuration */}
+                    {question.type === 'number' && (
+                      <div className="space-y-2 pl-4 border-l-2 border-green-300">
+                        <div>
+                          <Label className="text-sm font-medium">Placeholder (optional)</Label>
+                          <Input
+                            value={question.placeholder || ''}
+                            onChange={(e) => updateQuestion(question.id, 'placeholder', e.target.value)}
+                            placeholder="e.g., Enter your age"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm font-medium">Min Value</Label>
+                            <Input
+                              type="number"
+                              value={question.min !== undefined ? question.min : ''}
+                              onChange={(e) => updateQuestion(question.id, 'min', e.target.value ? parseFloat(e.target.value) : undefined)}
+                              placeholder="e.g., 0"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Max Value</Label>
+                            <Input
+                              type="number"
+                              value={question.max !== undefined ? question.max : ''}
+                              onChange={(e) => updateQuestion(question.id, 'max', e.target.value ? parseFloat(e.target.value) : undefined)}
+                              placeholder="e.g., 100"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Required checkbox for all types */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`required-${question.id}`}
+                        checked={question.required || false}
+                        onChange={(e) => updateQuestion(question.id, 'required', e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor={`required-${question.id}`} className="text-sm font-medium cursor-pointer">
+                        Required field
+                      </Label>
                     </div>
                   </div>
                   <Button
