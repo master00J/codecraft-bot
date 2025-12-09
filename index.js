@@ -1120,13 +1120,28 @@ client.once('ready', async () => {
 
   // Start Internal API Server
   const API_PORT = process.env.PORT || process.env.DISCORD_API_PORT || process.env.API_PORT || 3002;
+  console.log(`🔧 [API Server] Attempting to start on port ${API_PORT}`);
+  console.log(`🔧 [API Server] PORT env: ${process.env.PORT || 'not set'}`);
+  console.log(`🔧 [API Server] DISCORD_API_PORT env: ${process.env.DISCORD_API_PORT || 'not set'}`);
+  console.log(`🔧 [API Server] API_PORT env: ${process.env.API_PORT || 'not set'}`);
+  
   try {
-    app.listen(API_PORT, '0.0.0.0', () => {
+    const server = app.listen(API_PORT, '0.0.0.0', () => {
       console.log(`✅ Internal API server listening on port ${API_PORT}`);
       console.log(`📡 Health check: http://localhost:${API_PORT}/health`);
+      console.log(`📡 Internal API: http://0.0.0.0:${API_PORT}/api/discord/...`);
+    });
+    
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${API_PORT} is already in use. Another instance might be running.`);
+      } else {
+        console.error(`❌ API server error:`, error);
+      }
     });
   } catch (error) {
     console.error(`❌ Failed to start API server on port ${API_PORT}:`, error);
+    console.error(`❌ Error details:`, error.message, error.stack);
   }
 
   console.log('🚀 All systems operational!');
