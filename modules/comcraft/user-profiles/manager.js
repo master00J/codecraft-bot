@@ -79,46 +79,64 @@ class UserProfileManager {
       // Build components with select menus
       const components = [];
 
-      // Discord limits: max 5 action rows (one per question + submit button)
+      // Discord limits: max 5 action rows total (including submit button)
       // Max 25 options per select menu
-      const MAX_QUESTIONS = 4; // Leave room for submit button
+      // If a question has more than 25 options, we split it into multiple menus
+      const MAX_OPTIONS_PER_MENU = 25;
+      let remainingRows = 4; // Leave room for submit button
       
-      for (let i = 0; i < Math.min(form.questions.length, MAX_QUESTIONS); i++) {
+      for (let i = 0; i < form.questions.length && remainingRows > 0; i++) {
         const question = form.questions[i];
         
-        // Discord select menu max: 25 options per menu
-        if (question.options.length > 25) {
-          console.warn(`[Profile Manager] Question "${question.text}" has ${question.options.length} options, but Discord limits select menus to 25. Only the first 25 will be shown.`);
+        if (question.options.length === 0) continue;
+
+        // Split options into chunks of 25 if needed
+        const optionChunks = [];
+        for (let j = 0; j < question.options.length; j += MAX_OPTIONS_PER_MENU) {
+          optionChunks.push(question.options.slice(j, j + MAX_OPTIONS_PER_MENU));
         }
-        
-        const menuOptions = question.options.slice(0, 25).map(option => {
-          const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
-          const description = option.description 
-            ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
-            : undefined;
+
+        // Create a select menu for each chunk
+        for (let chunkIndex = 0; chunkIndex < optionChunks.length && remainingRows > 0; chunkIndex++) {
+          const chunk = optionChunks[chunkIndex];
           
-          const menuOption = new StringSelectMenuOptionBuilder()
-            .setLabel(label)
-            .setValue(`${question.id}:${option.id}`); // Format: questionId:optionId
-          
-          if (description) {
-            menuOption.setDescription(description);
+          const menuOptions = chunk.map(option => {
+            const label = option.text.length > 100 ? option.text.substring(0, 97) + '...' : option.text;
+            const description = option.description 
+              ? (option.description.length > 100 ? option.description.substring(0, 97) + '...' : option.description)
+              : undefined;
+            
+            const menuOption = new StringSelectMenuOptionBuilder()
+              .setLabel(label)
+              .setValue(`${question.id}:${option.id}`); // Format: questionId:optionId
+            
+            if (description) {
+              menuOption.setDescription(description);
+            }
+            
+            return menuOption;
+          });
+
+          if (menuOptions.length === 0) continue;
+
+          // Create placeholder text indicating which part this is (if multiple chunks)
+          let placeholder = question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text;
+          if (optionChunks.length > 1) {
+            placeholder = `${placeholder} (Part ${chunkIndex + 1}/${optionChunks.length})`;
           }
-          
-          return menuOption;
-        });
+          placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
 
-        if (menuOptions.length === 0) continue;
+          const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`) // Add chunkIndex to customId
+            .setPlaceholder(`Select options: ${placeholder}`)
+            .setMinValues(0) // Allow deselecting all
+            .setMaxValues(menuOptions.length) // Allow selecting all options in this chunk
+            .addOptions(menuOptions);
 
-        const selectMenu = new StringSelectMenuBuilder()
-          .setCustomId(`profile_select:${form.id}:${question.id}`)
-          .setPlaceholder(`Select options for: ${question.text.length > 100 ? question.text.substring(0, 97) + '...' : question.text}`)
-          .setMinValues(0) // Allow deselecting all
-          .setMaxValues(menuOptions.length) // Allow selecting all options
-          .addOptions(menuOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-        components.push(row);
+          const row = new ActionRowBuilder().addComponents(selectMenu);
+          components.push(row);
+          remainingRows--;
+        }
       }
 
       // Add submit button (always last)

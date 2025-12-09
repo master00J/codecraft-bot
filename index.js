@@ -4670,7 +4670,7 @@ async function handleProfileSelectMenuInteraction(interaction) {
       });
     }
 
-    // Format: profile_select:{formId}:{questionId}
+    // Format: profile_select:{formId}:{questionId} or profile_select:{formId}:{questionId}:{chunkIndex}
     const parts = interaction.customId.split(':');
     if (parts.length < 3) {
       console.error('[Profile] Invalid customId format:', interaction.customId);
@@ -4682,6 +4682,8 @@ async function handleProfileSelectMenuInteraction(interaction) {
 
     const formId = parts[1];
     const questionId = parts[2];
+    // chunkIndex is optional (for questions with >25 options split into multiple menus)
+    const chunkIndex = parts.length > 3 ? parseInt(parts[3]) : 0;
     const selectedValues = interaction.values || [];
 
     await interaction.deferReply({ ephemeral: true });
