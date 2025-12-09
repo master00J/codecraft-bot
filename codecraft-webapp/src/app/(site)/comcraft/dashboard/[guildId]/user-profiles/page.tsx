@@ -136,11 +136,19 @@ export default function UserProfilesConfig() {
         console.log(`[User Profiles] Loaded ${data.threads.length} threads`);
       } else {
         console.warn(`[User Profiles] Failed to load threads:`, data.error || 'Unknown error');
+        // Don't set empty array - keep existing threads if available
+        // This allows the form to still work even if threads can't be loaded
+        if (!threads.length) {
+          setThreads([]);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching threads:', error);
+      // Only clear threads if we don't have any cached
+      // This prevents breaking the UI if the bot API is temporarily unavailable
+      if (!threads.length) {
         setThreads([]);
       }
-    } catch (error) {
-      console.error('Error fetching threads:', error);
-      setThreads([]);
     } finally {
       setLoadingThreads(false);
     }

@@ -8870,7 +8870,24 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
     // Use the appropriate DiscordManager for the bot client
     const DiscordManager = require('./modules/comcraft/discord-manager');
     const manager = new DiscordManager(botClient);
-    const result = await manager.getThreads(guildId, channelId);
+    
+    try {
+      const result = await manager.getThreads(guildId, channelId);
+      
+      if (!result.success) {
+        console.error(`[Threads API] Error from DiscordManager:`, result.error);
+        return res.status(500).json(result);
+      }
+      
+      return res.json(result);
+    } catch (error) {
+      console.error(`[Threads API] Exception in getThreads:`, error);
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Unknown error',
+        threads: []
+      });
+    }
     
     res.json(result);
   } catch (error) {

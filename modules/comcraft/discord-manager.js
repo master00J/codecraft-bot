@@ -281,54 +281,121 @@ class DiscordManager {
     try {
       const guild = this.client.guilds.cache.get(guildId);
       if (!guild) {
+        console.error(`[Discord Manager] Guild ${guildId} not found`);
         return { success: false, error: 'Guild not found' };
       }
 
       const channel = guild.channels.cache.get(channelId);
       if (!channel) {
+        console.error(`[Discord Manager] Channel ${channelId} not found in guild ${guildId}`);
         return { success: false, error: 'Channel not found' };
       }
 
       // Only text-based channels can have threads
       if (!channel.isTextBased() && channel.type !== ChannelType.GuildForum) {
+        console.warn(`[Discord Manager] Channel ${channelId} does not support threads (type: ${channel.type})`);
         return { success: false, error: 'Channel does not support threads' };
       }
 
+      console.log(`[Discord Manager] Fetching threads for channel ${channelId} (${channel.name})`);
+
       // Fetch all active threads
-      const activeThreads = await channel.threads.fetchActive();
+      let activeThreadsList = [];
+      try {
+        const activeThreads = await channel.threads.fetchActive();
+        console.log(`[Discord Manager] fetchActive returned:`, {
+          hasThreads: !!activeThreads,
+          hasThreadsProperty: !!activeThreads.threads,
+          threadsType: typeof activeThreads.threads,
+          threadsValue: activeThreads.threads
+        });
+        
+        // activeThreads.threads is a Collection, we need to convert it properly
+        if (activeThreads && activeThreads.threads) {
+          // Collection can be converted to array using Array.from or spread
+          const threadsCollection = activeThreads.threads;
+          
+          // Try different methods to convert Collection to array
+          let threadsArray = [];
+          if (threadsCollection instanceof Map) {
+            threadsArray = Array.from(threadsCollection.values());
+          } else if (threadsCollection.values) {
+            threadsArray = Array.from(threadsCollection.values());
+          } else if (Array.isArray(threadsCollection)) {
+            threadsArray = threadsCollection;
+          } else if (typeof threadsCollection.forEach === 'function') {
+            // If it's iterable, use forEach
+            threadsCollection.forEach(thread => threadsArray.push(thread));
+          } else {
+            // Fallback: try to iterate
+            for (const thread of threadsCollection) {
+              threadsArray.push(thread);
+            }
+          }
+          
+          activeThreadsList = threadsArray.map(thread => ({
+            id: thread.id,
+            name: thread.name || 'Unnamed Thread',
+            type: thread.type,
+            parentId: thread.parentId,
+            archived: thread.archived || false,
+            locked: thread.locked || false,
+            memberCount: thread.memberCount || 0,
+            messageCount: thread.messageCount || 0,
+            createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
+          }));
+        }
+        
+        console.log(`[Discord Manager] Found ${activeThreadsList.length} active threads`);
+      } catch (error) {
+        console.error(`[Discord Manager] Error fetching active threads:`, error);
+        console.error(`[Discord Manager] Error stack:`, error.stack);
+        // Continue with empty list
+      }
       
       // Also try to fetch archived threads
       let archivedThreads = [];
       try {
         const archived = await channel.threads.fetchArchived({ fetchAll: false, limit: 50 });
-        archivedThreads = archived.threads.map(thread => ({
-          id: thread.id,
-          name: thread.name,
-          type: thread.type,
-          parentId: thread.parentId,
-          archived: true,
-          locked: thread.locked,
-          memberCount: thread.memberCount,
-          messageCount: thread.messageCount,
-          createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
-        }));
+        if (archived && archived.threads) {
+          // Similar handling for archived threads
+          const threadsCollection = archived.threads;
+          let threadsArray = [];
+          
+          if (threadsCollection instanceof Map) {
+            threadsArray = Array.from(threadsCollection.values());
+          } else if (threadsCollection.values) {
+            threadsArray = Array.from(threadsCollection.values());
+          } else if (Array.isArray(threadsCollection)) {
+            threadsArray = threadsCollection;
+          } else if (typeof threadsCollection.forEach === 'function') {
+            threadsCollection.forEach(thread => threadsArray.push(thread));
+          } else {
+            for (const thread of threadsCollection) {
+              threadsArray.push(thread);
+            }
+          }
+          
+          archivedThreads = threadsArray.map(thread => ({
+            id: thread.id,
+            name: thread.name || 'Unnamed Thread',
+            type: thread.type,
+            parentId: thread.parentId,
+            archived: true,
+            locked: thread.locked || false,
+            memberCount: thread.memberCount || 0,
+            messageCount: thread.messageCount || 0,
+            createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
+          }));
+          console.log(`[Discord Manager] Found ${archivedThreads.length} archived threads`);
+        }
       } catch (error) {
         console.warn(`[Discord Manager] Could not fetch archived threads for channel ${channelId}:`, error.message);
+        console.warn(`[Discord Manager] Archived threads error stack:`, error.stack);
+        // Continue without archived threads
       }
       
       // Combine active and archived threads
-      const activeThreadsList = Array.from(activeThreads.threads.values()).map(thread => ({
-        id: thread.id,
-        name: thread.name,
-        type: thread.type,
-        parentId: thread.parentId,
-        archived: thread.archived || false,
-        locked: thread.locked,
-        memberCount: thread.memberCount,
-        messageCount: thread.messageCount,
-        createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
-      }));
-
       const allThreads = [...activeThreadsList, ...archivedThreads];
       
       // Remove duplicates (in case a thread appears in both)
@@ -336,12 +403,20 @@ class DiscordManager {
         new Map(allThreads.map(thread => [thread.id, thread])).values()
       );
 
-      console.log(`[Discord Manager] Found ${activeThreadsList.length} active and ${archivedThreads.length} archived threads in channel ${channelId}`);
+      console.log(`[Discord Manager] Total unique threads: ${uniqueThreads.length} (${activeThreadsList.length} active, ${archivedThreads.length} archived)`);
 
       return {
         success: true,
         threads: uniqueThreads.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       };
+    } catch (error) {
+      console.error(`[Discord Manager] Error in getThreads for channel ${channelId}:`, error);
+      return {
+        success: false,
+        error: error.message || 'Unknown error fetching threads',
+        threads: []
+      };
+    }
     } catch (error) {
       console.error('Error getting threads:', error);
       return { success: false, error: error.message };
