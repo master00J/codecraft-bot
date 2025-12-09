@@ -489,7 +489,7 @@ export default function AuthorizedUsersPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+            <Button variant="outline" onClick={() => setShowAddUserDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAddUser}>Add User</Button>
