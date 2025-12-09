@@ -106,9 +106,18 @@ class UserProfileManager {
             buttonsInRow = 0;
           }
           
+          // Create checkbox-style label: [ ] Option or [✓] Option
+          const checkboxPrefix = '[ ] ';
+          // Account for checkbox prefix in label length (4 chars for "[ ] ")
+          const maxOptionLength = 76; // 80 - 4 = 76
+          const truncatedText = option.text.length > maxOptionLength 
+            ? option.text.substring(0, maxOptionLength - 3) + '...' 
+            : option.text;
+          const checkboxLabel = checkboxPrefix + truncatedText;
+          
           const button = new ButtonBuilder()
             .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
-            .setLabel(label)
+            .setLabel(checkboxLabel)
             .setStyle(ButtonStyle.Secondary);
           
           questionRow.addComponents(button);
@@ -460,8 +469,15 @@ class UserProfileManager {
           if (totalButtons >= MAX_BUTTONS || components.length >= 5) break;
           
           const isSelected = questionSelections.includes(option.id);
-          // Discord button label limit is 80 characters
-          const label = option.text.length > 80 ? option.text.substring(0, 77) + '...' : option.text;
+          
+          // Create checkbox-style label: [✓] for selected, [ ] for unselected
+          const checkboxPrefix = isSelected ? '[✓] ' : '[ ] ';
+          // Account for checkbox prefix in label length (4 chars for "[ ] " or "[✓] ")
+          const maxOptionLength = 76; // 80 - 4 = 76
+          const truncatedText = option.text.length > maxOptionLength 
+            ? option.text.substring(0, maxOptionLength - 3) + '...' 
+            : option.text;
+          const checkboxLabel = checkboxPrefix + truncatedText;
           
           // Max 5 buttons per row
           if (buttonsInRow >= 5) {
@@ -472,7 +488,7 @@ class UserProfileManager {
           
           const button = new ButtonBuilder()
             .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
-            .setLabel(label)
+            .setLabel(checkboxLabel)
             .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary);
           
           questionRow.addComponents(button);
