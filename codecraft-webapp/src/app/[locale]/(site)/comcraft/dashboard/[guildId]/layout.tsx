@@ -8,6 +8,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { Link } from '@/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/use-toast';
 import {
   LayoutDashboard,
   TrendingUp,
