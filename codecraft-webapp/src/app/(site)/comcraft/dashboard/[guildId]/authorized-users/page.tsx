@@ -65,29 +65,30 @@ export default function AuthorizedUsersPage() {
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
 
   useEffect(() => {
-    fetchAuthorizedUsers();
-    fetchAuthorizedRoles();
-    fetchDiscordRoles();
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchAuthorizedUsers(),
+          fetchAuthorizedRoles(),
+          fetchDiscordRoles(),
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [guildId]);
 
   const fetchAuthorizedUsers = async () => {
-    try {
-      const response = await fetch(`/api/comcraft/guilds/${guildId}/admins`);
-      const data = await response.json();
+    const response = await fetch(`/api/comcraft/guilds/${guildId}/admins`);
+    const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch authorized users');
-      }
-
-      setAuthorizedUsers(data.authorizedUsers || []);
-    } catch (error: any) {
-      console.error('Error fetching authorized users:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to load authorized users',
-        variant: 'destructive',
-      });
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch authorized users');
     }
+
+    setAuthorizedUsers(data.authorizedUsers || []);
   };
 
   const fetchAuthorizedRoles = async () => {
@@ -96,20 +97,17 @@ export default function AuthorizedUsersPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        // Silently fail if table doesn't exist yet
+        if (data.error?.includes('relation') || data.error?.includes('does not exist')) {
+          return;
+        }
         throw new Error(data.error || 'Failed to fetch authorized roles');
       }
 
       setAuthorizedRoles(data.authorizedRoles || []);
     } catch (error: any) {
       console.error('Error fetching authorized roles:', error);
-      // Don't show toast for roles if table doesn't exist yet
-      if (!error.message?.includes('relation') && !error.message?.includes('does not exist')) {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to load authorized roles',
-          variant: 'destructive',
-        });
-      }
+      // Silently fail - table might not exist yet
     }
   };
 
