@@ -109,8 +109,7 @@ class UserProfileManager {
           const button = new ButtonBuilder()
             .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
             .setLabel(label)
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('☐');
+            .setStyle(ButtonStyle.Secondary);
           
           questionRow.addComponents(button);
           buttonsInRow++;
@@ -131,7 +130,6 @@ class UserProfileManager {
               .setCustomId(`profile_submit_${form.id}`)
               .setLabel('Submit Profile')
               .setStyle(ButtonStyle.Success)
-              .setEmoji('✅')
           );
         components.push(submitRow);
       } else {
@@ -454,11 +452,13 @@ class UserProfileManager {
         
         for (const option of question.options) {
           const isSelected = questionSelections.includes(option.id);
+          // Discord button label limit is 80 characters
+          const label = option.text.length > 80 ? option.text.substring(0, 77) + '...' : option.text;
+          
           const button = new ButtonBuilder()
             .setCustomId(`profile_checkbox_${form.id}_${question.id}_${option.id}`)
-            .setLabel(option.text)
-            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary)
-            .setEmoji(isSelected ? '☑️' : '☐');
+            .setLabel(label)
+            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary);
           
           questionRow.addComponents(button);
         }
@@ -472,7 +472,6 @@ class UserProfileManager {
             .setCustomId(`profile_submit_${form.id}`)
             .setLabel('Submit Profile')
             .setStyle(ButtonStyle.Success)
-            .setEmoji('✅')
         );
       components.push(submitRow);
 
