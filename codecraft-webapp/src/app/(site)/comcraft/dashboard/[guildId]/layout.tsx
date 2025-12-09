@@ -8,6 +8,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { Link } from '@/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/use-toast';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -37,7 +38,8 @@ import {
   Check,
   X,
   Sparkles as SparklesIcon,
-  FileText
+  FileText,
+  Heart
 } from 'lucide-react';
 import {
   DndContext,
@@ -510,7 +512,10 @@ export default function GuildDashboardLayout({
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-800">
+        <div className="p-4 border-t border-gray-800 space-y-3">
+          {/* Donation Button */}
+          <DonationButton />
+          
           <Link
             href="/comcraft/dashboard"
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
@@ -525,6 +530,72 @@ export default function GuildDashboardLayout({
       <main className="flex-1 ml-64 min-h-screen">
         {children}
       </main>
+    </div>
+  );
+}
+
+// Donation Button Component
+function DonationButton() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleDonate = async () => {
+    try {
+      setLoading(true);
+
+      // Default donation amount (could be made configurable)
+      const amount = 5; // $5 default
+      const currency = 'USD';
+
+      const response = await fetch('/api/comcraft/donation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, currency, provider: 'stripe' }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create donation checkout');
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (error: any) {
+      console.error('Donation error:', error);
+      toast({
+        title: 'Donation Failed',
+        description: error.message || 'Please try again or contact support.',
+        variant: 'destructive',
+      });
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-400 text-center px-2">
+        You like this bot? Feel free to donate and support this bot
+      </p>
+      <button
+        onClick={handleDonate}
+        disabled={loading}
+        className="w-full px-4 py-3 bg-gradient-to-r from-pink-500/20 to-purple-500/20 hover:from-pink-500/30 hover:to-purple-500/30 border border-pink-500/30 hover:border-pink-500/50 rounded-lg transition-all duration-200 flex items-center gap-2 justify-center group"
+      >
+        <Heart className={cn(
+          "h-4 w-4 transition-colors",
+          loading ? "text-gray-500" : "text-pink-400 group-hover:text-pink-300"
+        )} fill={loading ? "none" : "currentColor"} />
+        <span className={cn(
+          "text-sm font-medium transition-colors",
+          loading ? "text-gray-500" : "text-gray-300 group-hover:text-white"
+        )}>
+          {loading ? 'Loading...' : 'Support ComCraft'}
+        </span>
+      </button>
     </div>
   );
 }
