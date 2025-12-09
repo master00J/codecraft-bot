@@ -42,6 +42,17 @@ function createProfileCommands() {
               .setRequired(false)
           )
       )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('browse')
+          .setDescription('Browse all submitted profiles for a form')
+          .addStringOption((option) =>
+            option
+              .setName('form_id')
+              .setDescription('Form ID (use /profile list to see form IDs)')
+              .setRequired(true)
+          )
+      )
   ];
 }
 
@@ -58,6 +69,9 @@ async function handleProfileCommand(interaction, profileManager) {
         break;
       case 'view':
         await handleProfileView(interaction, profileManager);
+        break;
+      case 'browse':
+        await handleProfileBrowse(interaction, profileManager);
         break;
       default:
         await interaction.reply({ content: 'Unknown subcommand', ephemeral: true });
@@ -226,6 +240,83 @@ async function handleProfileView(interaction, profileManager) {
     await interaction.editReply({ embeds: [embed] });
   } catch (error) {
     console.error('Error viewing profile:', error);
+    await interaction.editReply({
+      content: `❌ ${error.message}`
+    });
+  }
+}
+
+async function handleProfileBrowse(interaction, profileManager) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const formId = interaction.options.getString('form_id');
+
+    const form = await profileManager.getForm(formId);
+    if (!form) {
+      await interaction.editReply({ content: '❌ Form not found!' });
+      return;
+    }
+
+    if (form.guild_id !== interaction.guildId) {
+      await interaction.editReply({ content: '❌ That form belongs to a different server!' });
+      return;
+    }
+
+    // Get all completed profiles for this form
+    const profiles = await profileManager.getFormProfiles(formId, 25); // Max 25 for embed limits
+
+    if (profiles.length === 0) {
+      await interaction.editReply({
+        content: `❌ No profiles have been submitted for "${form.form_name}" yet!`
+      });
+      return;
+    }
+
+    // Fetch user information for each profile
+    const profileList = [];
+    for (const profile of profiles.slice(0, 25)) {
+      try {
+        const member = await interaction.guild.members.fetch(profile.user_id).catch(() => null);
+        const username = member?.displayName || member?.user?.username || `User ${profile.user_id}`;
+        const threadLink = profile.thread_id && form.channel_id
+          ? `[View Thread](https://discord.com/channels/${form.guild_id}/${form.channel_id}/${profile.thread_id})`
+          : 'No thread';
+        
+        const completedDate = profile.completed_at 
+          ? `<t:${Math.floor(new Date(profile.completed_at).getTime() / 1000)}:R>`
+          : 'Unknown';
+
+        profileList.push(`**${username}** • ${threadLink} • ${completedDate}`);
+      } catch (error) {
+        // Skip users we can't fetch
+        continue;
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📋 ${form.form_name} - All Profiles`)
+      .setDescription(
+        profileList.length > 0
+          ? profileList.join('\n')
+          : 'No profiles found'
+      )
+      .setColor(0x5865F2)
+      .setFooter({ 
+        text: `Showing ${profileList.length} of ${profiles.length} profile(s)${profiles.length > 25 ? ' (max 25 shown)' : ''}` 
+      });
+
+    if (form.channel_id && form.message_id) {
+      embed.addFields({
+        name: '🔗 Form Location',
+        value: `[View Form](https://discord.com/channels/${form.guild_id}/${form.channel_id}/${form.message_id})`,
+        inline: false
+      });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error('Error browsing profiles:', error);
     await interaction.editReply({
       content: `❌ ${error.message}`
     });
