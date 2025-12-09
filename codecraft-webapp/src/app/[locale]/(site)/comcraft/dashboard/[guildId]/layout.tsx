@@ -386,6 +386,34 @@ export default function GuildDashboardLayout({
     return pathWithoutLocale.startsWith(hrefPath);
   };
 
+  // Show loading while checking access
+  if (checkingAccess) {
+    return (
+      <div className="flex min-h-screen bg-[#0f1419] items-center justify-center">
+        <div className="text-center">
+          <div className="text-gray-400 mb-2">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied if no access
+  if (hasAccess === false) {
+    return (
+      <div className="flex min-h-screen bg-[#0f1419] items-center justify-center">
+        <div className="text-center max-w-md p-8">
+          <h1 className="text-2xl font-bold text-white mb-4">Access Denied</h1>
+          <p className="text-gray-400 mb-6">
+            You don't have permission to access this server's dashboard.
+          </p>
+          <Link href={`/${locale}/comcraft/dashboard`}>
+            <Button>Go to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-[#0f1419]">
       {/* Sidebar - Fixed Left */}
