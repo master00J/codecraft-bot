@@ -8883,9 +8883,20 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
     }
 
     // Use the appropriate DiscordManager for the bot client
-    // Clear require cache to ensure we get the latest version
+    // Force clear require cache multiple times to ensure fresh load
     const discordManagerPath = require.resolve('./modules/comcraft/discord-manager');
-    delete require.cache[discordManagerPath];
+    
+    // Clear all references to this module
+    for (const key in require.cache) {
+      if (key === discordManagerPath || key.includes('discord-manager')) {
+        delete require.cache[key];
+      }
+    }
+    
+    // Also clear the parent module if it exists
+    delete require.cache[require.resolve('./index.js')];
+    
+    // Force a fresh require
     const DiscordManager = require(discordManagerPath);
     const manager = new DiscordManager(botClient);
     
@@ -8895,10 +8906,29 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
     console.log(`[Threads API] DiscordManager loaded from: ${discordManagerPath}`);
     console.log(`[Threads API] Available async methods:`, asyncMethods);
     console.log(`[Threads API] getThreads type:`, typeof manager.getThreads);
+    console.log(`[Threads API] getThreads in methods list:`, asyncMethods.includes('getThreads'));
+    
+    // Also check if it's a direct property
+    console.log(`[Threads API] manager.getThreads exists:`, 'getThreads' in manager);
+    console.log(`[Threads API] manager.getThreads descriptor:`, Object.getOwnPropertyDescriptor(Object.getPrototypeOf(manager), 'getThreads'));
     
     // Verify the method exists
     if (typeof manager.getThreads !== 'function') {
       console.error(`[Threads API] getThreads is not a function. All methods:`, allMethods);
+      
+      // Try to read the file and check if getThreads is in it
+      const fs = require('fs');
+      try {
+        const fileContent = fs.readFileSync(discordManagerPath, 'utf8');
+        const hasGetThreads = fileContent.includes('async getThreads') || fileContent.includes('getThreads(');
+        console.log(`[Threads API] File contains 'getThreads':`, hasGetThreads);
+        if (hasGetThreads) {
+          console.error(`[Threads API] WARNING: getThreads exists in file but not in loaded class! This suggests a syntax error or caching issue.`);
+        }
+      } catch (readError) {
+        console.error(`[Threads API] Could not read file to verify:`, readError.message);
+      }
+      
       return res.status(500).json({
         success: false,
         error: 'getThreads method not found on DiscordManager',
