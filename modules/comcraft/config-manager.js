@@ -776,7 +776,7 @@ class ConfigManager {
   }
 
   /**
-   * Ensure guild exists in database
+   * Ensure guild exists in database and owner is authorized
    */
   async ensureGuild(guild, ownerId) {
     const { data: existing } = await this.supabase
@@ -797,6 +797,18 @@ class ConfigManager {
           is_active: true
         })
         .eq('guild_id', guild.id);
+      
+      // Ensure owner is in authorized users (for existing guilds too)
+      await this.supabase
+        .from('guild_authorized_users')
+        .upsert({
+          guild_id: guild.id,
+          discord_id: ownerId,
+          role: 'owner'
+        }, {
+          onConflict: 'guild_id,discord_id'
+        })
+        .catch(err => console.warn('Could not ensure owner in authorized users:', err));
       
       return existing;
     }
