@@ -8868,8 +8868,20 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
     }
 
     // Use the appropriate DiscordManager for the bot client
+    // Clear require cache to ensure we get the latest version
+    delete require.cache[require.resolve('./modules/comcraft/discord-manager')];
     const DiscordManager = require('./modules/comcraft/discord-manager');
     const manager = new DiscordManager(botClient);
+    
+    // Verify the method exists
+    if (typeof manager.getThreads !== 'function') {
+      console.error(`[Threads API] getThreads is not a function. Available methods:`, Object.getOwnPropertyNames(Object.getPrototypeOf(manager)));
+      return res.status(500).json({
+        success: false,
+        error: 'getThreads method not found on DiscordManager',
+        threads: []
+      });
+    }
     
     try {
       const result = await manager.getThreads(guildId, channelId);
@@ -8882,17 +8894,16 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
       return res.json(result);
     } catch (error) {
       console.error(`[Threads API] Exception in getThreads:`, error);
+      console.error(`[Threads API] Error stack:`, error.stack);
       return res.status(500).json({
         success: false,
         error: error.message || 'Unknown error',
         threads: []
       });
     }
-    
-    res.json(result);
   } catch (error) {
     console.error('Error in threads API:', error);
-    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+    return res.status(500).json({ success: false, error: error.message || 'Internal server error' });
   }
 });
 
