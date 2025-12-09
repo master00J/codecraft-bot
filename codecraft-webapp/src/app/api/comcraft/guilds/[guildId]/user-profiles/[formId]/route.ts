@@ -130,12 +130,32 @@ export async function PATCH(
         );
       }
       for (const question of body.questions) {
-        if (!question.id || !question.text || !Array.isArray(question.options) || question.options.length === 0) {
+        if (!question.id || !question.text) {
           return NextResponse.json(
-            { error: 'Each question must have an id, text, and at least one option' },
+            { error: 'Each question must have an id and text' },
             { status: 400 }
           );
         }
+        
+        const questionType = question.type || 'dropdown';
+        
+        if (questionType === 'dropdown') {
+          if (!Array.isArray(question.options) || question.options.length === 0) {
+            return NextResponse.json(
+              { error: 'Dropdown questions must have at least one option' },
+              { status: 400 }
+            );
+          }
+          for (const option of question.options) {
+            if (!option.id || !option.text) {
+              return NextResponse.json(
+                { error: 'Each option must have an id and text' },
+                { status: 400 }
+              );
+            }
+          }
+        }
+        // Text and number types don't require options
       }
       updates.questions = body.questions;
     }
