@@ -97,11 +97,14 @@ export async function POST(
     // @ts-ignore
     const requestingUserId = session.user.discordId
 
-    const { discordId, role = 'admin' } = await request.json()
+    const { discordId: rawDiscordId, role = 'admin' } = await request.json()
 
-    if (!discordId) {
+    if (!rawDiscordId) {
       return NextResponse.json({ error: 'Discord ID required' }, { status: 400 })
     }
+
+    // Normalize Discord ID to string (Discord IDs can be very large numbers)
+    const discordId = String(rawDiscordId).trim()
 
     // Check if requesting user is owner or platform admin
     const { data: guild } = await supabaseAdmin

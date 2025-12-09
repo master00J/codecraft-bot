@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getGuildAccess } from '@/lib/comcraft/access-control';
+import { supabaseAdmin } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,11 +27,17 @@ export async function GET(
     }
 
     const { guildId } = await params;
-    console.log(`[Access Route] Checking access for user ${discordId} to guild ${guildId}`);
+    console.log(`[Access Route] Checking access for user ${discordId} (type: ${typeof discordId}) to guild ${guildId}`);
     const access = await getGuildAccess(guildId, discordId);
 
     if (!access.allowed) {
       console.warn(`[Access Route] Access denied for user ${discordId} to guild ${guildId}: ${access.reason}`);
+      // Log authorized users for debugging
+      const { data: authUsers } = await supabaseAdmin
+        .from('guild_authorized_users')
+        .select('discord_id, role')
+        .eq('guild_id', guildId);
+      console.log(`[Access Route] Authorized users for guild ${guildId}:`, authUsers);
     } else {
       console.log(`[Access Route] Access granted for user ${discordId} to guild ${guildId}`);
     }

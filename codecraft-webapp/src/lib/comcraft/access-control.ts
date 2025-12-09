@@ -65,15 +65,23 @@ export async function getGuildAccess(guildId: string, discordId: string) {
   }
 
   // Check guild_authorized_users table (uses discord_id)
-  const { data: authorizedGuild } = await supabaseAdmin
+  // Normalize both IDs to strings for comparison
+  const normalizedUserId = String(discordId);
+  const { data: authorizedGuildList } = await supabaseAdmin
     .from('guild_authorized_users')
-    .select('role')
-    .eq('guild_id', guildId)
-    .eq('discord_id', discordId)
-    .maybeSingle();
+    .select('discord_id, role')
+    .eq('guild_id', guildId);
 
-  if (authorizedGuild) {
-    return { allowed: true };
+  if (authorizedGuildList && authorizedGuildList.length > 0) {
+    // Check if any authorized user's discord_id matches (normalize both)
+    const isAuthorized = authorizedGuildList.some(
+      (user) => String(user.discord_id) === normalizedUserId
+    );
+    
+    if (isAuthorized) {
+      console.log(`[Access Control] User ${discordId} is authorized for guild ${guildId}`);
+      return { allowed: true };
+    }
   }
 
   // Check authorized_users table (uses user_id)
