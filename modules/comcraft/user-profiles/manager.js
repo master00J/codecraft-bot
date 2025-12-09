@@ -139,18 +139,64 @@ class UserProfileManager {
 
       console.log(`[Profile Manager] Sending message with ${components.length} action rows (${components.length - 1} questions + submit button)`);
 
-      const message = await channel.send({
-        embeds: [embed],
-        components: components
-      });
+      // Check if form already has a message posted
+      let message;
+      if (form.message_id) {
+        try {
+          // Try to fetch and update existing message
+          const existingMessage = await channel.messages.fetch(form.message_id).catch(() => null);
+          if (existingMessage) {
+            console.log(`[Profile Manager] Updating existing message ${form.message_id}`);
+            await existingMessage.edit({
+              embeds: [embed],
+              components: components
+            });
+            message = existingMessage;
+            console.log(`[Profile Manager] Message updated successfully: ${message.id}`);
+          } else {
+            // Message doesn't exist anymore, create new one
+            console.log(`[Profile Manager] Existing message ${form.message_id} not found, creating new message`);
+            message = await channel.send({
+              embeds: [embed],
+              components: components
+            });
+            console.log(`[Profile Manager] New message sent successfully: ${message.id}`);
+            
+            // Update form with new message ID
+            await this.supabase
+              .from('user_profiles_forms')
+              .update({ message_id: message.id })
+              .eq('id', form.id);
+          }
+        } catch (error) {
+          // If update fails, create a new message
+          console.warn(`[Profile Manager] Failed to update existing message, creating new one:`, error.message);
+          message = await channel.send({
+            embeds: [embed],
+            components: components
+          });
+          console.log(`[Profile Manager] New message sent successfully: ${message.id}`);
+          
+          // Update form with new message ID
+          await this.supabase
+            .from('user_profiles_forms')
+            .update({ message_id: message.id })
+            .eq('id', form.id);
+        }
+      } else {
+        // No existing message, create new one
+        message = await channel.send({
+          embeds: [embed],
+          components: components
+        });
+        console.log(`[Profile Manager] Message sent successfully: ${message.id}`);
 
-      console.log(`[Profile Manager] Message sent successfully: ${message.id}`);
-
-      // Update form with message ID
-      await this.supabase
-        .from('user_profiles_forms')
-        .update({ message_id: message.id })
-        .eq('id', form.id);
+        // Update form with message ID
+        await this.supabase
+          .from('user_profiles_forms')
+          .update({ message_id: message.id })
+          .eq('id', form.id);
+      }
 
       return message;
     } catch (error) {
