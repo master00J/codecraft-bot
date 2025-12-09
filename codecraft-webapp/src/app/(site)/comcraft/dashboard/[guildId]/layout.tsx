@@ -197,6 +197,35 @@ export default function GuildDashboardLayout({
     return () => clearInterval(interval);
   }, []);
 
+  // Check access to this guild
+  useEffect(() => {
+    async function checkAccess() {
+      if (!guildId) {
+        setCheckingAccess(false);
+        setHasAccess(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/comcraft/guilds/${guildId}/access`);
+        const data = await response.json();
+        
+        if (data.allowed) {
+          setHasAccess(true);
+        } else {
+          setHasAccess(false);
+        }
+      } catch (error) {
+        console.error('Error checking access:', error);
+        setHasAccess(false);
+      } finally {
+        setCheckingAccess(false);
+      }
+    }
+
+    checkAccess();
+  }, [guildId]);
+
   // Fetch menu order
   useEffect(() => {
     async function fetchMenuOrder() {
@@ -211,10 +240,10 @@ export default function GuildDashboardLayout({
       }
     }
 
-    if (guildId) {
+    if (guildId && hasAccess) {
       fetchMenuOrder();
     }
-  }, [guildId]);
+  }, [guildId, hasAccess]);
 
   // Save menu order
   const saveMenuOrder = async (newOrder: string[]) => {
