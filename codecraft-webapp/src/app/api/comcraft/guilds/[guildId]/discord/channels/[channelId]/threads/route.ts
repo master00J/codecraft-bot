@@ -72,16 +72,23 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching threads:', error);
     
-    // If bot API is unavailable, return empty array instead of error
-    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout') || error.message?.includes('Bot API')) {
+    // If bot API is unavailable, return success with empty array
+    // This prevents the UI from breaking and allows channels to still be selectable
+    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout') || error.message?.includes('Bot API') || error.message?.includes('connection refused')) {
+      console.warn('[Threads API] Bot API unavailable, returning empty threads array');
       return NextResponse.json({ 
-        success: false, 
+        success: true,  // Return success so UI doesn't break
         threads: [],
-        error: 'Bot API unavailable - threads cannot be loaded at this time'
+        warning: 'Bot API unavailable - threads cannot be loaded at this time'
       });
     }
     
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // For other errors, also return success with empty array to prevent UI breakage
+    return NextResponse.json({ 
+      success: true,
+      threads: [],
+      error: error.message || 'Unknown error'
+    });
   }
 }
 
