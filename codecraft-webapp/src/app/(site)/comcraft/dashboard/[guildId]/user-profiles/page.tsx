@@ -101,19 +101,30 @@ export default function UserProfilesConfig() {
 
   const fetchChannels = async () => {
     try {
+      console.log(`[User Profiles] Fetching channels for guild ${guildId}`);
       const response = await fetch(`/api/comcraft/guilds/${guildId}/discord/channels`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.channels) {
-          setChannels(data.channels.text || []);
-        } else if (Array.isArray(data.channels)) {
-          setChannels(data.channels.filter((ch: any) => ch.type === 0 || ch.type === 5));
-        } else {
-          setChannels([]);
-        }
+      const data = await response.json();
+      console.log(`[User Profiles] Channels API response:`, { 
+        ok: response.ok, 
+        success: data.success, 
+        hasChannels: !!data.channels,
+        channelsType: typeof data.channels 
+      });
+      
+      if (response.ok && data.success && data.channels) {
+        const textChannels = data.channels.text || [];
+        console.log(`[User Profiles] Loaded ${textChannels.length} text channels`);
+        setChannels(textChannels);
+      } else if (response.ok && Array.isArray(data.channels)) {
+        const textChannels = data.channels.filter((ch: any) => ch.type === 0 || ch.type === 5);
+        console.log(`[User Profiles] Loaded ${textChannels.length} text channels (from array)`);
+        setChannels(textChannels);
+      } else {
+        console.warn(`[User Profiles] Failed to load channels:`, data.error || 'Unknown error', data);
+        setChannels([]);
       }
-    } catch (error) {
-      console.error('Error fetching channels:', error);
+    } catch (error: any) {
+      console.error('[User Profiles] Error fetching channels:', error);
       setChannels([]);
     }
   };

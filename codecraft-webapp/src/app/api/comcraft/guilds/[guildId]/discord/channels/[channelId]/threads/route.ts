@@ -16,12 +16,23 @@ async function callBotAPI(endpoint: string, method: string = 'GET', body?: any) 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
 
+  if (!COMCRAFT_BOT_API || COMCRAFT_BOT_API === 'http://localhost:3002') {
+    console.warn('[Threads API] COMCRAFT_BOT_API_URL is not set or is localhost. Set it in Vercel environment variables.');
+  }
+  
+  if (!INTERNAL_SECRET) {
+    console.warn('[Threads API] INTERNAL_API_SECRET is not set. Set it in Vercel environment variables.');
+  }
+
   try {
-    const response = await fetch(`${COMCRAFT_BOT_API}${endpoint}`, {
+    const url = `${COMCRAFT_BOT_API}${endpoint}`;
+    console.log(`[Threads API] Calling bot API: ${url}`);
+    
+    const response = await fetch(url, {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-Secret': INTERNAL_SECRET!,
+        'X-Internal-Secret': INTERNAL_SECRET || '',
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
@@ -30,6 +41,8 @@ async function callBotAPI(endpoint: string, method: string = 'GET', body?: any) 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Threads API] Bot API returned ${response.status}: ${errorText}`);
       throw new Error(`Bot API returned ${response.status}: ${response.statusText}`);
     }
 
@@ -37,10 +50,12 @@ async function callBotAPI(endpoint: string, method: string = 'GET', body?: any) 
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[Threads API] Request timeout');
       throw new Error('Bot API timeout - is the bot running?');
     }
     if (error.message?.includes('ECONNREFUSED') || error.cause?.code === 'ECONNREFUSED') {
-      throw new Error('Bot API connection refused - is the bot running?');
+      console.error(`[Threads API] Connection refused to ${COMCRAFT_BOT_API}. Make sure COMCRAFT_BOT_API_URL is set correctly in Vercel.`);
+      throw new Error(`Bot API connection refused - check COMCRAFT_BOT_API_URL environment variable (currently: ${COMCRAFT_BOT_API || 'not set'})`);
     }
     throw error;
   }
