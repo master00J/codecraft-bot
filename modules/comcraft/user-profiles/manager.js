@@ -553,23 +553,43 @@ class UserProfileManager {
 
       // Create thread
       let thread;
+      const threadName = form.thread_name_template
+        .replace('{username}', user.user.username)
+        .replace('{displayName}', user.displayName)
+        .slice(0, 100);
+      
       if (formMessage) {
-        const threadName = form.thread_name_template
-          .replace('{username}', user.user.username)
-          .replace('{displayName}', user.displayName)
-          .slice(0, 100);
-        
-        thread = await formMessage.startThread({
-          name: threadName,
-          autoArchiveDuration: 1440, // 24 hours
-        });
+        // Check if message already has a thread
+        try {
+          // Try to fetch existing thread if any
+          if (formMessage.thread) {
+            // Message already has a thread, create new thread in channel instead
+            console.log(`[Profile Manager] Message ${formMessage.id} already has a thread, creating new thread in channel`);
+            thread = await channel.threads.create({
+              name: threadName,
+              autoArchiveDuration: 1440,
+            });
+          } else {
+            // Try to start thread from message
+            thread = await formMessage.startThread({
+              name: threadName,
+              autoArchiveDuration: 1440, // 24 hours
+            });
+          }
+        } catch (error) {
+          // If startThread fails (e.g., message already has thread), create thread in channel
+          if (error.message && error.message.includes('thread')) {
+            console.log(`[Profile Manager] Cannot start thread from message (already has thread), creating in channel instead`);
+            thread = await channel.threads.create({
+              name: threadName,
+              autoArchiveDuration: 1440,
+            });
+          } else {
+            throw error;
+          }
+        }
       } else {
-        // Fallback: create thread from channel
-        const threadName = form.thread_name_template
-          .replace('{username}', user.user.username)
-          .replace('{displayName}', user.displayName)
-          .slice(0, 100);
-        
+        // No form message, create thread from channel
         thread = await channel.threads.create({
           name: threadName,
           autoArchiveDuration: 1440,
