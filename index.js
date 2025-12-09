@@ -1723,6 +1723,26 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isModalSubmit()) {
+    // Profile modal handler (for text/number inputs)
+    if (interaction.customId.startsWith('profile_modal:')) {
+      if (!global.profileManager) {
+        return interaction.reply({
+          content: '❌ Profile system is not available at this time.',
+          ephemeral: true
+        });
+      }
+      const allowed = await featureGate.checkFeatureOrReply(
+        interaction,
+        interaction.guild?.id,
+        'user_profiles',
+        'Premium'
+      );
+      if (!allowed) return;
+      
+      await handleProfileModalInteraction(interaction);
+      return;
+    }
+
     if (isTicketModal(interaction.customId)) {
       await handleTicketModal(interaction);
       return;
