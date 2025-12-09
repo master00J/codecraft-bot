@@ -313,12 +313,17 @@ class UserProfileManager {
       }
 
       const response = await this.getUserResponse(formId, userId);
-      if (!response) {
+      if (!response || !response.responses || Object.keys(response.responses).length === 0) {
         throw new Error('No response found. Please select some options first.');
       }
 
-      if (response.status === 'completed') {
-        throw new Error('You have already submitted this profile.');
+      // Check if there are any selected options
+      const hasSelectedOptions = Object.values(response.responses).some(
+        optionIds => Array.isArray(optionIds) && optionIds.length > 0
+      );
+      
+      if (!hasSelectedOptions) {
+        throw new Error('Please select at least one option before submitting.');
       }
 
       // Get channel
@@ -343,9 +348,48 @@ class UserProfileManager {
         throw new Error('User not found in server');
       }
 
-      // Build profile content
-      let profileContent = `# ${user.user.displayName}'s Profile\n\n`;
-      
+      // Calculate submission count (how many times this user has completed this form)
+      const { count: submissionCount } = await this.supabase
+        .from('user_profiles_responses')
+        .select('*', { count: 'exact', head: true })
+        .eq('form_id', formId)
+        .eq('user_id', userId)
+        .eq('status', 'completed');
+
+      const currentSubmissionNumber = (submissionCount || 0) + 1;
+
+      // Calculate duration (time spent filling out the form)
+      const createdAt = new Date(response.created_at);
+      const completedAt = new Date();
+      const durationSeconds = Math.floor((completedAt - createdAt) / 1000);
+
+      // Get ordinal suffix for submission number
+      const getOrdinal = (n) => {
+        const s = ['th', 'st', 'nd', 'rd'];
+        const v = n % 100;
+        return n + (s[(v - 20) % 10] || s[v] || s[0]);
+      };
+
+      // Build embed with user info and submission details
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setAuthor({
+          name: `${user.user.displayName} (${user.user.id})`,
+          iconURL: user.user.displayAvatarURL({ dynamic: true, size: 256 })
+        })
+        .addFields(
+          {
+            name: '📊 Submission Info',
+            value: 
+              `**Count:** This is user ${getOrdinal(currentSubmissionNumber)} submission\n` +
+              `**Duration:** Spent ${durationSeconds} seconds to answer\n` +
+              `**Status:** Accepted by ${user.user.displayName} (${user.user.id}) <t:${Math.floor(completedAt.getTime() / 1000)}:R>`,
+            inline: false
+          }
+        );
+
+      // Build User Answer section
+      let answerFields = [];
       for (const question of form.questions) {
         const selectedOptionIds = response.responses[question.id] || [];
         if (selectedOptionIds.length === 0) {
@@ -356,12 +400,25 @@ class UserProfileManager {
           selectedOptionIds.includes(opt.id)
         );
 
-        profileContent += `**${question.text}**\n`;
-        for (const option of selectedOptions) {
-          profileContent += `✅ ${option.text}\n`;
-        }
-        profileContent += '\n';
+        // Join all selected options with comma, or show single option
+        const answerText = selectedOptions
+          .map(opt => opt.text)
+          .join(', ');
+
+        answerFields.push({
+          name: question.text,
+          value: answerText,
+          inline: false
+        });
       }
+
+      // Add User Answer section as a field with separator
+      if (answerFields.length > 0) {
+        embed.addFields({ name: '\u200B', value: '**User Answer**', inline: false });
+        embed.addFields(...answerFields);
+      }
+
+      embed.setTimestamp(completedAt);
 
       // Create thread
       let thread;
@@ -388,20 +445,35 @@ class UserProfileManager {
         });
       }
 
-      // Post profile in thread
-      const threadMessage = await thread.send(profileContent);
+      // Post profile embed in thread
+      const threadMessage = await thread.send({ embeds: [embed] });
 
-      // Update response
+      // Update response to completed
       await this.supabase
         .from('user_profiles_responses')
         .update({
           status: 'completed',
           thread_id: thread.id,
           thread_message_id: threadMessage.id,
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          completed_at: completedAt.toISOString(),
+          updated_at: completedAt.toISOString()
         })
         .eq('id', response.id);
+
+      // Create a new in_progress response so user can submit again
+      await this.supabase
+        .from('user_profiles_responses')
+        .insert({
+          form_id: formId,
+          guild_id: form.guild_id,
+          user_id: userId,
+          responses: {},
+          status: 'in_progress'
+        })
+        .catch(err => {
+          // Ignore error if insert fails (might be duplicate, but that's ok)
+          console.warn('Could not create new response for next submission:', err.message);
+        });
 
       return { thread, threadMessage };
     } catch (error) {
