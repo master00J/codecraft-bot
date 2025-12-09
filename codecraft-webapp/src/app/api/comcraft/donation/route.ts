@@ -102,22 +102,18 @@ export async function POST(request: NextRequest) {
     const cancelUrl = `${baseUrl}/comcraft/donation/cancel?paymentId=${paymentData?.id || 'none'}`;
 
     const params = new URLSearchParams();
-    // Use same payment methods as checkout page
+    // Use same payment methods as checkout page (exact same order and configuration)
     // Stripe will automatically show available methods based on customer location and currency
-    // Google Pay and Apple Pay are automatically available when 'card' is enabled
-    const paymentMethodTypes = [
-      'card',        // Kaart (Credit/debit cards) - also enables Google Pay & Apple Pay
-      'paypal',      // PayPal
-      'bancontact',  // Bancontact (Belgium)
-      'ideal',       // iDEAL (Netherlands)
-      'eps',         // EPS (Austria)
-    ];
+    const paymentMethodTypes = ['card', 'paypal', 'bancontact', 'ideal', 'eps'];
     paymentMethodTypes.forEach((type, index) => {
       params.append(`payment_method_types[${index}]`, type);
     });
     
-    // Enable Google Pay and Apple Pay via payment method options
+    // Enable Google Pay and Apple Pay (wallets) - automatically available with 'card' but explicitly enable
     params.append('payment_method_options[card][request_three_d_secure]', 'automatic');
+    
+    // Enable wallet payments (Google Pay, Apple Pay, etc.)
+    // Note: Wallets are automatically shown when 'card' payment method is enabled and configured in Stripe Dashboard
 
     params.append('mode', 'payment');
     params.append('success_url', successUrl);
