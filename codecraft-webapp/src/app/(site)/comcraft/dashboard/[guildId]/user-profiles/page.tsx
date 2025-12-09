@@ -272,9 +272,10 @@ export default function UserProfilesConfig() {
       });
 
       if (response.ok) {
+        const data = await response.json();
         toast({
           title: 'Success',
-          description: 'Form message posted to Discord channel'
+          description: data.messageId ? 'Form message updated in Discord channel' : 'Form message posted to Discord channel'
         });
         fetchForms();
       } else {
@@ -488,16 +489,14 @@ export default function UserProfilesConfig() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {!form.message_id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => postMessage(form.id)}
-                    >
-                      <Send className="w-4 h-4 mr-2" />
-                      Post to Discord
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => postMessage(form.id)}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    {form.message_id ? 'Repost to Discord' : 'Post to Discord'}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
