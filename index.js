@@ -4671,6 +4671,14 @@ async function handleProfileSelectMenuInteraction(interaction) {
 
     // Format: profile_select:{formId}:{questionId}
     const parts = interaction.customId.split(':');
+    if (parts.length < 3) {
+      console.error('[Profile] Invalid customId format:', interaction.customId);
+      return interaction.reply({
+        content: '❌ Invalid form interaction. Please try again.',
+        ephemeral: true
+      });
+    }
+
     const formId = parts[1];
     const questionId = parts[2];
     const selectedValues = interaction.values || [];
@@ -4679,10 +4687,12 @@ async function handleProfileSelectMenuInteraction(interaction) {
 
     const form = await global.profileManager.getForm(formId);
     if (!form) {
+      console.error(`[Profile] Form ${formId} not found`);
       return interaction.editReply({ content: '❌ Form not found!' });
     }
 
     if (form.guild_id !== interaction.guildId) {
+      console.error(`[Profile] Form guild mismatch: ${form.guild_id} !== ${interaction.guildId}`);
       return interaction.editReply({ content: '❌ That form belongs to a different server!' });
     }
 
@@ -4691,19 +4701,36 @@ async function handleProfileSelectMenuInteraction(interaction) {
     }
 
     // Update selections
-    await global.profileManager.updateSelectMenuSelections(formId, questionId, selectedValues, interaction.user.id);
+    try {
+      await global.profileManager.updateSelectMenuSelections(formId, questionId, selectedValues, interaction.user.id);
 
-    // Update form message to show visual feedback
-    await global.profileManager.updateFormMessage(formId, interaction.user.id);
+      // Update form message to show visual feedback
+      await global.profileManager.updateFormMessage(formId, interaction.user.id);
 
-    await interaction.editReply({
-      content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected)`
-    });
+      await interaction.editReply({
+        content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected)`
+      });
+    } catch (updateError) {
+      console.error('[Profile] Error updating selections:', updateError);
+      await interaction.editReply({
+        content: `❌ ${updateError.message || 'Failed to update selection. Please try again.'}`
+      });
+    }
   } catch (error) {
-    console.error('Error handling profile select menu:', error);
-    await interaction.editReply({
-      content: `❌ ${error.message}`
-    }).catch(() => {});
+    console.error('[Profile] Error handling profile select menu:', error);
+    console.error('[Profile] Error stack:', error.stack);
+    
+    // Try to reply if we haven't deferred yet
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({
+        content: `❌ ${error.message || 'An error occurred. Please try again.'}`
+      }).catch(() => {});
+    } else {
+      await interaction.reply({
+        content: `❌ ${error.message || 'An error occurred. Please try again.'}`,
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
 }
 

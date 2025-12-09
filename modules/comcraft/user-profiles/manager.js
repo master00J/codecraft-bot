@@ -247,19 +247,24 @@ class UserProfileManager {
 
   /**
    * Get or create user response
+   * Returns the most recent in_progress response, or creates a new one
    */
   async getOrCreateResponse(formId, guildId, userId) {
-    const { data: existing } = await this.supabase
+    // First try to get the most recent in_progress response
+    const { data: existingResponses } = await this.supabase
       .from('user_profiles_responses')
       .select('*')
       .eq('form_id', formId)
       .eq('user_id', userId)
-      .single();
+      .eq('status', 'in_progress')
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-    if (existing) {
-      return existing;
+    if (existingResponses && existingResponses.length > 0) {
+      return existingResponses[0];
     }
 
+    // No in_progress response found, create a new one
     const { data: response, error } = await this.supabase
       .from('user_profiles_responses')
       .insert({
