@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -544,8 +545,21 @@ function DonationButton() {
   const [showDialog, setShowDialog] = useState(false);
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
+  const [currency, setCurrency] = useState<'USD' | 'EUR'>('EUR');
   
-  const presetAmounts = [5, 10, 25, 50, 100];
+  // Currency symbols and preset amounts
+  const currencySymbols: Record<string, string> = {
+    USD: '$',
+    EUR: '€',
+  };
+  
+  const presetAmounts: Record<string, number[]> = {
+    USD: [5, 10, 25, 50, 100],
+    EUR: [5, 10, 25, 50, 100],
+  };
+  
+  const currencySymbol = currencySymbols[currency] || '$';
+  const amounts = presetAmounts[currency] || [5, 10, 25, 50, 100];
 
   const handleDonate = async () => {
     try {
@@ -560,7 +574,7 @@ function DonationButton() {
           throw new Error('Please enter a valid donation amount');
         }
         if (amount < 1) {
-          throw new Error('Minimum donation amount is $1');
+          throw new Error(`Minimum donation amount is ${currencySymbol}1`);
         }
       } else if (selectedAmount && selectedAmount > 0) {
         // Preset amount
@@ -568,8 +582,6 @@ function DonationButton() {
       } else {
         throw new Error('Please select or enter a donation amount');
       }
-
-      const currency = 'USD';
 
       const response = await fetch('/api/comcraft/donation', {
         method: 'POST',
@@ -633,11 +645,32 @@ function DonationButton() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Currency selector */}
+            <div className="space-y-2">
+              <Label htmlFor="currency">Currency</Label>
+              <Select value={currency} onValueChange={(value: 'USD' | 'EUR') => {
+                setCurrency(value);
+                setSelectedAmount(null);
+                setCustomAmount('');
+              }}>
+                <SelectTrigger id="currency">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EUR">Euro (€) - All payment methods</SelectItem>
+                  <SelectItem value="USD">US Dollar ($)</SelectItem>
+                </SelectContent>
+              </Select>
+              {currency === 'EUR' && (
+                <p className="text-xs text-gray-400">EUR enables iDEAL, Bancontact, EPS, and Google Pay</p>
+              )}
+            </div>
+
             {/* Preset amounts */}
             <div className="space-y-2">
               <Label>Quick Select</Label>
               <div className="grid grid-cols-3 gap-2">
-                {presetAmounts.map((amount) => (
+                {amounts.map((amount) => (
                   <button
                     key={amount}
                     onClick={() => {
@@ -651,7 +684,7 @@ function DonationButton() {
                         : "bg-gray-800/50 border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-gray-600"
                     )}
                   >
-                    ${amount}
+                    {currencySymbol}{amount}
                   </button>
                 ))}
                 <button
@@ -674,7 +707,7 @@ function DonationButton() {
             {/* Custom amount input */}
             {selectedAmount === -1 && (
               <div className="space-y-2">
-                <Label htmlFor="customAmount">Custom Amount (USD)</Label>
+                <Label htmlFor="customAmount">Custom Amount ({currency})</Label>
                 <Input
                   id="customAmount"
                   type="number"
@@ -684,7 +717,7 @@ function DonationButton() {
                   value={customAmount}
                   onChange={(e) => setCustomAmount(e.target.value)}
                 />
-                <p className="text-xs text-gray-400">Minimum donation: $1.00</p>
+                <p className="text-xs text-gray-400">Minimum donation: {currencySymbol}1.00</p>
               </div>
             )}
 
@@ -692,7 +725,7 @@ function DonationButton() {
             {selectedAmount !== null && selectedAmount !== -1 && (
               <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
                 <p className="text-sm text-gray-300">
-                  Selected: <span className="font-semibold text-pink-300">${selectedAmount}</span>
+                  Selected: <span className="font-semibold text-pink-300">{currencySymbol}{selectedAmount}</span>
                 </p>
               </div>
             )}
