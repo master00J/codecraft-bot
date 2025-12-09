@@ -19,13 +19,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const discordId = (session.user as any).discordId;
-    if (!discordId) {
+    const rawDiscordId = (session.user as any).discordId;
+    if (!rawDiscordId) {
       return NextResponse.json({ error: 'Discord ID not found' }, { status: 400 });
     }
 
+    // Normalize Discord ID to string for consistent comparison
+    const discordId = String(rawDiscordId);
+
+    console.log(`[Guilds API] Fetching guilds for user ${discordId} (type: ${typeof rawDiscordId})`);
+
     // Get all guilds where user is owner
-    const { data: ownedGuilds, error: ownedError } = await supabase
+    // Normalize owner_discord_id comparison by fetching all and filtering
+    const { data: allGuilds, error: allGuildsError } = await supabase
       .from('guild_configs')
       .select(`
         guild_id,
@@ -33,25 +39,42 @@ export async function GET(request: NextRequest) {
         guild_icon_url,
         subscription_tier,
         subscription_active,
-        license_id
-      `)
-      .eq('owner_discord_id', discordId);
+        license_id,
+        owner_discord_id
+      `);
 
-    if (ownedError) {
-      console.error('Error fetching owned guilds:', ownedError);
+    if (allGuildsError) {
+      console.error('Error fetching all guilds:', allGuildsError);
       return NextResponse.json({ error: 'Failed to fetch guilds' }, { status: 500 });
     }
 
+    // Filter owned guilds by normalized Discord ID comparison
+    const ownedGuilds = (allGuilds || []).filter(
+      (guild: any) => String(guild.owner_discord_id) === discordId
+    ).map(({ owner_discord_id, ...rest }: any) => rest); // Remove owner_discord_id from result
+
+    console.log(`[Guilds API] Found ${ownedGuilds.length} owned guilds`);
+
     // Get all guilds where user is authorized (via guild_authorized_users)
-    // First get the guild IDs, then fetch the configs separately
-    const { data: authorizedGuildIds, error: authError } = await supabase
+    // Fetch all authorized users for this guild and filter in JavaScript
+    const { data: allAuthorizedUsers, error: authError } = await supabase
       .from('guild_authorized_users')
-      .select('guild_id')
-      .eq('discord_id', discordId);
+      .select('guild_id, discord_id');
+
+    let authorizedGuildIds: string[] = [];
+    if (!authError && allAuthorizedUsers) {
+      // Filter by normalized Discord ID comparison
+      authorizedGuildIds = allAuthorizedUsers
+        .filter((user: any) => String(user.discord_id) === discordId)
+        .map((user: any) => user.guild_id);
+      
+      console.log(`[Guilds API] Found ${authorizedGuildIds.length} authorized guilds for user ${discordId}`);
+    } else if (authError) {
+      console.warn('Error fetching authorized users:', authError);
+    }
 
     let authorizedGuilds: any[] = [];
-    if (!authError && authorizedGuildIds && authorizedGuildIds.length > 0) {
-      const authorizedIds = authorizedGuildIds.map((a: any) => a.guild_id);
+    if (authorizedGuildIds.length > 0) {
       const { data: authorizedGuildsData, error: authorizedGuildsError } = await supabase
         .from('guild_configs')
         .select(`
@@ -62,42 +85,52 @@ export async function GET(request: NextRequest) {
           subscription_active,
           license_id
         `)
-        .in('guild_id', authorizedIds);
+        .in('guild_id', authorizedGuildIds);
 
       if (!authorizedGuildsError && authorizedGuildsData) {
         authorizedGuilds = authorizedGuildsData;
+        console.log(`[Guilds API] Loaded ${authorizedGuilds.length} authorized guild configs`);
+      } else if (authorizedGuildsError) {
+        console.warn('Error fetching authorized guild configs:', authorizedGuildsError);
       }
-    } else if (authError) {
-      console.warn('Error fetching authorized guilds:', authError);
     }
 
     // Get all guilds where user is authorized (via authorized_users table - legacy)
-    // First get the guild IDs, then fetch the configs separately
-    const { data: legacyAuthorizedGuildIds, error: legacyAuthError } = await supabase
-      .from('authorized_users')
-      .select('guild_id')
-      .eq('user_id', discordId);
-
+    // Try to fetch, but ignore if table doesn't exist
     let legacyAuthorizedGuilds: any[] = [];
-    if (!legacyAuthError && legacyAuthorizedGuildIds && legacyAuthorizedGuildIds.length > 0) {
-      const legacyIds = legacyAuthorizedGuildIds.map((a: any) => a.guild_id);
-      const { data: legacyGuildsData, error: legacyGuildsError } = await supabase
-        .from('guild_configs')
-        .select(`
-          guild_id,
-          guild_name,
-          guild_icon_url,
-          subscription_tier,
-          subscription_active,
-          license_id
-        `)
-        .in('guild_id', legacyIds);
+    try {
+      const { data: allLegacyUsers, error: legacyAuthError } = await supabase
+        .from('authorized_users')
+        .select('guild_id, user_id');
 
-      if (!legacyGuildsError && legacyGuildsData) {
-        legacyAuthorizedGuilds = legacyGuildsData;
+      if (!legacyAuthError && allLegacyUsers) {
+        // Filter by normalized user_id comparison
+        const legacyIds = allLegacyUsers
+          .filter((user: any) => String(user.user_id) === discordId)
+          .map((user: any) => user.guild_id);
+
+        if (legacyIds.length > 0) {
+          const { data: legacyGuildsData, error: legacyGuildsError } = await supabase
+            .from('guild_configs')
+            .select(`
+              guild_id,
+              guild_name,
+              guild_icon_url,
+              subscription_tier,
+              subscription_active,
+              license_id
+            `)
+            .in('guild_id', legacyIds);
+
+          if (!legacyGuildsError && legacyGuildsData) {
+            legacyAuthorizedGuilds = legacyGuildsData;
+            console.log(`[Guilds API] Found ${legacyAuthorizedGuilds.length} legacy authorized guilds`);
+          }
+        }
       }
-    } else if (legacyAuthError) {
-      console.warn('Error fetching legacy authorized guilds:', legacyAuthError);
+    } catch (error) {
+      // Silently ignore if table doesn't exist
+      console.warn('Legacy authorized_users table not available or error:', error);
     }
 
     // Combine all guilds and deduplicate
@@ -129,6 +162,8 @@ export async function GET(request: NextRequest) {
     const guilds = Array.from(guildMap.values()).sort((a: any, b: any) => 
       (a.guild_name || '').localeCompare(b.guild_name || '')
     );
+
+    console.log(`[Guilds API] Total guilds after combining: ${guilds.length} (${ownedGuilds.length} owned, ${authorizedGuilds.length} authorized, ${legacyAuthorizedGuilds.length} legacy)`);
 
     // Get all guild IDs for vote tier unlock check
     const guildIds = guilds.map((g: any) => g.guild_id);
