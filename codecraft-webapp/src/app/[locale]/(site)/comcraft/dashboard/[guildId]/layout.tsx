@@ -9,6 +9,9 @@ import { Link } from '@/navigation';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -549,13 +552,34 @@ export default function GuildDashboardLayout({
 function DonationButton() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [customAmount, setCustomAmount] = useState('');
+  
+  const presetAmounts = [5, 10, 25, 50, 100];
 
   const handleDonate = async () => {
     try {
       setLoading(true);
 
-      // Default donation amount (could be made configurable)
-      const amount = 5; // $5 default
+      // Determine amount
+      let amount: number;
+      if (selectedAmount === -1 && customAmount) {
+        // Custom amount
+        amount = parseFloat(customAmount);
+        if (isNaN(amount) || amount <= 0) {
+          throw new Error('Please enter a valid donation amount');
+        }
+        if (amount < 1) {
+          throw new Error('Minimum donation amount is $1');
+        }
+      } else if (selectedAmount && selectedAmount > 0) {
+        // Preset amount
+        amount = selectedAmount;
+      } else {
+        throw new Error('Please select or enter a donation amount');
+      }
+
       const currency = 'USD';
 
       const response = await fetch('/api/comcraft/donation', {
@@ -587,27 +611,122 @@ function DonationButton() {
   };
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-gray-400 text-center px-2">
-        You like this bot? Feel free to donate and support this bot
-      </p>
-      <button
-        onClick={handleDonate}
-        disabled={loading}
-        className="w-full px-4 py-3 bg-gradient-to-r from-pink-500/20 to-purple-500/20 hover:from-pink-500/30 hover:to-purple-500/30 border border-pink-500/30 hover:border-pink-500/50 rounded-lg transition-all duration-200 flex items-center gap-2 justify-center group"
-      >
-        <Heart className={cn(
-          "h-4 w-4 transition-colors",
-          loading ? "text-gray-500" : "text-pink-400 group-hover:text-pink-300"
-        )} fill={loading ? "none" : "currentColor"} />
-        <span className={cn(
-          "text-sm font-medium transition-colors",
-          loading ? "text-gray-500" : "text-gray-300 group-hover:text-white"
-        )}>
-          {loading ? 'Loading...' : 'Support ComCraft'}
-        </span>
-      </button>
-    </div>
+    <>
+      <div className="space-y-2">
+        <p className="text-xs text-gray-400 text-center px-2">
+          You like this bot? Feel free to donate and support this bot
+        </p>
+        <button
+          onClick={() => setShowDialog(true)}
+          disabled={loading}
+          className="w-full px-4 py-3 bg-gradient-to-r from-pink-500/20 to-purple-500/20 hover:from-pink-500/30 hover:to-purple-500/30 border border-pink-500/30 hover:border-pink-500/50 rounded-lg transition-all duration-200 flex items-center gap-2 justify-center group"
+        >
+          <Heart className={cn(
+            "h-4 w-4 transition-colors",
+            loading ? "text-gray-500" : "text-pink-400 group-hover:text-pink-300"
+          )} fill={loading ? "none" : "currentColor"} />
+          <span className={cn(
+            "text-sm font-medium transition-colors",
+            loading ? "text-gray-500" : "text-gray-300 group-hover:text-white"
+          )}>
+            Support ComCraft
+          </span>
+        </button>
+      </div>
+
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Support ComCraft</DialogTitle>
+            <DialogDescription>
+              Choose a donation amount to support the development of ComCraft
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Preset amounts */}
+            <div className="space-y-2">
+              <Label>Quick Select</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {presetAmounts.map((amount) => (
+                  <button
+                    key={amount}
+                    onClick={() => {
+                      setSelectedAmount(amount);
+                      setCustomAmount('');
+                    }}
+                    className={cn(
+                      "px-4 py-2 rounded-lg border transition-all",
+                      selectedAmount === amount
+                        ? "bg-pink-500/20 border-pink-500/50 text-pink-300"
+                        : "bg-gray-800/50 border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-gray-600"
+                    )}
+                  >
+                    ${amount}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    setSelectedAmount(-1);
+                    setCustomAmount('');
+                  }}
+                  className={cn(
+                    "px-4 py-2 rounded-lg border transition-all",
+                    selectedAmount === -1
+                      ? "bg-pink-500/20 border-pink-500/50 text-pink-300"
+                      : "bg-gray-800/50 border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-gray-600"
+                  )}
+                >
+                  Custom
+                </button>
+              </div>
+            </div>
+
+            {/* Custom amount input */}
+            {selectedAmount === -1 && (
+              <div className="space-y-2">
+                <Label htmlFor="customAmount">Custom Amount (USD)</Label>
+                <Input
+                  id="customAmount"
+                  type="number"
+                  step="0.01"
+                  min="1"
+                  placeholder="Enter amount"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                />
+                <p className="text-xs text-gray-400">Minimum donation: $1.00</p>
+              </div>
+            )}
+
+            {/* Selected amount display */}
+            {selectedAmount !== null && selectedAmount !== -1 && (
+              <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
+                <p className="text-sm text-gray-300">
+                  Selected: <span className="font-semibold text-pink-300">${selectedAmount}</span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <button
+              onClick={() => setShowDialog(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDonate}
+              disabled={loading || (selectedAmount === null) || (selectedAmount === -1 && !customAmount)}
+              className="px-4 py-2 text-sm font-medium bg-pink-500 hover:bg-pink-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Processing...' : 'Donate Now'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
