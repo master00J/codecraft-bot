@@ -133,7 +133,14 @@ export async function PATCH(
 
     if (body.formName !== undefined) updates.form_name = body.formName;
     if (body.description !== undefined) updates.description = body.description;
-    if (body.channelId !== undefined) updates.channel_id = body.channelId;
+    if (body.channelId !== undefined) {
+      updates.channel_id = body.channelId;
+      // If channel changes, reset thread_id (threads belong to specific channels)
+      if (body.threadId === undefined) {
+        updates.thread_id = null;
+      }
+    }
+    if (body.threadId !== undefined) updates.thread_id = body.threadId || null;
     if (body.questions !== undefined) {
       // Validate questions structure
       if (!Array.isArray(body.questions) || body.questions.length === 0) {

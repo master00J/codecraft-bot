@@ -275,6 +275,53 @@ class DiscordManager {
   }
 
   /**
+   * Get all threads in a channel (including active and archived)
+   */
+  async getThreads(guildId, channelId) {
+    try {
+      const guild = this.client.guilds.cache.get(guildId);
+      if (!guild) {
+        return { success: false, error: 'Guild not found' };
+      }
+
+      const channel = guild.channels.cache.get(channelId);
+      if (!channel) {
+        return { success: false, error: 'Channel not found' };
+      }
+
+      // Only text-based channels can have threads
+      if (!channel.isTextBased() && channel.type !== ChannelType.GuildForum) {
+        return { success: false, error: 'Channel does not support threads' };
+      }
+
+      // Fetch all active threads
+      const activeThreads = await channel.threads.fetchActive();
+      
+      // Fetch archived threads (requires manual fetching per thread or using fetchArchived)
+      // For now, we'll just return active threads as they're the most useful
+      const threads = activeThreads.threads.map(thread => ({
+        id: thread.id,
+        name: thread.name,
+        type: thread.type,
+        parentId: thread.parentId,
+        archived: thread.archived,
+        locked: thread.locked,
+        memberCount: thread.memberCount,
+        messageCount: thread.messageCount,
+        createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
+      }));
+
+      return {
+        success: true,
+        threads: threads.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      };
+    } catch (error) {
+      console.error('Error getting threads:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Create a new channel
    */
   async createChannel(guildId, options = {}) {

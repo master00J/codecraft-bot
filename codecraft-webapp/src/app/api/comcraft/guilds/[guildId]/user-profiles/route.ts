@@ -154,7 +154,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { formName, description, channelId, questions, threadNameTemplate } = body;
+    const { formName, description, channelId, threadId, questions, threadNameTemplate } = body;
 
     if (!formName || !channelId || !Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json(
@@ -200,6 +200,7 @@ export async function POST(
         form_name: formName,
         description: description || null,
         channel_id: channelId,
+        thread_id: threadId || null, // Optional: use existing thread if provided
         questions: questions,
         thread_name_template: threadNameTemplate || '{username} Profile',
         enabled: true

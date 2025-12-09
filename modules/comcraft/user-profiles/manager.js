@@ -741,24 +741,27 @@ class UserProfileManager {
       // Get or create shared thread for this form
       let thread;
       
-      // Check if form already has a thread_id stored
+      // Check if form already has a thread_id stored (user-selected or previously created)
       if (form.thread_id) {
         try {
           // Try to fetch existing thread
           thread = await channel.threads.fetch(form.thread_id);
           if (!thread) {
-            // Thread doesn't exist anymore, create new one
-            console.log(`[Profile Manager] Thread ${form.thread_id} no longer exists, creating new shared thread`);
-            form.thread_id = null;
+            // Thread doesn't exist anymore
+            console.log(`[Profile Manager] Thread ${form.thread_id} no longer exists`);
+            // Only clear thread_id if it wasn't user-selected (we'll create new thread below)
+            // For user-selected threads, we assume they want to keep trying to use it
+            // But if it doesn't exist, we'll create a new one
           }
         } catch (error) {
-          // Thread not found, create new one
-          console.log(`[Profile Manager] Could not fetch thread ${form.thread_id}, creating new shared thread:`, error.message);
-          form.thread_id = null;
+          // Thread not found
+          console.log(`[Profile Manager] Could not fetch thread ${form.thread_id}:`, error.message);
+          // Thread might be archived or deleted, we'll create a new one
+          thread = null;
         }
       }
       
-      // If no thread exists yet, create one
+      // If no thread exists yet (or thread was not found), create one
       if (!thread) {
         // Use a generic name for the shared thread (remove user-specific template)
         const threadName = (form.thread_name_template || 'User Profiles')

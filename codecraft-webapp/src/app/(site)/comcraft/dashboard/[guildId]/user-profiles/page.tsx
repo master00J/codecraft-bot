@@ -22,6 +22,7 @@ interface ProfileForm {
   description?: string;
   channel_id: string;
   message_id?: string;
+  thread_id?: string; // Optional: selected thread ID
   questions: Question[];
   thread_name_template: string;
   enabled: boolean;
@@ -56,6 +57,8 @@ export default function UserProfilesConfig() {
 
   const [forms, setForms] = useState<ProfileForm[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
+  const [threads, setThreads] = useState<any[]>([]);
+  const [loadingThreads, setLoadingThreads] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [creatingNewForm, setCreatingNewForm] = useState(false);
@@ -65,6 +68,7 @@ export default function UserProfilesConfig() {
     formName: '',
     description: '',
     channelId: '',
+    threadId: '',
     threadNameTemplate: '{username} Profile',
     questions: [] as Question[]
   });
@@ -111,6 +115,33 @@ export default function UserProfilesConfig() {
     } catch (error) {
       console.error('Error fetching channels:', error);
       setChannels([]);
+    }
+  };
+
+  const fetchThreads = async (channelId: string) => {
+    if (!channelId) {
+      setThreads([]);
+      return;
+    }
+
+    setLoadingThreads(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/discord/channels/${channelId}/threads`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.threads) {
+          setThreads(data.threads || []);
+        } else {
+          setThreads([]);
+        }
+      } else {
+        setThreads([]);
+      }
+    } catch (error) {
+      console.error('Error fetching threads:', error);
+      setThreads([]);
+    } finally {
+      setLoadingThreads(false);
     }
   };
 
@@ -251,6 +282,7 @@ export default function UserProfilesConfig() {
           formName: newForm.formName,
           description: newForm.description,
           channelId: newForm.channelId,
+          threadId: newForm.threadId || null, // Send null if empty
           questions: newForm.questions,
           threadNameTemplate: newForm.threadNameTemplate
         })
@@ -267,9 +299,11 @@ export default function UserProfilesConfig() {
           formName: '',
           description: '',
           channelId: '',
+          threadId: '',
           threadNameTemplate: '{username} Profile',
           questions: []
         });
+        setThreads([]);
         fetchForms();
       } else {
         const data = await response.json();
@@ -352,9 +386,14 @@ export default function UserProfilesConfig() {
       formName: form.form_name,
       description: form.description || '',
       channelId: form.channel_id,
+      threadId: form.thread_id || '',
       threadNameTemplate: form.thread_name_template,
       questions: questionsWithTypes
     });
+    // Fetch threads for the channel when editing
+    if (form.channel_id) {
+      fetchThreads(form.channel_id);
+    }
     setCreatingNewForm(true);
   };
 
@@ -373,9 +412,11 @@ export default function UserProfilesConfig() {
             formName: '',
             description: '',
             channelId: '',
+            threadId: '',
             threadNameTemplate: '{username} Profile',
             questions: []
           });
+          setThreads([]);
         }}>
           <Plus className="w-4 h-4 mr-2" />
           Create Form
@@ -406,7 +447,10 @@ export default function UserProfilesConfig() {
 
           <div>
             <Label>Channel</Label>
-            <Select value={newForm.channelId} onValueChange={(value) => setNewForm({ ...newForm, channelId: value })}>
+            <Select value={newForm.channelId} onValueChange={(value) => {
+              setNewForm({ ...newForm, channelId: value, threadId: '' }); // Reset thread when channel changes
+              fetchThreads(value); // Fetch threads for selected channel
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a channel" />
               </SelectTrigger>
@@ -420,15 +464,43 @@ export default function UserProfilesConfig() {
             </Select>
           </div>
 
-          <div>
-            <Label>Thread Name Template</Label>
-            <Input
-              value={newForm.threadNameTemplate}
-              onChange={(e) => setNewForm({ ...newForm, threadNameTemplate: e.target.value })}
-              placeholder="{username} Profile"
-            />
-            <p className="text-sm text-gray-500 mt-1">Use {"{username}"} or {"{displayName}"} for dynamic names</p>
-          </div>
+          {newForm.channelId && (
+            <div>
+              <Label>Existing Thread (Optional)</Label>
+              <Select 
+                value={newForm.threadId || 'none'} 
+                onValueChange={(value) => setNewForm({ ...newForm, threadId: value === 'none' ? '' : value })}
+                disabled={loadingThreads}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingThreads ? "Loading threads..." : "Select an existing thread (optional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Create new thread</SelectItem>
+                  {threads.map((thread) => (
+                    <SelectItem key={thread.id} value={thread.id}>
+                      #{thread.name} {thread.archived ? '(Archived)' : ''} ({thread.messageCount || 0} messages)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-gray-500 mt-1">
+                Select an existing thread to add profiles to, or leave as "Create new thread" to create a new one
+              </p>
+            </div>
+          )}
+
+          {!newForm.threadId && (
+            <div>
+              <Label>Thread Name Template</Label>
+              <Input
+                value={newForm.threadNameTemplate}
+                onChange={(e) => setNewForm({ ...newForm, threadNameTemplate: e.target.value })}
+                placeholder="{username} Profile"
+              />
+              <p className="text-sm text-gray-500 mt-1">Use {"{username}"} or {"{displayName}"} for dynamic names (only used when creating a new thread)</p>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex justify-between items-center">

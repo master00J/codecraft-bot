@@ -8841,6 +8841,44 @@ app.get('/api/discord/:guildId/channels', async (req, res) => {
   }
 });
 
+// Get threads in a channel
+app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) => {
+  try {
+    const { guildId, channelId } = req.params;
+    
+    // Check if this guild uses a custom bot
+    let botClient = client;
+    let guild = client.guilds.cache.get(guildId);
+    
+    if (!guild && customBotManager) {
+      // Try to find custom bot for this guild
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+        guild = customBot.guilds.cache.get(guildId);
+        console.log(`🤖 [Threads API] Using custom bot for guild ${guildId}`);
+      }
+    }
+
+    if (!guild) {
+      return res.json({ 
+        success: false, 
+        error: 'Guild not found. Make sure the bot (main or custom) is in the server.' 
+      });
+    }
+
+    // Use the appropriate DiscordManager for the bot client
+    const DiscordManager = require('./modules/comcraft/discord-manager');
+    const manager = new DiscordManager(botClient);
+    const result = await manager.getThreads(guildId, channelId);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error in threads API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
 // Get guild emojis
 app.get('/api/discord/:guildId/emojis', async (req, res) => {
   try {
