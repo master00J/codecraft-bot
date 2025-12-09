@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getGuildAccess } from '@/lib/comcraft/access-control';
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,13 @@ export async function GET(
 
     console.log('Fetching config for guild:', guildId, 'user:', discordId);
 
+    // Check access using centralized helper
+    const access = await getGuildAccess(guildId, discordId);
+    if (!access.allowed) {
+      console.warn(`[Config API] Access denied for user ${discordId} to guild ${guildId}: ${access.reason}`);
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
     // Get guild config
     const { data: guild, error: guildError } = await supabase
       .from('guild_configs')
@@ -46,28 +54,6 @@ export async function GET(
 
     if (guildError || !guild) {
       return NextResponse.json({ error: 'Guild not found' }, { status: 404 });
-    }
-
-    // Check if user has access (owner OR authorized user OR platform admin)
-    const isOwner = guild.owner_discord_id === discordId;
-    
-    const { data: authorized } = await supabase
-      .from('authorized_users')
-      .select('role')
-      .eq('guild_id', guildId)
-      .eq('user_id', discordId)
-      .maybeSingle();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('discord_id', discordId)
-      .maybeSingle();
-
-    const isPlatformAdmin = user?.is_admin === true;
-
-    if (!isOwner && !authorized && !isPlatformAdmin) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     // Get leveling config
@@ -127,37 +113,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
     }
 
-    // Get guild and check access
+    // Check access using centralized helper
+    const access = await getGuildAccess(guildId, discordId);
+    if (!access.allowed) {
+      console.warn(`[Config API PATCH] Access denied for user ${discordId} to guild ${guildId}: ${access.reason}`);
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // Verify guild exists
     const { data: guild } = await supabase
       .from('guild_configs')
-      .select('owner_discord_id')
+      .select('guild_id')
       .eq('guild_id', guildId)
       .single();
 
     if (!guild) {
       return NextResponse.json({ error: 'Guild not found' }, { status: 404 });
-    }
-
-    // Check permissions
-    const isOwner = guild.owner_discord_id === discordId;
-    
-    const { data: authorized } = await supabase
-      .from('authorized_users')
-      .select('role')
-      .eq('guild_id', guildId)
-      .eq('user_id', discordId)
-      .maybeSingle();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('discord_id', discordId)
-      .maybeSingle();
-
-    const isPlatformAdmin = user?.is_admin === true;
-
-    if (!isOwner && !authorized && !isPlatformAdmin) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     // Update guild config
