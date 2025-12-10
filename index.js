@@ -4978,13 +4978,9 @@ async function handleProfileModalInteraction(interaction) {
     // Update user's response
     await global.profileManager.updateInputResponse(formId, questionId, inputValue, interaction.user.id);
 
-    // Update form message to show visual feedback (fail silently if it doesn't work)
-    try {
-      await global.profileManager.updateFormMessage(formId, interaction.user.id);
-    } catch (updateError) {
-      console.warn('[Profile] Could not update form message (non-critical):', updateError.message);
-      // Continue anyway - the response was saved successfully
-    }
+    // Don't update the form message - keep it clean for all users
+    // Each user's selections are stored in the database and will be shown when they submit
+    // Updating the message would show one user's selections to all other users
 
     await interaction.editReply({
       content: `✅ Answer saved! (${questionType === 'number' ? inputValue : inputValue.length + ' characters'})`
