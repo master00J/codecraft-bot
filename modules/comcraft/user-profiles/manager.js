@@ -142,11 +142,16 @@ class UserProfileManager {
             }
             placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
 
+            // Use maxSelections limit if set, otherwise allow all options
+            const maxSelections = question.maxSelections !== undefined && question.maxSelections > 0
+              ? Math.min(question.maxSelections, menuOptions.length)
+              : menuOptions.length;
+
             const selectMenu = new StringSelectMenuBuilder()
               .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`)
               .setPlaceholder(`Select options: ${placeholder}`)
               .setMinValues(0)
-              .setMaxValues(menuOptions.length)
+              .setMaxValues(maxSelections)
               .addOptions(menuOptions);
 
             const row = new ActionRowBuilder().addComponents(selectMenu);
@@ -463,6 +468,12 @@ class UserProfileManager {
 
       const currentResponses = response.responses || {};
       
+      // Find the question to check maxSelections limit
+      const question = form.questions.find(q => q.id === questionId);
+      if (!question) {
+        throw new Error('Question not found');
+      }
+
       // Parse selected values (format: questionId:optionId)
       // Filter to only include values that match the current questionId
       const selectedOptionIds = selectedValues
@@ -475,6 +486,13 @@ class UserProfileManager {
           const parts = value.split(':');
           return parts[1]; // Return just the optionId
         });
+
+      // Validate maxSelections limit if set
+      if (question.maxSelections !== undefined && question.maxSelections > 0) {
+        if (selectedOptionIds.length > question.maxSelections) {
+          throw new Error(`You can only select a maximum of ${question.maxSelections} option(s) for this question.`);
+        }
+      }
 
       // Update responses for this question
       const updatedResponses = {
@@ -924,11 +942,16 @@ class UserProfileManager {
             }
             placeholder = placeholder.length > 100 ? placeholder.substring(0, 97) + '...' : placeholder;
 
+            // Use maxSelections limit if set, otherwise allow all options
+            const maxSelections = question.maxSelections !== undefined && question.maxSelections > 0
+              ? Math.min(question.maxSelections, menuOptions.length)
+              : menuOptions.length;
+
             const selectMenu = new StringSelectMenuBuilder()
               .setCustomId(`profile_select:${form.id}:${question.id}:${chunkIndex}`)
               .setPlaceholder(`Select options: ${placeholder}`)
               .setMinValues(0)
-              .setMaxValues(menuOptions.length)
+              .setMaxValues(maxSelections)
               .addOptions(menuOptions);
 
             const row = new ActionRowBuilder().addComponents(selectMenu);

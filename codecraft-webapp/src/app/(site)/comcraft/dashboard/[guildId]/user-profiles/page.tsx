@@ -42,6 +42,7 @@ interface Question {
   min?: number; // For number type
   max?: number; // For number type
   required?: boolean; // Optional, defaults to false
+  maxSelections?: number; // For dropdown type: maximum number of options that can be selected (default: all)
 }
 
 interface Option {
@@ -561,41 +562,59 @@ export default function UserProfilesConfig() {
                     {/* Dropdown Type Configuration */}
                     {(!question.type || question.type === 'dropdown') && (
                       <div className="space-y-2 pl-4 border-l-2 border-gray-300">
-                        <Label className="text-sm font-medium">Options</Label>
-                        {(question.options || []).map((option, oIdx) => {
-                          const currentOptions = question.options || [];
-                          return (
-                            <div key={option.id} className="flex gap-2">
-                              <Input
-                                value={option.text}
-                                onChange={(e) => {
-                                  const updatedOptions = currentOptions.map(opt =>
-                                    opt.id === option.id ? { ...opt, text: e.target.value } : opt
-                                  );
-                                  updateQuestion(question.id, 'options', updatedOptions);
-                                }}
-                                placeholder={`Option ${oIdx + 1} (e.g., "USA")`}
-                              />
-                              {currentOptions.length > 1 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeOption(question.id, option.id)}
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </Button>
-                              )}
-                            </div>
-                          );
-                        })}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => addOption(question.id)}
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Add Option
-                        </Button>
+                        <div>
+                          <Label className="text-sm font-medium">Maximum Selections (optional)</Label>
+                          <Input
+                            type="number"
+                            value={question.maxSelections !== undefined ? question.maxSelections : ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? undefined : parseInt(e.target.value);
+                              updateQuestion(question.id, 'maxSelections', value);
+                            }}
+                            placeholder="No limit (all options can be selected)"
+                            min="1"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Maximum number of options users can select. Leave empty for no limit.
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Options</Label>
+                          {(question.options || []).map((option, oIdx) => {
+                            const currentOptions = question.options || [];
+                            return (
+                              <div key={option.id} className="flex gap-2">
+                                <Input
+                                  value={option.text}
+                                  onChange={(e) => {
+                                    const updatedOptions = currentOptions.map(opt =>
+                                      opt.id === option.id ? { ...opt, text: e.target.value } : opt
+                                    );
+                                    updateQuestion(question.id, 'options', updatedOptions);
+                                  }}
+                                  placeholder={`Option ${oIdx + 1} (e.g., "USA")`}
+                                />
+                                {currentOptions.length > 1 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeOption(question.id, option.id)}
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addOption(question.id)}
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Option
+                          </Button>
+                        </div>
                       </div>
                     )}
 
