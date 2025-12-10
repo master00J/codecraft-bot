@@ -299,15 +299,40 @@ class DiscordManager {
 
       console.log(`[Discord Manager] Fetching threads for channel ${channelId} (${channel.name})`);
 
+      // First, get threads from cache (guild-wide)
+      let cachedThreads = [];
+      try {
+        // Get all threads from guild cache that belong to this channel
+        const allGuildChannels = guild.channels.cache;
+        allGuildChannels.forEach(ch => {
+          // Check if this is a thread and if it belongs to our channel
+          if (ch.isThread() && (ch.parentId === channelId || ch.parent?.id === channelId)) {
+            cachedThreads.push({
+              id: ch.id,
+              name: ch.name || 'Unnamed Thread',
+              type: ch.type,
+              parentId: ch.parentId,
+              archived: ch.archived || false,
+              locked: ch.locked || false,
+              memberCount: ch.memberCount || 0,
+              messageCount: ch.messageCount || 0,
+              createdAt: ch.createdAt ? ch.createdAt.toISOString() : null,
+            });
+          }
+        });
+        console.log(`[Discord Manager] Found ${cachedThreads.length} threads in cache`);
+      } catch (error) {
+        console.warn(`[Discord Manager] Error getting threads from cache:`, error.message);
+      }
+
       // Fetch all active threads
       let activeThreadsList = [];
       try {
         const activeThreads = await channel.threads.fetchActive();
         console.log(`[Discord Manager] fetchActive returned:`, {
           hasThreads: !!activeThreads,
-          hasThreadsProperty: !!activeThreads.threads,
-          threadsType: typeof activeThreads.threads,
-          threadsValue: activeThreads.threads
+          hasThreadsProperty: !!activeThreads?.threads,
+          threadsType: typeof activeThreads?.threads,
         });
         
         // activeThreads.threads is a Collection, we need to convert it properly
@@ -346,7 +371,7 @@ class DiscordManager {
           }));
         }
         
-        console.log(`[Discord Manager] Found ${activeThreadsList.length} active threads`);
+        console.log(`[Discord Manager] Found ${activeThreadsList.length} active threads from API`);
       } catch (error) {
         console.error(`[Discord Manager] Error fetching active threads:`, error);
         console.error(`[Discord Manager] Error stack:`, error.stack);
@@ -356,7 +381,7 @@ class DiscordManager {
       // Also try to fetch archived threads
       let archivedThreads = [];
       try {
-        const archived = await channel.threads.fetchArchived({ fetchAll: false, limit: 50 });
+        const archived = await channel.threads.fetchArchived({ fetchAll: true, limit: 100 });
         if (archived && archived.threads) {
           // Similar handling for archived threads
           const threadsCollection = archived.threads;
@@ -387,7 +412,7 @@ class DiscordManager {
             messageCount: thread.messageCount || 0,
             createdAt: thread.createdAt ? thread.createdAt.toISOString() : null,
           }));
-          console.log(`[Discord Manager] Found ${archivedThreads.length} archived threads`);
+          console.log(`[Discord Manager] Found ${archivedThreads.length} archived threads from API`);
         }
       } catch (error) {
         console.warn(`[Discord Manager] Could not fetch archived threads for channel ${channelId}:`, error.message);
@@ -395,15 +420,15 @@ class DiscordManager {
         // Continue without archived threads
       }
       
-      // Combine active and archived threads
-      const allThreads = [...activeThreadsList, ...archivedThreads];
+      // Combine all sources: cache, active, and archived threads
+      const allThreads = [...cachedThreads, ...activeThreadsList, ...archivedThreads];
       
-      // Remove duplicates (in case a thread appears in both)
+      // Remove duplicates (in case a thread appears in multiple sources)
       const uniqueThreads = Array.from(
         new Map(allThreads.map(thread => [thread.id, thread])).values()
       );
 
-      console.log(`[Discord Manager] Total unique threads: ${uniqueThreads.length} (${activeThreadsList.length} active, ${archivedThreads.length} archived)`);
+      console.log(`[Discord Manager] Total unique threads: ${uniqueThreads.length} (${cachedThreads.length} cached, ${activeThreadsList.length} active, ${archivedThreads.length} archived)`);
 
       return {
         success: true,
