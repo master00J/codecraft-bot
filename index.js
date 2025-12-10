@@ -8886,17 +8886,26 @@ app.get('/api/discord/:guildId/channels/:channelId/threads', async (req, res) =>
     // Force clear require cache multiple times to ensure fresh load
     const discordManagerPath = require.resolve('./modules/comcraft/discord-manager');
     
-    // Clear all references to this module
+    // Clear all references to this module - be more aggressive
+    const keysToDelete = [];
     for (const key in require.cache) {
-      if (key === discordManagerPath || key.includes('discord-manager')) {
-        delete require.cache[key];
+      if (key === discordManagerPath || 
+          key.includes('discord-manager') || 
+          key.endsWith('discord-manager.js')) {
+        keysToDelete.push(key);
       }
     }
+    keysToDelete.forEach(key => delete require.cache[key]);
     
     // Also clear the parent module if it exists
-    delete require.cache[require.resolve('./index.js')];
+    try {
+      delete require.cache[require.resolve('./index.js')];
+    } catch (e) {
+      // Ignore if can't resolve
+    }
     
-    // Force a fresh require
+    // Force a fresh require - delete cache again just before requiring
+    delete require.cache[discordManagerPath];
     const DiscordManager = require(discordManagerPath);
     const manager = new DiscordManager(botClient);
     
