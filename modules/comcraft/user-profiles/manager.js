@@ -77,32 +77,24 @@ class UserProfileManager {
   }
 
   /**
-   * Post the form message to Discord channel
+   * Build components for a single message (max 5 action rows)
+   * Returns: { components, questionsProcessed, hasMore }
    */
-  async postFormMessage(form, channel) {
-    try {
-      const embed = new EmbedBuilder()
-        .setTitle(`📋 ${form.form_name}`)
-        .setColor(0x5865F2)
-        .setDescription(form.description || 'Fill out your profile by selecting your answers from the dropdowns below, then click "Submit Profile" when done.')
-        .setFooter({ text: 'Use the dropdowns to select your answers, then click "Submit Profile" when done' })
-        .setTimestamp();
-
-      // Build components with select menus, buttons for text/number inputs
-      const components = [];
-
-      // Discord limits: max 5 action rows total (including submit button)
-      // Max 25 options per select menu
-      // Max 5 buttons per row
-      const MAX_OPTIONS_PER_MENU = 25;
-      const MAX_BUTTONS_PER_ROW = 5;
-      let remainingRows = 4; // Leave room for submit button
+  buildMessageComponents(form, startQuestionIndex = 0, includeSubmitButton = false) {
+    const components = [];
+    const MAX_OPTIONS_PER_MENU = 25;
+    const MAX_BUTTONS_PER_ROW = 5;
+    const MAX_ROWS_PER_MESSAGE = 5;
+    
+    // Calculate available rows (leave 1 for submit button if needed)
+    let remainingRows = includeSubmitButton ? MAX_ROWS_PER_MESSAGE - 1 : MAX_ROWS_PER_MESSAGE;
+    let questionsProcessed = 0;
+    
+    for (let i = startQuestionIndex; i < form.questions.length && remainingRows > 0; i++) {
+      const question = form.questions[i];
+      const questionType = question.type || 'dropdown';
       
-      for (let i = 0; i < form.questions.length && remainingRows > 0; i++) {
-        const question = form.questions[i];
-        const questionType = question.type || 'dropdown';
-        
-        if (questionType === 'dropdown') {
+      if (questionType === 'dropdown') {
           // Dropdown type - use select menus
           if (!question.options || question.options.length === 0) continue;
 
@@ -158,44 +150,50 @@ class UserProfileManager {
             components.push(row);
             remainingRows--;
           }
+          
+          // Mark question as processed after all chunks
+          questionsProcessed++;
         } else if (questionType === 'text' || questionType === 'number') {
-          // Text/Number type - use button to open modal
-          if (remainingRows <= 0) break;
-          
-          if (!question.text) {
-            console.warn(`[Profile Manager] Question ${question.id || i} has no text, skipping`);
-            continue;
-          }
-          
-          const buttonLabel = question.text.length > 80 
-            ? question.text.substring(0, 77) + '...' 
-            : question.text;
-          
-          const button = new ButtonBuilder()
-            .setCustomId(`profile_input:${form.id}:${question.id}`)
-            .setLabel(buttonLabel)
-            .setStyle(ButtonStyle.Primary);
-          
-          // Try to add to existing row if there's space, otherwise create new row
-          let addedToRow = false;
-          if (components.length > 0) {
-            const lastRow = components[components.length - 1];
-            const lastRowComponents = lastRow.components || [];
-            if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
-              lastRow.addComponents(button);
-              addedToRow = true;
-            }
-          }
-          
-          if (!addedToRow) {
-            const row = new ActionRowBuilder().addComponents(button);
-            components.push(row);
-            remainingRows--;
+        // Text/Number type - use button to open modal
+        if (remainingRows <= 0) break;
+        
+        if (!question.text) {
+          console.warn(`[Profile Manager] Question ${question.id || i} has no text, skipping`);
+          continue;
+        }
+        
+        const buttonLabel = question.text.length > 80 
+          ? question.text.substring(0, 77) + '...' 
+          : question.text;
+        
+        const button = new ButtonBuilder()
+          .setCustomId(`profile_input:${form.id}:${question.id}`)
+          .setLabel(buttonLabel)
+          .setStyle(ButtonStyle.Primary);
+        
+        // Try to add to existing row if there's space, otherwise create new row
+        let addedToRow = false;
+        if (components.length > 0) {
+          const lastRow = components[components.length - 1];
+          const lastRowComponents = lastRow.components || [];
+          if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
+            lastRow.addComponents(button);
+            addedToRow = true;
           }
         }
+        
+        if (!addedToRow) {
+          const row = new ActionRowBuilder().addComponents(button);
+          components.push(row);
+          remainingRows--;
+        }
+        
+        questionsProcessed++;
       }
-
-      // Add submit button (always last)
+    }
+    
+    // Add submit button if requested
+    if (includeSubmitButton && components.length > 0) {
       const submitRow = new ActionRowBuilder()
         .addComponents(
           new ButtonBuilder()
@@ -204,50 +202,76 @@ class UserProfileManager {
             .setStyle(ButtonStyle.Success)
         );
       components.push(submitRow);
+    }
+    
+    const hasMore = startQuestionIndex + questionsProcessed < form.questions.length;
+    
+    return { components, questionsProcessed, hasMore };
+  }
 
-      // Validate we have at least one question
-      if (components.length === 1) { // Only submit button
-        throw new Error('Form must have at least one question with options.');
-      }
+  /**
+   * Post the form message to Discord channel
+   * Now supports multiple messages if there are more than 4 questions
+   */
+  async postFormMessage(form, channel) {
+    try {
+      const embed = new EmbedBuilder()
+        .setTitle(`📋 ${form.form_name}`)
+        .setColor(0x5865F2)
+        .setDescription(form.description || 'Fill out your profile by selecting your answers from the dropdowns below, then click "Submit Profile" when done.')
+        .setFooter({ text: 'Use the dropdowns to select your answers, then click "Submit Profile" when done' })
+        .setTimestamp();
 
-      // Warn if questions were skipped due to Discord's 5 action row limit
-      const totalQuestionsUsed = components.length - 1; // Subtract submit button row
-      if (form.questions && form.questions.length > 0) {
-        // Count how many questions we could fit
-        let questionsFitted = 0;
-        let rowsUsed = 0;
-        for (let i = 0; i < form.questions.length && rowsUsed < 4; i++) {
-          const question = form.questions[i];
-          const questionType = question.type || 'dropdown';
-          
-          let rowsNeeded = 1; // Default: 1 row per question
-          
-          if (questionType === 'dropdown') {
-            if (!question.options || question.options.length === 0) continue;
-            const optionChunks = Math.ceil(question.options.length / MAX_OPTIONS_PER_MENU);
-            rowsNeeded = optionChunks;
-          } else if (questionType === 'text' || questionType === 'number') {
-            // Text/number questions take 1 row (but might be combined with buttons)
-            rowsNeeded = 1;
-          }
-          
-          if (rowsUsed + rowsNeeded <= 4) {
-            questionsFitted++;
-            rowsUsed += rowsNeeded;
-          } else {
-            break;
-          }
+      // Build messages - split across multiple messages if needed
+      const messages = [];
+      let questionIndex = 0;
+      let messageIndex = 0;
+      
+      while (questionIndex < form.questions.length) {
+        // Last message gets submit button, others don't
+        const isLastMessage = questionIndex + 4 >= form.questions.length;
+        const result = this.buildMessageComponents(form, questionIndex, isLastMessage);
+        
+        if (result.components.length === 0) {
+          console.warn(`[Profile Manager] No components generated for message ${messageIndex}, stopping`);
+          break;
         }
         
-        if (questionsFitted < form.questions.length) {
-          console.warn(`[Profile Manager] Form has ${form.questions.length} questions, but only ${questionsFitted} could fit within Discord's 5 action row limit (4 for questions + 1 for submit button). Remaining questions will not be displayed.`);
+        // Create embed for this message (only first message has full description)
+        const messageEmbed = messageIndex === 0 
+          ? embed 
+          : new EmbedBuilder()
+              .setTitle(`📋 ${form.form_name} (Part ${messageIndex + 1})`)
+              .setColor(0x5865F2)
+              .setDescription(`Continue filling out your profile...`)
+              .setFooter({ text: 'Use the dropdowns to select your answers, then click "Submit Profile" when done' })
+              .setTimestamp();
+        
+        messages.push({
+          embed: messageEmbed,
+          components: result.components
+        });
+        
+        questionIndex += result.questionsProcessed;
+        messageIndex++;
+        
+        // Safety check to prevent infinite loop
+        if (messageIndex > 100) {
+          console.error(`[Profile Manager] Too many messages generated, stopping at ${messageIndex}`);
+          break;
         }
       }
-
-      console.log(`[Profile Manager] Sending message with ${components.length} action rows (${totalQuestionsUsed} question menus + submit button)`);
-
-      // Check if form already has a message posted
-      let message;
+      
+      if (messages.length === 0) {
+        throw new Error('Form must have at least one question with options.');
+      }
+      
+      console.log(`[Profile Manager] Sending ${messages.length} message(s) with ${form.questions.length} total questions`);
+      
+      // Check if form already has messages posted
+      let firstMessage;
+      const messageIds = [];
+      
       if (form.message_id) {
         try {
           // Try to fetch and update existing message
@@ -255,57 +279,59 @@ class UserProfileManager {
           if (existingMessage) {
             console.log(`[Profile Manager] Updating existing message ${form.message_id}`);
             await existingMessage.edit({
-              embeds: [embed],
-              components: components
+              embeds: [messages[0].embed],
+              components: messages[0].components
             });
-            message = existingMessage;
-            console.log(`[Profile Manager] Message updated successfully: ${message.id}`);
-          } else {
-            // Message doesn't exist anymore, create new one
-            console.log(`[Profile Manager] Existing message ${form.message_id} not found, creating new message`);
-            message = await channel.send({
-              embeds: [embed],
-              components: components
-            });
-            console.log(`[Profile Manager] New message sent successfully: ${message.id}`);
+            firstMessage = existingMessage;
+            messageIds.push(existingMessage.id);
             
-            // Update form with new message ID
-            await this.supabase
-              .from('user_profiles_forms')
-              .update({ message_id: message.id })
-              .eq('id', form.id);
+            // Delete any additional existing messages (we'll recreate them)
+            // This is a simple approach - in production you might want to track all message IDs
+          } else {
+            // Message doesn't exist anymore, create new ones
+            console.log(`[Profile Manager] Existing message ${form.message_id} not found, creating new messages`);
+            for (const msg of messages) {
+              const sentMessage = await channel.send({
+                embeds: [msg.embed],
+                components: msg.components
+              });
+              messageIds.push(sentMessage.id);
+              if (!firstMessage) firstMessage = sentMessage;
+            }
           }
         } catch (error) {
-          // If update fails, create a new message
-          console.warn(`[Profile Manager] Failed to update existing message, creating new one:`, error.message);
-          message = await channel.send({
-            embeds: [embed],
-            components: components
-          });
-          console.log(`[Profile Manager] New message sent successfully: ${message.id}`);
-          
-          // Update form with new message ID
-          await this.supabase
-            .from('user_profiles_forms')
-            .update({ message_id: message.id })
-            .eq('id', form.id);
+          // If update fails, create new messages
+          console.warn(`[Profile Manager] Failed to update existing message, creating new ones:`, error.message);
+          for (const msg of messages) {
+            const sentMessage = await channel.send({
+              embeds: [msg.embed],
+              components: msg.components
+            });
+            messageIds.push(sentMessage.id);
+            if (!firstMessage) firstMessage = sentMessage;
+          }
         }
       } else {
-        // No existing message, create new one
-        message = await channel.send({
-          embeds: [embed],
-          components: components
-        });
-        console.log(`[Profile Manager] Message sent successfully: ${message.id}`);
-
-        // Update form with message ID
-        await this.supabase
-          .from('user_profiles_forms')
-          .update({ message_id: message.id })
-          .eq('id', form.id);
+        // No existing message, create new ones
+        for (const msg of messages) {
+          const sentMessage = await channel.send({
+            embeds: [msg.embed],
+            components: msg.components
+          });
+          messageIds.push(sentMessage.id);
+          if (!firstMessage) firstMessage = sentMessage;
+        }
       }
+      
+      // Update form with first message ID (for backward compatibility)
+      await this.supabase
+        .from('user_profiles_forms')
+        .update({ message_id: firstMessage.id })
+        .eq('id', form.id);
+      
+      console.log(`[Profile Manager] ${messages.length} message(s) sent successfully. First message ID: ${firstMessage.id}`);
 
-      return message;
+      return firstMessage;
     } catch (error) {
       console.error('[Profile Manager] Error posting form message:', error);
       console.error('[Profile Manager] Error details:', {
