@@ -4738,17 +4738,26 @@ async function handleProfileSelectMenuInteraction(interaction) {
       return interaction.editReply({ content: '❌ This form is currently disabled!' });
     }
 
-    // Update selections
-    try {
-      await global.profileManager.updateSelectMenuSelections(formId, questionId, selectedValues, interaction.user.id);
+      // Update selections
+      try {
+        await global.profileManager.updateSelectMenuSelections(formId, questionId, selectedValues, interaction.user.id);
 
-      // Don't update the form message - keep it clean for all users
-      // Each user's selections are stored in the database and will be shown when they submit
+        // Don't update the form message - keep it clean for all users
+        // Each user's selections are stored in the database and will be shown when they submit
 
-      await interaction.editReply({
-        content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected for this question)`
-      });
-    } catch (updateError) {
+        await interaction.editReply({
+          content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected for this question)`
+        });
+        
+        // Automatically delete the message after 3 seconds
+        setTimeout(async () => {
+          try {
+            await interaction.deleteReply();
+          } catch (error) {
+            // Ignore errors (message might already be deleted or interaction expired)
+          }
+        }, 3000);
+      } catch (updateError) {
       console.error('[Profile] Error updating selections:', updateError);
       await interaction.editReply({
         content: `❌ ${updateError.message || 'Failed to update selection. Please try again.'}`
