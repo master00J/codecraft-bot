@@ -861,6 +861,8 @@ class UserProfileManager {
 
       // Build User Answer section
       let answerFields = [];
+      let firstImageUrl = null;
+      
       for (const question of form.questions) {
         const questionType = question.type || 'dropdown';
         const questionResponse = response.responses[question.id];
@@ -894,6 +896,26 @@ class UserProfileManager {
           } else {
             continue; // Skip empty answers
           }
+        } else if (questionType === 'image') {
+          // Image type - response is a URL string
+          if (typeof questionResponse === 'string' && questionResponse.trim().length > 0) {
+            try {
+              const imageUrl = questionResponse.trim();
+              new URL(imageUrl); // Validate URL format
+              
+              // Store first image URL to set as main embed image
+              if (!firstImageUrl) {
+                firstImageUrl = imageUrl;
+                console.log('[Profile Submit] Found first image URL:', imageUrl);
+              }
+              continue; // Skip adding as text field
+            } catch {
+              // Invalid URL, treat as text
+              answerText = questionResponse;
+            }
+          } else {
+            continue; // Skip empty answers
+          }
         }
 
         if (answerText) {
@@ -909,6 +931,12 @@ class UserProfileManager {
       if (answerFields.length > 0) {
         embed.addFields({ name: '\u200B', value: '**User Answer**', inline: false });
         embed.addFields(...answerFields);
+      }
+
+      // Set image AFTER all fields are added (this ensures it's displayed)
+      if (firstImageUrl) {
+        embed.setImage(firstImageUrl);
+        console.log('[Profile Submit] Set embed image:', firstImageUrl);
       }
 
       embed.setTimestamp(completedAt);
