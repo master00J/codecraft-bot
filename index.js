@@ -394,13 +394,22 @@ try {
 let profileManager = null;
 try {
   const UserProfileManager = require('./modules/comcraft/user-profiles/manager');
-  if (UserProfileManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!UserProfileManager) {
+    console.warn('⚠️ User Profile Manager module not found');
+  } else if (!process.env.SUPABASE_URL) {
+    console.warn('⚠️ User Profile Manager: SUPABASE_URL not set');
+  } else if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn('⚠️ User Profile Manager: SUPABASE_SERVICE_ROLE_KEY not set');
+  } else {
     profileManager = new UserProfileManager(client);
     global.profileManager = profileManager;
     console.log('✅ User Profile Manager initialized');
   }
 } catch (error) {
-  console.warn('User Profile Manager not available:', error.message);
+  console.error('❌ User Profile Manager initialization failed:', error.message);
+  if (error.stack) {
+    console.error('   Stack:', error.stack.split('\n').slice(0, 3).join('\n'));
+  }
 }
 
 const {
@@ -9451,12 +9460,37 @@ app.post('/api/profile/post-message', async (req, res) => {
       });
     }
 
-    if (!global.profileManager) {
-      console.error('[Profile API] Profile manager not available');
+    // Check if client is ready
+    if (!client.isReady()) {
+      console.error('[Profile API] Discord client is not ready yet');
       return res.status(503).json({ 
         success: false, 
-        error: 'Profile system is not available' 
+        error: 'Bot is still starting up. Please try again in a moment.' 
       });
+    }
+
+    // Try to initialize profile manager if not available
+    if (!global.profileManager) {
+      console.warn('[Profile API] Profile manager not available, attempting to initialize...');
+      try {
+        const UserProfileManager = require('./modules/comcraft/user-profiles/manager');
+        if (UserProfileManager && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          global.profileManager = new UserProfileManager(client);
+          console.log('[Profile API] ✅ User Profile Manager initialized');
+        } else {
+          console.error('[Profile API] Missing required environment variables for profile manager');
+          return res.status(503).json({ 
+            success: false, 
+            error: 'Profile system is not available - missing configuration' 
+          });
+        }
+      } catch (error) {
+        console.error('[Profile API] Failed to initialize profile manager:', error);
+        return res.status(503).json({ 
+          success: false, 
+          error: `Profile system is not available: ${error.message}` 
+        });
+      }
     }
 
     // Get form from database
