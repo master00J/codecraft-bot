@@ -227,7 +227,6 @@ class UserProfileManager {
           
           questionsProcessed++;
         }
-      }
     }
     
     // Add submit button if requested
