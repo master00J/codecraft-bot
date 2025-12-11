@@ -1279,6 +1279,9 @@ class UserProfileManager {
    * @returns {EmbedBuilder} - Discord embed
    */
   async buildProfileEmbed(form, response, user) {
+    console.log('[Profile Embed] Building embed for form:', form.id, 'response:', response.id);
+    console.log('[Profile Embed] Response data:', JSON.stringify(response.responses, null, 2));
+    
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setAuthor({
@@ -1360,22 +1363,29 @@ class UserProfileManager {
         if (typeof questionResponse === 'string' && questionResponse.trim().length > 0) {
           // Validate URL
           try {
-            new URL(questionResponse);
-            // Add image to embed
-            // Use first image as main image, others as fields
-            if (!embed.data.image) {
-              embed.setImage(questionResponse);
+            const imageUrl = questionResponse.trim();
+            new URL(imageUrl); // Validate URL format
+            
+            // Check if embed already has an image
+            const hasImage = embed.data?.image?.url || false;
+            
+            if (!hasImage) {
+              // First image: set as main embed image
+              embed.setImage(imageUrl);
+              console.log('[Profile Embed] Set main image:', imageUrl);
             } else {
-              // If main image already set, add as field
+              // Additional images: add as field with link
               answerFields.push({
                 name: `${question.text} 📷`,
-                value: `[View Image](${questionResponse})`,
+                value: `[View Image](${imageUrl})`,
                 inline: false
               });
+              console.log('[Profile Embed] Added image as field:', imageUrl);
             }
             continue; // Skip adding as regular field
-          } catch {
+          } catch (urlError) {
             // Invalid URL, treat as text
+            console.warn('[Profile Embed] Invalid image URL:', questionResponse, urlError);
             answerText = questionResponse;
           }
         } else {
