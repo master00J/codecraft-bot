@@ -687,6 +687,9 @@ client.once('ready', async () => {
   // Register slash commands (will include music commands if initialized)
   await registerCommands(client);
 
+  // Start vote reminder system
+  startVoteReminderSystem(client);
+
   // Ensure all guilds are in database
   console.log('🔄 Syncing all guilds to database...');
   let syncedCount = 0;
@@ -1731,6 +1734,13 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // Handle vote reminder dismiss button
+    if (interaction.customId === 'vote_reminder_dismiss') {
+      await interaction.deferUpdate();
+      await interaction.message.delete().catch(() => {});
+      return;
+    }
+
     // Handle duel challenge button from embed builder
     if (interaction.customId === 'duel_challenge' || interaction.customId.startsWith('duel_challenge_')) {
       const allowed = await featureGate.checkFeatureOrReply(
@@ -2582,6 +2592,12 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       // ============ UTILITY COMMANDS ============
+      // ============ VOTE COMMAND ============
+      case 'vote': {
+        await handleVoteCommand(interaction);
+        break;
+      }
+
       case 'help':
         await handleHelpCommand(interaction);
         break;
@@ -6762,6 +6778,223 @@ async function handleStockOrderCommand(interaction) {
   return interaction.editReply({ embeds: [embed] });
 }
 
+/**
+ * Handle vote command - Show voting information and link
+ */
+async function handleVoteCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  try {
+    const botId = process.env.DISCORD_BOT_ID || process.env.DISCORD_CLIENT_ID || '1436442594715373610';
+    const voteUrl = `https://top.gg/bot/${botId}/vote`;
+    const dashboardUrl = process.env.WEBAPP_URL || 'https://codecraft-solutions.com';
+    
+    // Check if user has voted today
+    let hasVotedToday = false;
+    let lastVoteDate = null;
+    let votePoints = 0;
+    
+    try {
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+      
+      // Get user's vote points
+      const { data: pointsData } = await supabase
+        .from('vote_points')
+        .select('total_points, last_vote_at')
+        .eq('discord_user_id', interaction.user.id)
+        .maybeSingle();
+      
+      if (pointsData) {
+        votePoints = pointsData.total_points || 0;
+        if (pointsData.last_vote_at) {
+          lastVoteDate = new Date(pointsData.last_vote_at);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const voteDate = new Date(lastVoteDate);
+          voteDate.setHours(0, 0, 0, 0);
+          hasVotedToday = voteDate.getTime() === today.getTime();
+        }
+      }
+    } catch (error) {
+      console.error('[VoteCommand] Error checking vote status:', error);
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFFD700) // Gold
+      .setTitle('⭐ Vote for ComCraft on Top.gg!')
+      .setDescription(
+        `Support the bot by voting on Top.gg! Every vote helps us grow and reach more servers.\n\n` +
+        `**🎁 Rewards:**\n` +
+        `• Earn **vote points** for each vote\n` +
+        `• **2x points** on weekends!\n` +
+        `• Redeem points for **free tier unlocks** and premium features\n\n` +
+        `${hasVotedToday 
+          ? `✅ **You've already voted today!** Come back tomorrow to vote again.\n\n` 
+          : `⏰ **You can vote now!** Click the button below to vote.\n\n`}`
+      )
+      .addFields(
+        {
+          name: '💎 Your Vote Points',
+          value: `${votePoints} points`,
+          inline: true
+        },
+        {
+          name: '📅 Last Vote',
+          value: lastVoteDate 
+            ? `<t:${Math.floor(lastVoteDate.getTime() / 1000)}:R>`
+            : 'Never',
+          inline: true
+        },
+        {
+          name: '🔗 Links',
+          value: `[Vote on Top.gg](${voteUrl})\n[View Rewards](${dashboardUrl}/comcraft/account/vote-rewards)`,
+          inline: false
+        }
+      )
+      .setFooter({ text: 'Thank you for supporting ComCraft! 💙' })
+      .setTimestamp();
+
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Vote on Top.gg')
+          .setStyle(ButtonStyle.Link)
+          .setURL(voteUrl)
+          .setEmoji('⭐'),
+        new ButtonBuilder()
+          .setLabel('View Rewards')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${dashboardUrl}/comcraft/account/vote-rewards`)
+          .setEmoji('🎁')
+      );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+  } catch (error) {
+    console.error('[VoteCommand] Error:', error);
+    await interaction.editReply({
+      content: '❌ An error occurred while fetching vote information.'
+    });
+  }
+}
+
+/**
+ * Start vote reminder system - Sends periodic reminders to encourage voting
+ */
+function startVoteReminderSystem(client) {
+  // Send reminders every 12 hours (43200000 ms)
+  const reminderInterval = 12 * 60 * 60 * 1000;
+  
+  // Also send reminder 1 hour after bot starts
+  setTimeout(() => {
+    sendVoteReminders(client);
+  }, 60 * 60 * 1000); // 1 hour
+  
+  // Then send reminders every 12 hours
+  setInterval(() => {
+    sendVoteReminders(client);
+  }, reminderInterval);
+  
+  console.log('✅ Vote reminder system started (reminders every 12 hours)');
+}
+
+/**
+ * Send vote reminders to all guilds
+ */
+async function sendVoteReminders(client) {
+  try {
+    if (!client.isReady()) {
+      console.log('[Vote Reminder] Bot not ready, skipping reminders');
+      return;
+    }
+
+    const botId = process.env.DISCORD_BOT_ID || process.env.DISCORD_CLIENT_ID || '1436442594715373610';
+    const voteUrl = `https://top.gg/bot/${botId}/vote`;
+    const dashboardUrl = process.env.WEBAPP_URL || 'https://codecraft-solutions.com';
+    
+    // Get all guilds where bot is present
+    const guilds = client.guilds.cache;
+    let remindersSent = 0;
+    let remindersSkipped = 0;
+    
+    for (const [guildId, guild] of guilds) {
+      try {
+        // Get system channel or first available text channel
+        let channel = guild.systemChannel;
+        if (!channel || !channel.isTextBased()) {
+          // Try to find first text channel
+          channel = guild.channels.cache.find(
+            ch => ch.isTextBased() && ch.permissionsFor(guild.members.me)?.has(['SendMessages', 'EmbedLinks'])
+          );
+        }
+        
+        if (!channel) {
+          remindersSkipped++;
+          continue;
+        }
+        
+        // Check if we sent a reminder to this guild in the last 12 hours
+        // (Simple check - in production you might want to track this in database)
+        const embed = new EmbedBuilder()
+          .setColor(0xFFD700) // Gold
+          .setTitle('⭐ Vote for ComCraft on Top.gg!')
+          .setDescription(
+            `Support the bot by voting on Top.gg! Every vote helps us grow and reach more servers.\n\n` +
+            `**🎁 Rewards:**\n` +
+            `• Earn **vote points** for each vote\n` +
+            `• **2x points** on weekends!\n` +
+            `• Redeem points for **free tier unlocks** and premium features\n\n` +
+            `Use \`/vote\` to check your vote status and points!`
+          )
+          .addFields(
+            {
+              name: '🔗 Links',
+              value: `[Vote on Top.gg](${voteUrl})\n[View Rewards](${dashboardUrl}/comcraft/account/vote-rewards)`,
+              inline: false
+            }
+          )
+          .setFooter({ text: 'Thank you for supporting ComCraft! 💙' })
+          .setTimestamp();
+
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setLabel('Vote on Top.gg')
+              .setStyle(ButtonStyle.Link)
+              .setURL(voteUrl)
+              .setEmoji('⭐'),
+            new ButtonBuilder()
+              .setLabel('View Rewards')
+              .setStyle(ButtonStyle.Link)
+              .setURL(`${dashboardUrl}/comcraft/account/vote-rewards`)
+              .setEmoji('🎁'),
+            new ButtonBuilder()
+              .setCustomId('vote_reminder_dismiss')
+              .setLabel('Dismiss')
+              .setStyle(ButtonStyle.Secondary)
+              .setEmoji('❌')
+          );
+
+        await channel.send({ embeds: [embed], components: [row] });
+        remindersSent++;
+        
+        // Rate limit: wait 1 second between sends to avoid hitting Discord rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`[Vote Reminder] Error sending reminder to guild ${guildId}:`, error.message);
+        remindersSkipped++;
+      }
+    }
+    
+    console.log(`[Vote Reminder] Sent ${remindersSent} reminders, skipped ${remindersSkipped} guilds`);
+  } catch (error) {
+    console.error('[Vote Reminder] Error in reminder system:', error);
+  }
+}
+
 async function handleStockOrdersCommand(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -8528,6 +8761,11 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('stockleaderboard')
       .setDescription('🏆 View stock market leaderboard (richest portfolios)'),
+
+    // Vote command
+    new SlashCommandBuilder()
+      .setName('vote')
+      .setDescription('⭐ Vote for the bot on Top.gg and earn rewards!'),
 
     new SlashCommandBuilder()
       .setName('stockorder')
