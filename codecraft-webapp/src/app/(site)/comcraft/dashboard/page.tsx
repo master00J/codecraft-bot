@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Key, Loader2, RefreshCw, LogIn, Bot, CheckCircle, ArrowRight, ExternalLink, Coins, Gift } from 'lucide-react';
+import { Key, Loader2, RefreshCw, LogIn, Bot, CheckCircle, ArrowRight, ExternalLink, Coins, Gift, Star } from 'lucide-react';
 import { ReferralPromoBanner } from '@/components/ReferralPromoBanner';
 
 interface Guild {
@@ -475,32 +475,63 @@ export default function ComcraftDashboard() {
         {/* Referral Program Promo Banner */}
         <ReferralPromoBanner />
 
-        {/* Vote Rewards Promo Card */}
-        <Card className="mb-6 border-2 border-yellow-500/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 hover:shadow-lg transition-all">
-          <div className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-xl bg-yellow-500/20 flex items-center justify-center">
-                  <Coins className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
+        {/* Vote Rewards Promo Card - Prominent placement */}
+        <Card className="mb-6 border-2 border-yellow-500/30 bg-gradient-to-r from-yellow-500/15 to-orange-500/15 hover:shadow-xl transition-all relative overflow-hidden">
+          {/* Decorative background pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute inset-0" style={{
+              backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)',
+              backgroundSize: '24px 24px'
+            }}></div>
+          </div>
+          
+          <div className="p-6 relative z-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-yellow-500/30 to-orange-500/30 flex items-center justify-center shadow-lg">
+                  <Star className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold mb-1">Vote Rewards</h3>
-                  <p className="text-muted-foreground">
-                    Earn points by voting on Top.gg and redeem them for free tier unlocks!
+                <div className="flex-1">
+                  <h3 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                    ⭐ Vote on Top.gg
+                    <Badge variant="secondary" className="ml-2 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400">
+                      Free Rewards
+                    </Badge>
+                  </h3>
+                  <p className="text-muted-foreground text-base">
+                    Support the bot by voting on Top.gg! Earn <strong className="text-yellow-600 dark:text-yellow-400">vote points</strong> that you can redeem for <strong className="text-yellow-600 dark:text-yellow-400">free tier unlocks</strong> and premium features.
                   </p>
                 </div>
               </div>
-              <Button
-                asChild
-                className="bg-yellow-600 hover:bg-yellow-700 text-white"
-                size="lg"
-              >
-                <Link href="/comcraft/account/vote-rewards">
-                  <Gift className="h-5 w-5 mr-2" />
-                  View Rewards
-                  <ArrowRight className="h-5 w-5 ml-2" />
-                </Link>
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  asChild
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white shadow-md hover:shadow-lg transition-all"
+                  size="lg"
+                >
+                  <a
+                    href={`https://top.gg/bot/${process.env.NEXT_PUBLIC_DISCORD_BOT_ID || process.env.NEXT_PUBLIC_COMCRAFT_CLIENT_ID || '1436442594715373610'}/vote`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Star className="h-5 w-5 mr-2" />
+                    Vote Now
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-yellow-500/50 hover:bg-yellow-500/10"
+                  size="lg"
+                >
+                  <Link href="/comcraft/account/vote-rewards">
+                    <Gift className="h-5 w-5 mr-2" />
+                    View Rewards
+                    <ArrowRight className="h-5 w-5 ml-2" />
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </Card>
