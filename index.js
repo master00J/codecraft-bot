@@ -1738,8 +1738,8 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isModalSubmit()) {
-    // Profile modal handler (for text/number inputs)
-    if (interaction.customId.startsWith('profile_modal:')) {
+    // Profile modal handler (for text/number/image inputs)
+    if (interaction.customId.startsWith('profile_modal:') || interaction.customId.startsWith('profile_image_modal:')) {
       if (!global.profileManager) {
         return interaction.reply({
           content: '❌ Profile system is not available at this time.',
@@ -4881,6 +4881,61 @@ async function handleProfileButtonInteraction(interaction) {
           ephemeral: true
         }).catch(() => {});
       }
+    } else if (customId.startsWith('profile_image:')) {
+      // Format: profile_image:{formId}:{questionId}
+      // Prompt user to upload image via message attachment
+      const parts = customId.split(':');
+      if (parts.length < 3) {
+        return interaction.reply({
+          content: '❌ Invalid form interaction. Please try again.',
+          ephemeral: true
+        });
+      }
+
+      const formId = parts[1];
+      const questionId = parts[2];
+
+      try {
+        const form = await global.profileManager.getForm(formId);
+        if (!form) {
+          return interaction.reply({
+            content: '❌ Form not found!',
+            ephemeral: true
+          });
+        }
+
+        if (form.guild_id !== interaction.guildId) {
+          return interaction.reply({
+            content: '❌ That form belongs to a different server!',
+            ephemeral: true
+          });
+        }
+
+        if (!form.enabled) {
+          return interaction.reply({
+            content: '❌ This form is currently disabled!',
+            ephemeral: true
+          });
+        }
+
+        const question = form.questions.find(q => q.id === questionId);
+        if (!question || question.type !== 'image') {
+          return interaction.reply({
+            content: '❌ Question not found or is not an image type!',
+            ephemeral: true
+          });
+        }
+
+        // Show modal for image URL input, or prompt for attachment
+        const modal = global.profileManager.createImageModal(formId, questionId, question);
+        await interaction.showModal(modal);
+      } catch (error) {
+        console.error('[Profile] Error handling image upload prompt:', error);
+        await interaction.reply({
+          content: `❌ ${error.message || 'Failed to process image upload. Please try again.'}`,
+          ephemeral: true
+        }).catch(() => {});
+      }
     }
   } catch (error) {
     console.error('Error handling profile button:', error);
@@ -4903,7 +4958,8 @@ async function handleProfileModalInteraction(interaction) {
       });
     }
 
-    // Format: profile_modal:{formId}:{questionId}
+    // Format: profile_modal:{formId}:{questionId} or profile_image_modal:{formId}:{questionId}
+    const isImageModal = interaction.customId.startsWith('profile_image_modal:');
     const parts = interaction.customId.split(':');
     if (parts.length < 3) {
       console.error('[Profile] Invalid modal customId format:', interaction.customId);
@@ -4915,7 +4971,9 @@ async function handleProfileModalInteraction(interaction) {
 
     const formId = parts[1];
     const questionId = parts[2];
-    const inputValue = interaction.fields.getTextInputValue('input_value') || '';
+    const inputValue = isImageModal 
+      ? interaction.fields.getTextInputValue('image_url') || ''
+      : interaction.fields.getTextInputValue('input_value') || '';
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -4938,6 +4996,34 @@ async function handleProfileModalInteraction(interaction) {
     }
 
     const questionType = question.type || 'text';
+
+    // Handle image type
+    if (questionType === 'image' || isImageModal) {
+      // If URL provided, validate and save
+      if (inputValue.trim()) {
+        // Basic URL validation
+        try {
+          new URL(inputValue.trim());
+        } catch {
+          return interaction.editReply({
+            content: '❌ Please enter a valid image URL (e.g., https://example.com/image.png)'
+          });
+        }
+        
+        // Save URL directly
+        await global.profileManager.updateInputResponse(formId, questionId, inputValue.trim(), interaction.user.id);
+        
+        await interaction.editReply({
+          content: '✅ Image URL saved!'
+        });
+        return;
+      } else {
+        // No URL provided, prompt user to attach image
+        return interaction.editReply({
+          content: '📷 **No URL provided**\n\nPlease either:\n1. Enter an image URL in the modal, or\n2. Send an image file as an attachment in this channel\n\nThe image will be automatically saved to your profile.'
+        });
+      }
+    }
 
     // Validate input based on question type
     if (questionType === 'number') {

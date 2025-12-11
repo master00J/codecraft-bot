@@ -154,41 +154,79 @@ class UserProfileManager {
           // Mark question as processed after all chunks
           questionsProcessed++;
         } else if (questionType === 'text' || questionType === 'number') {
-        // Text/Number type - use button to open modal
-        if (remainingRows <= 0) break;
-        
-        if (!question.text) {
-          console.warn(`[Profile Manager] Question ${question.id || i} has no text, skipping`);
-          continue;
-        }
-        
-        const buttonLabel = question.text.length > 80 
-          ? question.text.substring(0, 77) + '...' 
-          : question.text;
-        
-        const button = new ButtonBuilder()
-          .setCustomId(`profile_input:${form.id}:${question.id}`)
-          .setLabel(buttonLabel)
-          .setStyle(ButtonStyle.Primary);
-        
-        // Try to add to existing row if there's space, otherwise create new row
-        let addedToRow = false;
-        if (components.length > 0) {
-          const lastRow = components[components.length - 1];
-          const lastRowComponents = lastRow.components || [];
-          if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
-            lastRow.addComponents(button);
-            addedToRow = true;
+          // Text/Number type - use button to open modal
+          if (remainingRows <= 0) break;
+          
+          if (!question.text) {
+            console.warn(`[Profile Manager] Question ${question.id || i} has no text, skipping`);
+            continue;
           }
+          
+          const buttonLabel = question.text.length > 80 
+            ? question.text.substring(0, 77) + '...' 
+            : question.text;
+          
+          const button = new ButtonBuilder()
+            .setCustomId(`profile_input:${form.id}:${question.id}`)
+            .setLabel(buttonLabel)
+            .setStyle(ButtonStyle.Primary);
+          
+          // Try to add to existing row if there's space, otherwise create new row
+          let addedToRow = false;
+          if (components.length > 0) {
+            const lastRow = components[components.length - 1];
+            const lastRowComponents = lastRow.components || [];
+            if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
+              lastRow.addComponents(button);
+              addedToRow = true;
+            }
+          }
+          
+          if (!addedToRow) {
+            const row = new ActionRowBuilder().addComponents(button);
+            components.push(row);
+            remainingRows--;
+          }
+          
+          questionsProcessed++;
+        } else if (questionType === 'image') {
+          // Image type - use button to upload image
+          if (remainingRows <= 0) break;
+          
+          if (!question.text) {
+            console.warn(`[Profile Manager] Question ${question.id || i} has no text, skipping`);
+            continue;
+          }
+          
+          const buttonLabel = question.text.length > 80 
+            ? question.text.substring(0, 77) + '...' 
+            : question.text;
+          
+          const button = new ButtonBuilder()
+            .setCustomId(`profile_image:${form.id}:${question.id}`)
+            .setLabel(buttonLabel)
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('📷');
+          
+          // Try to add to existing row if there's space, otherwise create new row
+          let addedToRow = false;
+          if (components.length > 0) {
+            const lastRow = components[components.length - 1];
+            const lastRowComponents = lastRow.components || [];
+            if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
+              lastRow.addComponents(button);
+              addedToRow = true;
+            }
+          }
+          
+          if (!addedToRow) {
+            const row = new ActionRowBuilder().addComponents(button);
+            components.push(row);
+            remainingRows--;
+          }
+          
+          questionsProcessed++;
         }
-        
-        if (!addedToRow) {
-          const row = new ActionRowBuilder().addComponents(button);
-          components.push(row);
-          remainingRows--;
-        }
-        
-        questionsProcessed++;
       }
     }
     
@@ -429,6 +467,100 @@ class UserProfileManager {
     }
 
     return response;
+  }
+
+  /**
+   * Upload image to Supabase storage and save URL to response
+   * @param {string} formId - Form ID
+   * @param {string} questionId - Question ID
+   * @param {Buffer} imageBuffer - Image file buffer
+   * @param {string} fileName - Original filename
+   * @param {string} mimeType - MIME type (e.g., 'image/png')
+   * @param {string} userId - User ID
+   * @param {string} guildId - Guild ID
+   */
+  async uploadImageResponse(formId, questionId, imageBuffer, fileName, mimeType, userId, guildId) {
+    try {
+      const form = await this.getForm(formId);
+      if (!form) {
+        throw new Error('Form not found');
+      }
+
+      // Get question to check maxFileSize and allowedTypes
+      const question = form.questions.find(q => q.id === questionId);
+      if (!question || question.type !== 'image') {
+        throw new Error('Question not found or is not an image type');
+      }
+
+      // Validate file size (default 10MB, or from question config)
+      const maxFileSize = (question.maxFileSize || 10) * 1024 * 1024; // Convert MB to bytes
+      if (imageBuffer.length > maxFileSize) {
+        throw new Error(`Image too large. Maximum size is ${question.maxFileSize || 10}MB`);
+      }
+
+      // Validate MIME type (default image/*, or from question config)
+      const allowedTypes = (question.allowedTypes || 'image/*').split(',').map(t => t.trim());
+      const isAllowed = allowedTypes.some(type => {
+        if (type === 'image/*') return mimeType.startsWith('image/');
+        return mimeType === type;
+      });
+      
+      if (!isAllowed) {
+        throw new Error(`Image type not allowed. Allowed types: ${allowedTypes.join(', ')}`);
+      }
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(7);
+      const fileExt = fileName.split('.').pop() || 'png';
+      const storagePath = `user-profiles/${guildId}/${formId}/${userId}/${timestamp}-${randomString}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await this.supabase.storage
+        .from('comecraft-images')
+        .upload(storagePath, imageBuffer, {
+          contentType: mimeType,
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('[Profile Manager] Supabase upload error:', uploadError);
+        throw new Error('Failed to upload image');
+      }
+
+      // Get public URL
+      const { data: urlData } = this.supabase.storage
+        .from('comecraft-images')
+        .getPublicUrl(storagePath);
+
+      const imageUrl = urlData.publicUrl;
+
+      // Get or create user response
+      const response = await this.getOrCreateResponse(formId, guildId, userId);
+
+      // Update responses object with image URL
+      const responses = response.responses || {};
+      responses[questionId] = imageUrl;
+
+      // Update in database
+      const { error: updateError } = await this.supabase
+        .from('user_profiles_responses')
+        .update({
+          responses: responses,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', response.id);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      return imageUrl;
+    } catch (error) {
+      console.error('[Profile Manager] Error uploading image:', error);
+      throw error;
+    }
   }
 
   /**
@@ -1022,6 +1154,42 @@ class UserProfileManager {
             components.push(row);
             remainingRows--;
           }
+        } else if (questionType === 'image') {
+          // Image type - show button with value indicator
+          if (remainingRows <= 0) break;
+          
+          let buttonLabel = question.text.length > 80 
+            ? question.text.substring(0, 77) + '...' 
+            : question.text;
+          
+          // Add value indicator if filled
+          if (questionValue && typeof questionValue === 'string') {
+            buttonLabel = `${buttonLabel}${questionValue ? ' ✅' : ''}`;
+            buttonLabel = buttonLabel.length > 80 ? buttonLabel.substring(0, 77) + '...' : buttonLabel;
+          }
+          
+          const button = new ButtonBuilder()
+            .setCustomId(`profile_image:${form.id}:${question.id}`)
+            .setLabel(buttonLabel)
+            .setStyle(questionValue ? ButtonStyle.Success : ButtonStyle.Secondary)
+            .setEmoji('📷');
+          
+          // Try to add to existing row if there's space
+          let addedToRow = false;
+          if (components.length > 0) {
+            const lastRow = components[components.length - 1];
+            const lastRowComponents = lastRow.components || [];
+            if (lastRowComponents.length < MAX_BUTTONS_PER_ROW && lastRowComponents[0]?.type === ComponentType.Button) {
+              lastRow.addComponents(button);
+              addedToRow = true;
+            }
+          }
+          
+          if (!addedToRow) {
+            const row = new ActionRowBuilder().addComponents(button);
+            components.push(row);
+            remainingRows--;
+          }
         }
       }
 
@@ -1188,6 +1356,32 @@ class UserProfileManager {
         } else {
           continue; // Skip empty answers
         }
+      } else if (questionType === 'image') {
+        // Image type - response is a URL string
+        if (typeof questionResponse === 'string' && questionResponse.trim().length > 0) {
+          // Validate URL
+          try {
+            new URL(questionResponse);
+            // Add image to embed
+            // Use first image as main image, others as fields
+            if (!embed.data.image) {
+              embed.setImage(questionResponse);
+            } else {
+              // If main image already set, add as field
+              answerFields.push({
+                name: `${question.text} 📷`,
+                value: `[View Image](${questionResponse})`,
+                inline: false
+              });
+            }
+            continue; // Skip adding as regular field
+          } catch {
+            // Invalid URL, treat as text
+            answerText = questionResponse;
+          }
+        } else {
+          continue; // Skip empty answers
+        }
       }
 
       if (answerText) {
@@ -1262,6 +1456,22 @@ class UserProfileManager {
         textInput.setMaxLength(Math.min(question.maxLength, 4000));
       }
     }
+
+    modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+    return modal;
+  }
+
+  createImageModal(formId, questionId, question) {
+    const modal = new ModalBuilder()
+      .setCustomId(`profile_image_modal:${formId}:${questionId}`)
+      .setTitle(question.text.length > 45 ? question.text.substring(0, 42) + '...' : question.text);
+
+    const textInput = new TextInputBuilder()
+      .setCustomId('image_url')
+      .setLabel('Image URL or upload via attachment')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://example.com/image.png or attach image in next message')
+      .setRequired(false);
 
     modal.addComponents(new ActionRowBuilder().addComponents(textInput));
     return modal;

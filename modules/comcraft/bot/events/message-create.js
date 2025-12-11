@@ -122,6 +122,73 @@ function createMessageCreateHandler({
       console.log(`ℹ️ [AutoReactions] getAutoReactionsManager not available (module not loaded at startup)`);
     }
 
+    // Check for profile image uploads (if message has image attachment)
+    if (message.attachments && message.attachments.size > 0 && global.profileManager) {
+      try {
+        const imageAttachment = Array.from(message.attachments.values()).find(
+          att => att.contentType && att.contentType.startsWith('image/')
+        );
+        
+        if (imageAttachment) {
+          // Check if user has an active profile response with image questions
+          // This is a simple check - in production you might want to track which form/question the user is working on
+          const { data: activeResponses } = await global.profileManager.supabase
+            .from('user_profiles_responses')
+            .select('form_id, responses, status')
+            .eq('guild_id', message.guild.id)
+            .eq('user_id', message.author.id)
+            .eq('status', 'in_progress')
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          
+          if (activeResponses && activeResponses.length > 0) {
+            const response = activeResponses[0];
+            const form = await global.profileManager.getForm(response.form_id);
+            
+            if (form && form.enabled) {
+              // Find first image question that doesn't have a response yet
+              const imageQuestion = form.questions.find(q => 
+                q.type === 'image' && !response.responses?.[q.id]
+              );
+              
+              if (imageQuestion) {
+                // Download image and upload to Supabase
+                const imageResponse = await fetch(imageAttachment.url);
+                const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+                
+                try {
+                  const imageUrl = await global.profileManager.uploadImageResponse(
+                    response.form_id,
+                    imageQuestion.id,
+                    imageBuffer,
+                    imageAttachment.name,
+                    imageAttachment.contentType,
+                    message.author.id,
+                    message.guild.id
+                  );
+                  
+                  await message.react('✅');
+                  await message.reply({
+                    content: `✅ Image uploaded successfully! It has been saved to your profile.`,
+                    allowedMentions: { repliedUser: false }
+                  });
+                } catch (error) {
+                  console.error('[Profile] Error uploading image:', error);
+                  await message.reply({
+                    content: `❌ Failed to upload image: ${error.message}`,
+                    allowedMentions: { repliedUser: false }
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Don't break message handling if profile image check fails
+        console.error('[MessageCreate] Error checking profile image upload:', error.message);
+      }
+    }
+
     // Check for custom commands (with prefix or mention)
     const guildConfig = await configManager.getGuildConfig(message.guild.id);
     const prefix = guildConfig?.prefix || '!';

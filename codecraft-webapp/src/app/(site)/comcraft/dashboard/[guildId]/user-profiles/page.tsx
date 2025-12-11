@@ -29,12 +29,12 @@ interface ProfileForm {
   created_at: string;
 }
 
-type QuestionType = 'dropdown' | 'text' | 'number';
+type QuestionType = 'dropdown' | 'text' | 'number' | 'image';
 
 interface Question {
   id: string;
   text: string;
-  type: QuestionType; // 'dropdown', 'text', or 'number'
+  type: QuestionType; // 'dropdown', 'text', 'number', or 'image'
   options?: Option[]; // Only required for dropdown type
   placeholder?: string; // For text/number types
   minLength?: number; // For text type
@@ -43,6 +43,8 @@ interface Question {
   max?: number; // For number type
   required?: boolean; // Optional, defaults to false
   maxSelections?: number; // For dropdown type: maximum number of options that can be selected (default: all)
+  maxFileSize?: number; // For image type: maximum file size in MB (default: 10)
+  allowedTypes?: string; // For image type: allowed MIME types (default: 'image/*')
 }
 
 interface Option {
@@ -555,6 +557,7 @@ export default function UserProfilesConfig() {
                           <SelectItem value="dropdown">Dropdown</SelectItem>
                           <SelectItem value="text">Text Input</SelectItem>
                           <SelectItem value="number">Number Input</SelectItem>
+                          <SelectItem value="image">Image Upload</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -681,6 +684,39 @@ export default function UserProfilesConfig() {
                               onChange={(e) => updateQuestion(question.id, 'max', e.target.value ? parseFloat(e.target.value) : undefined)}
                               placeholder="e.g., 100"
                             />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Image Upload Type Configuration */}
+                    {question.type === 'image' && (
+                      <div className="space-y-2 pl-4 border-l-2 border-purple-300">
+                        <p className="text-xs text-gray-500">
+                          Users will be able to upload an image file. Images are stored securely and displayed in their profile.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm font-medium">Max File Size (MB)</Label>
+                            <Input
+                              type="number"
+                              value={question.maxFileSize || 10}
+                              onChange={(e) => updateQuestion(question.id, 'maxFileSize', e.target.value ? parseInt(e.target.value) : 10)}
+                              placeholder="10"
+                              min="1"
+                              max="25"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Allowed Types</Label>
+                            <Input
+                              value={question.allowedTypes || 'image/*'}
+                              onChange={(e) => updateQuestion(question.id, 'allowedTypes', e.target.value)}
+                              placeholder="image/*"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              e.g., image/*, image/png,image/jpeg
+                            </p>
                           </div>
                         </div>
                       </div>
