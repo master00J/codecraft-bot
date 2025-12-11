@@ -4972,6 +4972,19 @@ async function handleProfileButtonInteraction(interaction) {
         console.log('[Profile Image] Modal created, showing...');
         await interaction.showModal(modal);
         console.log('[Profile Image] Modal shown successfully');
+        
+        // Also send a follow-up message explaining both options
+        // Use setTimeout to avoid rate limits
+        setTimeout(async () => {
+          try {
+            await interaction.followUp({
+              content: '📷 **Image Upload Options:**\n\n**Option 1:** Enter image URL in the modal above\n**Option 2:** Close the modal and upload an image file as an attachment in this channel\n\nThe image will be automatically saved to your profile!',
+              ephemeral: true
+            }).catch(() => {}); // Ignore errors if interaction expired
+          } catch (error) {
+            // Ignore follow-up errors
+          }
+        }, 500);
       } catch (error) {
         console.error('[Profile Image] Error handling image upload prompt:', error);
         console.error('[Profile Image] Error message:', error.message);

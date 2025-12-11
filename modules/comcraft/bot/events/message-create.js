@@ -169,7 +169,7 @@ function createMessageCreateHandler({
                   
                   await message.react('✅');
                   await message.reply({
-                    content: `✅ Image uploaded successfully! It has been saved to your profile.`,
+                    content: `✅ **Image uploaded successfully!**\n\nThe image has been saved to your profile and will be displayed when you submit the form.`,
                     allowedMentions: { repliedUser: false }
                   });
                 } catch (error) {

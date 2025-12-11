@@ -1492,13 +1492,13 @@ class UserProfileManager {
 
       const textInput = new TextInputBuilder()
         .setCustomId('image_url')
-        .setLabel('Image URL')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('https://example.com/image.png')
+        .setLabel('Image URL (or upload file below)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Option 1: Paste image URL here\nOption 2: Close this and upload image file in channel')
         .setRequired(false);
 
-      // Discord label limit is 45 characters (already OK)
-      // Discord placeholder limit is 100 characters (already OK)
+      // Discord label limit is 45 characters
+      // Using Paragraph style to allow longer placeholder text
 
       modal.addComponents(new ActionRowBuilder().addComponents(textInput));
       
