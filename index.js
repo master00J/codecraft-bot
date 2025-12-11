@@ -4893,27 +4893,44 @@ async function handleProfileButtonInteraction(interaction) {
     } else if (customId.startsWith('profile_image:')) {
       // Format: profile_image:{formId}:{questionId}
       // Show modal for image URL input
+      console.log('[Profile Image] Button clicked, customId:', customId);
+      
       const parts = customId.split(':');
       if (parts.length < 3) {
+        console.error('[Profile Image] Invalid customId format:', customId);
         return interaction.reply({
           content: '❌ Invalid form interaction. Please try again.',
           ephemeral: true
-        }).catch(err => console.error('[Profile] Error replying to invalid interaction:', err));
+        }).catch(err => console.error('[Profile Image] Error replying:', err));
       }
 
       const formId = parts[1];
       const questionId = parts[2];
+      console.log('[Profile Image] Parsed formId:', formId, 'questionId:', questionId);
 
       try {
+        if (!global.profileManager) {
+          console.error('[Profile Image] Profile manager not available');
+          return interaction.reply({
+            content: '❌ Profile system is not available.',
+            ephemeral: true
+          }).catch(() => {});
+        }
+
+        console.log('[Profile Image] Fetching form...');
         const form = await global.profileManager.getForm(formId);
         if (!form) {
+          console.error('[Profile Image] Form not found:', formId);
           return interaction.reply({
             content: '❌ Form not found!',
             ephemeral: true
           }).catch(() => {});
         }
 
+        console.log('[Profile Image] Form found:', form.form_name, 'guild_id:', form.guild_id);
+        
         if (form.guild_id !== interaction.guildId) {
+          console.error('[Profile Image] Guild mismatch:', form.guild_id, 'vs', interaction.guildId);
           return interaction.reply({
             content: '❌ That form belongs to a different server!',
             ephemeral: true
@@ -4921,41 +4938,58 @@ async function handleProfileButtonInteraction(interaction) {
         }
 
         if (!form.enabled) {
+          console.warn('[Profile Image] Form is disabled');
           return interaction.reply({
             content: '❌ This form is currently disabled!',
             ephemeral: true
           }).catch(() => {});
         }
 
+        console.log('[Profile Image] Finding question...');
         const question = form.questions.find(q => q.id === questionId);
-        if (!question || question.type !== 'image') {
+        if (!question) {
+          console.error('[Profile Image] Question not found:', questionId);
           return interaction.reply({
-            content: '❌ Question not found or is not an image type!',
+            content: '❌ Question not found!',
             ephemeral: true
           }).catch(() => {});
         }
 
+        if (question.type !== 'image') {
+          console.error('[Profile Image] Question is not image type:', question.type);
+          return interaction.reply({
+            content: '❌ Question is not an image type!',
+            ephemeral: true
+          }).catch(() => {});
+        }
+
+        console.log('[Profile Image] Creating modal...');
         // Show modal for image URL input
         // Note: showModal must be called directly, cannot be used after deferReply
         const modal = global.profileManager.createImageModal(formId, questionId, question);
+        console.log('[Profile Image] Modal created, showing...');
         await interaction.showModal(modal);
+        console.log('[Profile Image] Modal shown successfully');
       } catch (error) {
-        console.error('[Profile] Error handling image upload prompt:', error);
-        console.error('[Profile] Error stack:', error.stack);
+        console.error('[Profile Image] Error handling image upload prompt:', error);
+        console.error('[Profile Image] Error message:', error.message);
+        console.error('[Profile Image] Error stack:', error.stack);
         try {
           if (interaction.replied || interaction.deferred) {
+            console.log('[Profile Image] Interaction already replied, using followUp');
             await interaction.followUp({
               content: `❌ ${error.message || 'Failed to process image upload. Please try again.'}`,
               ephemeral: true
-            }).catch(() => {});
+            }).catch(err => console.error('[Profile Image] FollowUp error:', err));
           } else {
+            console.log('[Profile Image] Sending error reply');
             await interaction.reply({
               content: `❌ ${error.message || 'Failed to process image upload. Please try again.'}`,
               ephemeral: true
-            }).catch(() => {});
+            }).catch(err => console.error('[Profile Image] Reply error:', err));
           }
         } catch (replyError) {
-          console.error('[Profile] Error sending error message:', replyError);
+          console.error('[Profile Image] Error sending error message:', replyError);
         }
       }
     }

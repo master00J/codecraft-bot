@@ -1461,19 +1461,42 @@ class UserProfileManager {
   }
 
   createImageModal(formId, questionId, question) {
-    const modal = new ModalBuilder()
-      .setCustomId(`profile_image_modal:${formId}:${questionId}`)
-      .setTitle(question.text.length > 45 ? question.text.substring(0, 42) + '...' : question.text);
+    try {
+      // Validate inputs
+      if (!formId || !questionId || !question) {
+        throw new Error('Missing required parameters for modal creation');
+      }
 
-    const textInput = new TextInputBuilder()
-      .setCustomId('image_url')
-      .setLabel('Image URL')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('https://example.com/image.png')
-      .setRequired(false);
+      if (!question.text) {
+        throw new Error('Question text is required');
+      }
 
-    modal.addComponents(new ActionRowBuilder().addComponents(textInput));
-    return modal;
+      // Discord modal title limit is 45 characters
+      const modalTitle = question.text.length > 45 
+        ? question.text.substring(0, 42) + '...' 
+        : question.text;
+
+      const modal = new ModalBuilder()
+        .setCustomId(`profile_image_modal:${formId}:${questionId}`)
+        .setTitle(modalTitle);
+
+      const textInput = new TextInputBuilder()
+        .setCustomId('image_url')
+        .setLabel('Image URL')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('https://example.com/image.png')
+        .setRequired(false);
+
+      // Discord label limit is 45 characters (already OK)
+      // Discord placeholder limit is 100 characters (already OK)
+
+      modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+      
+      return modal;
+    } catch (error) {
+      console.error('[Profile Manager] Error creating image modal:', error);
+      throw error;
+    }
   }
 }
 
