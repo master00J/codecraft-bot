@@ -1690,8 +1690,10 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      // Profile button handlers (submit and input buttons)
-      if (interaction.customId.startsWith('profile_submit:') || interaction.customId.startsWith('profile_input:')) {
+      // Profile button handlers (submit, input, and image buttons)
+      if (interaction.customId.startsWith('profile_submit:') || 
+          interaction.customId.startsWith('profile_input:') || 
+          interaction.customId.startsWith('profile_image:')) {
         if (!global.profileManager) {
           return interaction.reply({
             content: '❌ Profile system is not available at this time.',
