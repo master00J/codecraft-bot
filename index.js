@@ -4892,13 +4892,13 @@ async function handleProfileButtonInteraction(interaction) {
       }
     } else if (customId.startsWith('profile_image:')) {
       // Format: profile_image:{formId}:{questionId}
-      // Prompt user to upload image via message attachment
+      // Show modal for image URL input
       const parts = customId.split(':');
       if (parts.length < 3) {
         return interaction.reply({
           content: '❌ Invalid form interaction. Please try again.',
           ephemeral: true
-        });
+        }).catch(err => console.error('[Profile] Error replying to invalid interaction:', err));
       }
 
       const formId = parts[1];
@@ -4910,21 +4910,21 @@ async function handleProfileButtonInteraction(interaction) {
           return interaction.reply({
             content: '❌ Form not found!',
             ephemeral: true
-          });
+          }).catch(() => {});
         }
 
         if (form.guild_id !== interaction.guildId) {
           return interaction.reply({
             content: '❌ That form belongs to a different server!',
             ephemeral: true
-          });
+          }).catch(() => {});
         }
 
         if (!form.enabled) {
           return interaction.reply({
             content: '❌ This form is currently disabled!',
             ephemeral: true
-          });
+          }).catch(() => {});
         }
 
         const question = form.questions.find(q => q.id === questionId);
@@ -4932,18 +4932,31 @@ async function handleProfileButtonInteraction(interaction) {
           return interaction.reply({
             content: '❌ Question not found or is not an image type!',
             ephemeral: true
-          });
+          }).catch(() => {});
         }
 
-        // Show modal for image URL input, or prompt for attachment
+        // Show modal for image URL input
+        // Note: showModal must be called directly, cannot be used after deferReply
         const modal = global.profileManager.createImageModal(formId, questionId, question);
         await interaction.showModal(modal);
       } catch (error) {
         console.error('[Profile] Error handling image upload prompt:', error);
-        await interaction.reply({
-          content: `❌ ${error.message || 'Failed to process image upload. Please try again.'}`,
-          ephemeral: true
-        }).catch(() => {});
+        console.error('[Profile] Error stack:', error.stack);
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({
+              content: `❌ ${error.message || 'Failed to process image upload. Please try again.'}`,
+              ephemeral: true
+            }).catch(() => {});
+          } else {
+            await interaction.reply({
+              content: `❌ ${error.message || 'Failed to process image upload. Please try again.'}`,
+              ephemeral: true
+            }).catch(() => {});
+          }
+        } catch (replyError) {
+          console.error('[Profile] Error sending error message:', replyError);
+        }
       }
     }
   } catch (error) {
