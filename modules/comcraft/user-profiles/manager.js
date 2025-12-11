@@ -1326,6 +1326,9 @@ class UserProfileManager {
 
     // Add User Answer section
     let answerFields = [];
+    let firstImageUrl = null;
+    let imageFields = [];
+    
     for (const question of form.questions) {
       const questionType = question.type || 'dropdown';
       const questionResponse = response.responses[question.id];
@@ -1366,21 +1369,18 @@ class UserProfileManager {
             const imageUrl = questionResponse.trim();
             new URL(imageUrl); // Validate URL format
             
-            // Check if embed already has an image
-            const hasImage = embed.data?.image?.url || false;
-            
-            if (!hasImage) {
-              // First image: set as main embed image
-              embed.setImage(imageUrl);
-              console.log('[Profile Embed] Set main image:', imageUrl);
+            // Store first image URL to set as main embed image later
+            if (!firstImageUrl) {
+              firstImageUrl = imageUrl;
+              console.log('[Profile Embed] Found first image URL:', imageUrl);
             } else {
               // Additional images: add as field with link
-              answerFields.push({
+              imageFields.push({
                 name: `${question.text} 📷`,
                 value: `[View Image](${imageUrl})`,
                 inline: false
               });
-              console.log('[Profile Embed] Added image as field:', imageUrl);
+              console.log('[Profile Embed] Added additional image as field:', imageUrl);
             }
             continue; // Skip adding as regular field
           } catch (urlError) {
@@ -1402,11 +1402,23 @@ class UserProfileManager {
       }
     }
 
-    if (answerFields.length > 0) {
+    // Add fields first
+    if (answerFields.length > 0 || imageFields.length > 0) {
       embed.addFields({ name: '\u200B', value: '**User Answer**', inline: false });
-      embed.addFields(...answerFields);
+      if (answerFields.length > 0) {
+        embed.addFields(...answerFields);
+      }
+      if (imageFields.length > 0) {
+        embed.addFields(...imageFields);
+      }
     } else {
       embed.setDescription('*No answers provided*');
+    }
+
+    // Set image AFTER all fields are added (this ensures it's displayed)
+    if (firstImageUrl) {
+      embed.setImage(firstImageUrl);
+      console.log('[Profile Embed] Set embed image:', firstImageUrl);
     }
 
     // Link to the shared thread (all profiles are in the same thread)
