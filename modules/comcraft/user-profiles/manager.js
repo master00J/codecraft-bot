@@ -1467,9 +1467,9 @@ class UserProfileManager {
 
     const textInput = new TextInputBuilder()
       .setCustomId('image_url')
-      .setLabel('Image URL or upload via attachment')
+      .setLabel('Image URL')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('https://example.com/image.png or attach image in next message')
+      .setPlaceholder('https://example.com/image.png')
       .setRequired(false);
 
     modal.addComponents(new ActionRowBuilder().addComponents(textInput));
