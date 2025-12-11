@@ -219,7 +219,12 @@ class TopGGManager {
       }
 
       // Give vote rewards
-      await this.giveVoteRewards(user, isWeekend);
+      try {
+        await this.giveVoteRewards(user, isWeekend);
+      } catch (rewardError) {
+        console.error(`❌ [Top.gg] Error giving vote rewards to user ${user}:`, rewardError);
+        // Continue anyway - vote was logged successfully
+      }
 
       return { success: true };
     } catch (error) {
@@ -233,17 +238,45 @@ class TopGGManager {
    */
   async giveVoteRewards(discordUserId, isWeekend = false) {
     try {
+      console.log(`[Top.gg] Starting giveVoteRewards for user ${discordUserId} (weekend: ${isWeekend})`);
+      
       // Get vote rewards configuration
-      const { data: config } = await this.supabase
+      const { data: config, error: configError } = await this.supabase
         .from('vote_rewards_config')
         .select('*')
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
-      if (!config) {
-        console.log('⚠️  [Top.gg] Vote rewards config not found, skipping points');
+      if (configError) {
+        console.error('❌ [Top.gg] Error fetching vote rewards config:', configError);
         return;
       }
+
+      if (!config) {
+        console.warn('⚠️  [Top.gg] Vote rewards config not found or inactive, creating default config...');
+        
+        // Try to create default config
+        const { data: newConfig, error: createError } = await this.supabase
+          .from('vote_rewards_config')
+          .insert({
+            points_per_vote: 1,
+            points_per_weekend_vote: 2,
+            is_active: true
+          })
+          .select()
+          .single();
+
+        if (createError || !newConfig) {
+          console.error('❌ [Top.gg] Failed to create default vote rewards config:', createError);
+          console.warn('   Please manually create a vote_rewards_config entry in the database.');
+          return;
+        }
+
+        console.log('✅ [Top.gg] Created default vote rewards config');
+        config = newConfig;
+      }
+
+      console.log(`[Top.gg] Config found: ${config.points_per_vote} points per vote, ${config.points_per_weekend_vote} per weekend vote`);
 
       const pointsToAward = isWeekend ? config.points_per_weekend_vote : config.points_per_vote;
 
@@ -337,7 +370,7 @@ class TopGGManager {
       }
 
       // Log transaction
-      await this.supabase
+      const { error: transactionError } = await this.supabase
         .from('vote_points_transactions')
         .insert({
           user_id: userData.id,
@@ -346,6 +379,11 @@ class TopGGManager {
           points: pointsToAward,
           description: `Vote reward${isWeekend ? ' (weekend bonus)' : ''}`
         });
+
+      if (transactionError) {
+        console.error('❌ [Top.gg] Error logging vote transaction:', transactionError);
+        // Don't return here - points were already awarded
+      }
 
       console.log(`✅ [Top.gg] Awarded ${pointsToAward} vote points to user ${discordUserId} (total: ${votePoints.total_points})`);
 
