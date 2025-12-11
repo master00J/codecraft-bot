@@ -4760,14 +4760,14 @@ async function handleProfileSelectMenuInteraction(interaction) {
           content: `✅ Selection updated! (${selectedValues.length} option${selectedValues.length !== 1 ? 's' : ''} selected for this question)`
         });
         
-        // Automatically delete the message after 3 seconds
+        // Automatically delete the message after 5 seconds
         setTimeout(async () => {
           try {
             await interaction.deleteReply();
           } catch (error) {
             // Ignore errors (message might already be deleted or interaction expired)
           }
-        }, 3000);
+        }, 5000);
       } catch (updateError) {
       console.error('[Profile] Error updating selections:', updateError);
       await interaction.editReply({
@@ -4977,10 +4977,21 @@ async function handleProfileButtonInteraction(interaction) {
         // Use setTimeout to avoid rate limits
         setTimeout(async () => {
           try {
-            await interaction.followUp({
-              content: '📷 **Image Upload Options:**\n\n**Option 1:** Enter image URL in the modal above\n**Option 2:** Close the modal and upload an image file as an attachment in this channel\n\nThe image will be automatically saved to your profile!',
+            const followUpMsg = await interaction.followUp({
+              content: '📷 **Image Upload Options:**\n\n**Option 1:** Enter image URL in the modal above\n**Option 2:** Close the modal and upload an image file as an attachment in this channel\n\nThe image will be automatically processed and removed from the channel.',
               ephemeral: true
-            }).catch(() => {}); // Ignore errors if interaction expired
+            }).catch(() => null); // Ignore errors if interaction expired
+            
+            // Auto-delete follow-up message after 5 seconds
+            if (followUpMsg) {
+              setTimeout(async () => {
+                try {
+                  await followUpMsg.delete().catch(() => {});
+                } catch (error) {
+                  // Ignore errors when deleting
+                }
+              }, 5000);
+            }
           } catch (error) {
             // Ignore follow-up errors
           }

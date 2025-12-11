@@ -1532,9 +1532,9 @@ class UserProfileManager {
 
       const textInput = new TextInputBuilder()
         .setCustomId('image_url')
-        .setLabel('Image URL (or upload file below)')
+        .setLabel('Image URL')
         .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('Option 1: Paste image URL here\nOption 2: Close this and upload image file in channel')
+        .setPlaceholder('Option 1: Paste image URL here\n\nOption 2: Close this modal and upload an image file directly in this channel. The image will be automatically processed and removed.')
         .setRequired(false);
 
       // Discord label limit is 45 characters

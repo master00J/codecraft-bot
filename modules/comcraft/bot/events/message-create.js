@@ -167,17 +167,45 @@ function createMessageCreateHandler({
                     message.guild.id
                   );
                   
-                  await message.react('✅');
-                  await message.reply({
+                  // Send confirmation message
+                  const confirmationMessage = await message.reply({
                     content: `✅ **Image uploaded successfully!**\n\nThe image has been saved to your profile and will be displayed when you submit the form.`,
                     allowedMentions: { repliedUser: false }
                   });
+                  
+                  // Delete the original message with the image attachment (to keep channel clean)
+                  try {
+                    await message.delete().catch(() => {
+                      // If deletion fails (e.g., no permission), just log it
+                      console.log('[Profile] Could not delete original image message (may not have permission)');
+                    });
+                  } catch (deleteError) {
+                    console.log('[Profile] Error deleting original message:', deleteError.message);
+                  }
+                  
+                  // Auto-delete confirmation message after 5 seconds
+                  setTimeout(async () => {
+                    try {
+                      await confirmationMessage.delete().catch(() => {});
+                    } catch (error) {
+                      // Ignore errors when deleting
+                    }
+                  }, 5000);
                 } catch (error) {
                   console.error('[Profile] Error uploading image:', error);
-                  await message.reply({
+                  const errorMessage = await message.reply({
                     content: `❌ Failed to upload image: ${error.message}`,
                     allowedMentions: { repliedUser: false }
                   });
+                  
+                  // Auto-delete error message after 5 seconds
+                  setTimeout(async () => {
+                    try {
+                      await errorMessage.delete().catch(() => {});
+                    } catch (error) {
+                      // Ignore errors when deleting
+                    }
+                  }, 5000);
                 }
               }
             }
