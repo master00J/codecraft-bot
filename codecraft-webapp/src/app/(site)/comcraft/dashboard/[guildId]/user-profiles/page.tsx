@@ -12,9 +12,26 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Trash2, Edit, Plus, Send, CheckCircle2, XCircle } from 'lucide-react';
+import { Trash2, Edit, Plus, Send, CheckCircle2, XCircle, GripVertical } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface ProfileForm {
   id: string;
@@ -53,6 +70,263 @@ interface Option {
   description?: string;
 }
 
+// Sortable Question Component
+function SortableQuestion({
+  question,
+  qIdx,
+  updateQuestion,
+  addOption,
+  removeOption,
+  removeQuestion,
+}: {
+  question: Question;
+  qIdx: number;
+  updateQuestion: (questionId: string, field: keyof Question, value: any) => void;
+  addOption: (questionId: string) => void;
+  removeOption: (questionId: string, optionId: string) => void;
+  removeQuestion: (questionId: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: question.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 space-y-3 ${isDragging ? 'ring-2 ring-blue-500' : ''}`}
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1 space-y-3">
+          <div className="flex gap-2 items-center">
+            <div
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            >
+              <GripVertical className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="flex-1">
+              <Input
+                value={question.text}
+                onChange={(e) => updateQuestion(question.id, 'text', e.target.value)}
+                placeholder={`Question ${qIdx + 1} (e.g., "What country do you live in?")`}
+              />
+            </div>
+            <Select 
+              value={question.type || 'dropdown'} 
+              onValueChange={(value: QuestionType) => updateQuestion(question.id, 'type', value)}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dropdown">Dropdown</SelectItem>
+                <SelectItem value="text">Text Input</SelectItem>
+                <SelectItem value="number">Number Input</SelectItem>
+                <SelectItem value="image">Image Upload</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Rest of the question configuration UI */}
+          {/* Dropdown Type Configuration */}
+          {(!question.type || question.type === 'dropdown') && (
+            <div className="space-y-2 pl-4 border-l-2 border-gray-300">
+              <div>
+                <Label className="text-sm font-medium">Maximum Selections (optional)</Label>
+                <Input
+                  type="number"
+                  value={question.maxSelections !== undefined ? question.maxSelections : ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    updateQuestion(question.id, 'maxSelections', value);
+                  }}
+                  placeholder="No limit (all options can be selected)"
+                  min="1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Maximum number of options users can select. Leave empty for no limit.
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Options</Label>
+                {(question.options || []).map((option, oIdx) => {
+                  const currentOptions = question.options || [];
+                  return (
+                    <div key={option.id} className="flex gap-2">
+                      <Input
+                        value={option.text}
+                        onChange={(e) => {
+                          const updatedOptions = currentOptions.map(opt =>
+                            opt.id === option.id ? { ...opt, text: e.target.value } : opt
+                          );
+                          updateQuestion(question.id, 'options', updatedOptions);
+                        }}
+                        placeholder={`Option ${oIdx + 1} (e.g., "USA")`}
+                      />
+                      {currentOptions.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeOption(question.id, option.id)}
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => addOption(question.id)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Option
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Text Input Type Configuration */}
+          {question.type === 'text' && (
+            <div className="space-y-2 pl-4 border-l-2 border-blue-300">
+              <div>
+                <Label className="text-sm font-medium">Placeholder (optional)</Label>
+                <Input
+                  value={question.placeholder || ''}
+                  onChange={(e) => updateQuestion(question.id, 'placeholder', e.target.value)}
+                  placeholder="e.g., Enter your name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-sm font-medium">Min Length</Label>
+                  <Input
+                    type="number"
+                    value={question.minLength || ''}
+                    onChange={(e) => updateQuestion(question.id, 'minLength', e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="e.g., 2"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Max Length</Label>
+                  <Input
+                    type="number"
+                    value={question.maxLength || ''}
+                    onChange={(e) => updateQuestion(question.id, 'maxLength', e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="e.g., 50"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Number Input Type Configuration */}
+          {question.type === 'number' && (
+            <div className="space-y-2 pl-4 border-l-2 border-green-300">
+              <div>
+                <Label className="text-sm font-medium">Placeholder (optional)</Label>
+                <Input
+                  value={question.placeholder || ''}
+                  onChange={(e) => updateQuestion(question.id, 'placeholder', e.target.value)}
+                  placeholder="e.g., Enter your age"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-sm font-medium">Min Value</Label>
+                  <Input
+                    type="number"
+                    value={question.min !== undefined ? question.min : ''}
+                    onChange={(e) => updateQuestion(question.id, 'min', e.target.value ? parseFloat(e.target.value) : undefined)}
+                    placeholder="e.g., 0"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Max Value</Label>
+                  <Input
+                    type="number"
+                    value={question.max !== undefined ? question.max : ''}
+                    onChange={(e) => updateQuestion(question.id, 'max', e.target.value ? parseFloat(e.target.value) : undefined)}
+                    placeholder="e.g., 100"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Image Upload Type Configuration */}
+          {question.type === 'image' && (
+            <div className="space-y-2 pl-4 border-l-2 border-purple-300">
+              <p className="text-xs text-gray-500">
+                Users will be able to upload an image file. Images are stored securely and displayed in their profile.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-sm font-medium">Max File Size (MB)</Label>
+                  <Input
+                    type="number"
+                    value={question.maxFileSize || 10}
+                    onChange={(e) => updateQuestion(question.id, 'maxFileSize', e.target.value ? parseInt(e.target.value) : 10)}
+                    placeholder="10"
+                    min="1"
+                    max="25"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Allowed Types</Label>
+                  <Input
+                    value={question.allowedTypes || 'image/*'}
+                    onChange={(e) => updateQuestion(question.id, 'allowedTypes', e.target.value)}
+                    placeholder="image/*"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    e.g., image/*, image/png,image/jpeg
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Required checkbox for all types */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`required-${question.id}`}
+              checked={question.required || false}
+              onChange={(e) => updateQuestion(question.id, 'required', e.target.checked)}
+              className="rounded"
+            />
+            <Label htmlFor={`required-${question.id}`} className="text-sm font-medium cursor-pointer">
+              Required field
+            </Label>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => removeQuestion(question.id)}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export default function UserProfilesConfig() {
   const params = useParams();
   const guildId = params.guildId as string;
@@ -66,6 +340,31 @@ export default function UserProfilesConfig() {
   const [saving, setSaving] = useState(false);
   const [creatingNewForm, setCreatingNewForm] = useState(false);
   const [editingForm, setEditingForm] = useState<ProfileForm | null>(null);
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end for questions
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setNewForm((prev) => {
+        const oldIndex = prev.questions.findIndex((q) => q.id === active.id);
+        const newIndex = prev.questions.findIndex((q) => q.id === over.id);
+
+        return {
+          ...prev,
+          questions: arrayMove(prev.questions, oldIndex, newIndex),
+        };
+      });
+    }
+  };
 
   const [newForm, setNewForm] = useState({
     formName: '',
@@ -534,218 +833,28 @@ export default function UserProfilesConfig() {
               </Button>
             </div>
 
-            {newForm.questions.map((question, qIdx) => (
-              <Card key={question.id} className="p-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 space-y-3">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <Input
-                          value={question.text}
-                          onChange={(e) => updateQuestion(question.id, 'text', e.target.value)}
-                          placeholder={`Question ${qIdx + 1} (e.g., "What country do you live in?")`}
-                        />
-                      </div>
-                      <Select 
-                        value={question.type || 'dropdown'} 
-                        onValueChange={(value: QuestionType) => updateQuestion(question.id, 'type', value)}
-                      >
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="dropdown">Dropdown</SelectItem>
-                          <SelectItem value="text">Text Input</SelectItem>
-                          <SelectItem value="number">Number Input</SelectItem>
-                          <SelectItem value="image">Image Upload</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Dropdown Type Configuration */}
-                    {(!question.type || question.type === 'dropdown') && (
-                      <div className="space-y-2 pl-4 border-l-2 border-gray-300">
-                        <div>
-                          <Label className="text-sm font-medium">Maximum Selections (optional)</Label>
-                          <Input
-                            type="number"
-                            value={question.maxSelections !== undefined ? question.maxSelections : ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? undefined : parseInt(e.target.value);
-                              updateQuestion(question.id, 'maxSelections', value);
-                            }}
-                            placeholder="No limit (all options can be selected)"
-                            min="1"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            Maximum number of options users can select. Leave empty for no limit.
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium">Options</Label>
-                          {(question.options || []).map((option, oIdx) => {
-                            const currentOptions = question.options || [];
-                            return (
-                              <div key={option.id} className="flex gap-2">
-                                <Input
-                                  value={option.text}
-                                  onChange={(e) => {
-                                    const updatedOptions = currentOptions.map(opt =>
-                                      opt.id === option.id ? { ...opt, text: e.target.value } : opt
-                                    );
-                                    updateQuestion(question.id, 'options', updatedOptions);
-                                  }}
-                                  placeholder={`Option ${oIdx + 1} (e.g., "USA")`}
-                                />
-                                {currentOptions.length > 1 && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeOption(question.id, option.id)}
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            );
-                          })}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => addOption(question.id)}
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Option
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Text Input Type Configuration */}
-                    {question.type === 'text' && (
-                      <div className="space-y-2 pl-4 border-l-2 border-blue-300">
-                        <div>
-                          <Label className="text-sm font-medium">Placeholder (optional)</Label>
-                          <Input
-                            value={question.placeholder || ''}
-                            onChange={(e) => updateQuestion(question.id, 'placeholder', e.target.value)}
-                            placeholder="e.g., Enter your name"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-sm font-medium">Min Length</Label>
-                            <Input
-                              type="number"
-                              value={question.minLength || ''}
-                              onChange={(e) => updateQuestion(question.id, 'minLength', e.target.value ? parseInt(e.target.value) : undefined)}
-                              placeholder="e.g., 2"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">Max Length</Label>
-                            <Input
-                              type="number"
-                              value={question.maxLength || ''}
-                              onChange={(e) => updateQuestion(question.id, 'maxLength', e.target.value ? parseInt(e.target.value) : undefined)}
-                              placeholder="e.g., 50"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Number Input Type Configuration */}
-                    {question.type === 'number' && (
-                      <div className="space-y-2 pl-4 border-l-2 border-green-300">
-                        <div>
-                          <Label className="text-sm font-medium">Placeholder (optional)</Label>
-                          <Input
-                            value={question.placeholder || ''}
-                            onChange={(e) => updateQuestion(question.id, 'placeholder', e.target.value)}
-                            placeholder="e.g., Enter your age"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-sm font-medium">Min Value</Label>
-                            <Input
-                              type="number"
-                              value={question.min !== undefined ? question.min : ''}
-                              onChange={(e) => updateQuestion(question.id, 'min', e.target.value ? parseFloat(e.target.value) : undefined)}
-                              placeholder="e.g., 0"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">Max Value</Label>
-                            <Input
-                              type="number"
-                              value={question.max !== undefined ? question.max : ''}
-                              onChange={(e) => updateQuestion(question.id, 'max', e.target.value ? parseFloat(e.target.value) : undefined)}
-                              placeholder="e.g., 100"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Image Upload Type Configuration */}
-                    {question.type === 'image' && (
-                      <div className="space-y-2 pl-4 border-l-2 border-purple-300">
-                        <p className="text-xs text-gray-500">
-                          Users will be able to upload an image file. Images are stored securely and displayed in their profile.
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-sm font-medium">Max File Size (MB)</Label>
-                            <Input
-                              type="number"
-                              value={question.maxFileSize || 10}
-                              onChange={(e) => updateQuestion(question.id, 'maxFileSize', e.target.value ? parseInt(e.target.value) : 10)}
-                              placeholder="10"
-                              min="1"
-                              max="25"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">Allowed Types</Label>
-                            <Input
-                              value={question.allowedTypes || 'image/*'}
-                              onChange={(e) => updateQuestion(question.id, 'allowedTypes', e.target.value)}
-                              placeholder="image/*"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                              e.g., image/*, image/png,image/jpeg
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Required checkbox for all types */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id={`required-${question.id}`}
-                        checked={question.required || false}
-                        onChange={(e) => updateQuestion(question.id, 'required', e.target.checked)}
-                        className="rounded"
-                      />
-                      <Label htmlFor={`required-${question.id}`} className="text-sm font-medium cursor-pointer">
-                        Required field
-                      </Label>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeQuestion(question.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </Card>
-            ))}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={newForm.questions.map((q) => q.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {newForm.questions.map((question, qIdx) => (
+                  <SortableQuestion
+                    key={question.id}
+                    question={question}
+                    qIdx={qIdx}
+                    updateQuestion={updateQuestion}
+                    addOption={addOption}
+                    removeOption={removeOption}
+                    removeQuestion={removeQuestion}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
 
           <div className="flex gap-2">
