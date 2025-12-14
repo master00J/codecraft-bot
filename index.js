@@ -12874,11 +12874,32 @@ app.post('/webhook/topgg', async (req, res) => {
       // Internal secret is valid, proceed (Top.gg auth was already checked by Next.js)
     } else {
       // No internal secret, this is a direct call from Top.gg
-      // Check Top.gg webhook auth in body
+      // Check Top.gg webhook auth - Top.gg sends it in Authorization header (primary) or body as 'auth' (fallback)
       const topggWebhookAuth = process.env.TOPGG_WEBHOOK_AUTH;
-      if (topggWebhookAuth && data.auth !== topggWebhookAuth) {
-        console.warn('⚠️  [Top.gg Webhook] Invalid Top.gg auth');
-        return res.status(401).json({ success: false, error: 'Invalid authentication' });
+      if (topggWebhookAuth) {
+        const authHeader = req.headers.authorization;
+        const authInBody = data.auth;
+        
+        // Check Authorization header first (primary method)
+        if (authHeader && authHeader === topggWebhookAuth) {
+          // Valid auth in header
+          console.log('✅ [Top.gg Webhook] Authentication verified via Authorization header');
+        } 
+        // Fallback: check auth in body
+        else if (authInBody && authInBody === topggWebhookAuth) {
+          // Valid auth in body
+          console.log('✅ [Top.gg Webhook] Authentication verified via body auth field');
+        }
+        // No valid auth found
+        else {
+          console.warn('⚠️  [Top.gg Webhook] Missing or invalid Top.gg auth', {
+            hasAuthHeader: !!authHeader,
+            hasAuthBody: !!authInBody,
+            authHeaderMatch: authHeader === topggWebhookAuth,
+            authBodyMatch: authInBody === topggWebhookAuth
+          });
+          return res.status(401).json({ success: false, error: 'Invalid authentication' });
+        }
       }
     }
 

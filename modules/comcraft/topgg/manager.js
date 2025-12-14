@@ -241,7 +241,7 @@ class TopGGManager {
       console.log(`[Top.gg] Starting giveVoteRewards for user ${discordUserId} (weekend: ${isWeekend})`);
       
       // Get vote rewards configuration
-      const { data: config, error: configError } = await this.supabase
+      let { data: config, error: configError } = await this.supabase
         .from('vote_rewards_config')
         .select('*')
         .eq('is_active', true)
@@ -442,6 +442,9 @@ class TopGGManager {
 
     } catch (error) {
       console.error('❌ [Top.gg] Error giving vote rewards:', error);
+      console.error('   Error message:', error.message);
+      console.error('   Stack trace:', error.stack);
+      // Don't re-throw - vote was logged, just rewards failed
     }
   }
 

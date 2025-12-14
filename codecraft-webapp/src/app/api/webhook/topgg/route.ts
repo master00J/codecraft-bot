@@ -17,9 +17,12 @@ export async function POST(request: NextRequest) {
     
     // Debug logging (only in development)
     if (process.env.NODE_ENV === 'development') {
+      const authHeader = request.headers.get('authorization');
       console.log('📥 [Top.gg Webhook] Received data:', {
-        hasAuth: !!data.auth,
-        authLength: data.auth?.length,
+        hasAuthHeader: !!authHeader,
+        hasAuthInBody: !!data.auth,
+        authHeaderLength: authHeader?.length,
+        authBodyLength: data.auth?.length,
         hasUser: !!data.user,
         hasBot: !!data.bot,
         type: data.type,
@@ -31,21 +34,32 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Top.gg sends auth token in the body as 'auth' field, not in header
+    // Top.gg sends auth token in Authorization header (primary method)
+    // Some implementations may also send it in body as 'auth' field (fallback)
     // Verify webhook authentication
     if (TOPGG_WEBHOOK_AUTH) {
-      if (!data.auth) {
-        console.warn('⚠️  [Top.gg Webhook] Missing auth token in body');
-        return NextResponse.json({ error: 'Missing authentication token' }, { status: 401 });
-      }
+      const authHeader = request.headers.get('authorization');
+      const authInBody = data.auth;
       
-      if (data.auth !== TOPGG_WEBHOOK_AUTH) {
-        console.warn('⚠️  [Top.gg Webhook] Invalid auth token in body', {
-          received: data.auth?.substring(0, 10) + '...',
-          expected: TOPGG_WEBHOOK_AUTH?.substring(0, 10) + '...',
-          match: data.auth === TOPGG_WEBHOOK_AUTH
+      // Check Authorization header first (primary method)
+      if (authHeader && authHeader === TOPGG_WEBHOOK_AUTH) {
+        // Valid auth in header
+        console.log('✅ [Top.gg Webhook] Authentication verified via Authorization header');
+      } 
+      // Fallback: check auth in body
+      else if (authInBody && authInBody === TOPGG_WEBHOOK_AUTH) {
+        // Valid auth in body
+        console.log('✅ [Top.gg Webhook] Authentication verified via body auth field');
+      }
+      // No valid auth found
+      else {
+        console.warn('⚠️  [Top.gg Webhook] Missing or invalid auth token', {
+          hasAuthHeader: !!authHeader,
+          hasAuthBody: !!authInBody,
+          authHeaderMatch: authHeader === TOPGG_WEBHOOK_AUTH,
+          authBodyMatch: authInBody === TOPGG_WEBHOOK_AUTH
         });
-        return NextResponse.json({ error: 'Invalid authentication token' }, { status: 401 });
+        return NextResponse.json({ error: 'Missing or invalid authentication token' }, { status: 401 });
       }
     } else {
       console.warn('⚠️  [Top.gg Webhook] TOPGG_WEBHOOK_AUTH not configured - skipping auth check');
