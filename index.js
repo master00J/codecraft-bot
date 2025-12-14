@@ -1425,9 +1425,17 @@ client.on('guildMemberRemove', async (member) => {
 // INVITE EVENTS (For Referral Tracking)
 // ================================================================
 client.on('inviteCreate', async (invite) => {
-  // Clear invite cache when new invite is created
+  // Update invite cache when new invite is created (don't clear, just refresh)
   if (global.discordReferralManager) {
-    global.discordReferralManager.clearInviteCache(invite.guild.id);
+    // Refresh the cache to include the new invite
+    try {
+      await global.discordReferralManager.getInvites(invite.guild);
+      console.log(`[DiscordReferral] Updated invite cache for ${invite.guild.id} after new invite created`);
+    } catch (error) {
+      console.error(`[DiscordReferral] Error updating cache after invite create:`, error);
+      // Fallback: clear cache if refresh fails
+      global.discordReferralManager.clearInviteCache(invite.guild.id);
+    }
   }
 });
 
@@ -1590,6 +1598,47 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({ content: '❌ Vote kick system not initialized', ephemeral: true });
       }
       return;
+    }
+
+    // Handle invite copy button
+    if (interaction.customId && interaction.customId.startsWith('copy_invite_')) {
+      const userId = interaction.customId.replace('copy_invite_', '');
+      if (interaction.user.id !== userId) {
+        return interaction.reply({
+          content: '❌ This is not your invite link!',
+          ephemeral: true
+        });
+      }
+
+      // Get the invite URL from the embed
+      const embed = interaction.message.embeds[0];
+      if (!embed) {
+        return interaction.reply({
+          content: '❌ Could not find invite link.',
+          ephemeral: true
+        });
+      }
+
+      const inviteField = embed.fields.find(f => f.name === '🔗 Invite Link');
+      if (!inviteField) {
+        return interaction.reply({
+          content: '❌ Could not find invite link.',
+          ephemeral: true
+        });
+      }
+
+      const inviteUrl = inviteField.value.replace(/```/g, '').trim();
+
+      return interaction.reply({
+        content: `✅ Invite link copied!\n\`\`\`${inviteUrl}\`\`\`\n\nShare this link with your friends to earn rewards! 🎁`,
+        ephemeral: true
+      });
+    }
+
+    // Handle view referral stats button
+    if (interaction.customId === 'view_referral_stats') {
+      await interaction.deferReply({ ephemeral: true });
+      return handleMyReferralsCommand(interaction);
     }
 
     if (interaction.customId === 'feedback_submit') {
@@ -1950,6 +1999,10 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'myreferrals':
         await handleMyReferralsCommand(interaction);
+        break;
+
+      case 'invite':
+        await handleInviteCommand(interaction);
         break;
 
       case 'setxp':
@@ -2808,6 +2861,181 @@ async function handleStatsCommand(interaction) {
   } catch (error) {
     console.error('[StatsCommand] Error:', error);
     await interaction.editReply('❌ An error occurred while fetching stats.');
+  }
+}
+
+async function handleInviteCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!global.discordReferralManager) {
+    return interaction.editReply({ 
+      content: '❌ Referral system is not available at this time.' 
+    });
+  }
+
+  try {
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const guild = interaction.guild;
+
+    // Check if referral system is enabled
+    const config = await global.discordReferralManager.getConfig(guildId);
+    if (!config || !config.enabled) {
+      return interaction.editReply({
+        content: '❌ Referral system is not enabled in this server. Contact an administrator to enable it.'
+      });
+    }
+
+    // Check if bot has permission to create invites
+    const botMember = guild.members.cache.get(client.user.id);
+    if (!botMember || !botMember.permissions.has('CreateInstantInvite')) {
+      return interaction.editReply({
+        content: '❌ Bot does not have permission to create invites. Please grant the "Create Instant Invite" permission.'
+      });
+    }
+
+    // Find a suitable channel to create the invite in
+    const channels = guild.channels.cache.filter(ch => 
+      ch.isTextBased() && 
+      ch.permissionsFor(botMember).has('CreateInstantInvite')
+    );
+
+    if (channels.size === 0) {
+      return interaction.editReply({
+        content: '❌ No channels found where the bot can create invites.'
+      });
+    }
+
+    // Prefer system channel or first text channel
+    const targetChannel = guild.systemChannel || channels.first();
+
+    // Try to find existing invite created by this user
+    let inviteUrl = null;
+    try {
+      const invites = await guild.invites.fetch();
+      const userInvite = invites.find(inv => 
+        inv.inviter && inv.inviter.id === userId && 
+        (!inv.maxUses || inv.uses < inv.maxUses) &&
+        (!inv.expiresAt || inv.expiresAt > new Date())
+      );
+
+      if (userInvite) {
+        inviteUrl = userInvite.url;
+      }
+    } catch (error) {
+      console.log('[Invite Command] Could not fetch existing invites:', error.message);
+    }
+
+    // If no existing invite, create a new one
+    if (!inviteUrl) {
+      try {
+        const invite = await targetChannel.createInvite({
+          maxAge: 0, // Never expire
+          maxUses: 0, // Unlimited uses
+          unique: true,
+          reason: `Invite created by ${interaction.user.tag} for referral rewards`
+        });
+        inviteUrl = invite.url;
+      } catch (error) {
+        console.error('[Invite Command] Error creating invite:', error);
+        return interaction.editReply({
+          content: `❌ Failed to create invite: ${error.message}`
+        });
+      }
+    }
+
+    // Get user stats
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    const { data: stats } = await supabase
+      .from('discord_referral_stats')
+      .select('total_invites, total_rewards_given')
+      .eq('guild_id', guildId)
+      .eq('inviter_user_id', userId)
+      .single();
+
+    // Build embed
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle('🔗 Your Invite Link')
+      .setDescription(
+        `Share this link with your friends to invite them to **${guild.name}**!\n\n` +
+        `When someone joins using your link, you'll earn rewards! 🎁`
+      )
+      .addFields(
+        {
+          name: '🔗 Invite Link',
+          value: `\`\`\`${inviteUrl}\`\`\``,
+          inline: false
+        }
+      )
+      .setTimestamp();
+
+    // Add reward info from config
+    if (config.inviter_reward_type !== 'none') {
+      const rewards = [];
+      if (config.inviter_reward_coins > 0) {
+        rewards.push(`💰 **${config.inviter_reward_coins} coins**`);
+      }
+      if (config.inviter_reward_xp > 0) {
+        rewards.push(`⭐ **${config.inviter_reward_xp} XP**`);
+      }
+      if (config.inviter_reward_role_id) {
+        const role = guild.roles.cache.get(config.inviter_reward_role_id);
+        if (role) {
+          rewards.push(`🎭 **${role.name} role**`);
+        }
+      }
+      if (rewards.length > 0) {
+        embed.addFields({
+          name: '🎁 Rewards You Earn',
+          value: rewards.join('\n'),
+          inline: false
+        });
+      }
+    }
+
+    // Add stats if available
+    if (stats) {
+      embed.addFields(
+        {
+          name: '📊 Your Stats',
+          value: `**${stats.total_invites || 0}** invites\n**${stats.total_rewards_given || 0}** successful referrals`,
+          inline: true
+        }
+      );
+    }
+
+    // Add button to copy link
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Copy Link')
+          .setStyle(ButtonStyle.Primary)
+          .setCustomId(`copy_invite_${userId}`)
+          .setEmoji('📋'),
+        new ButtonBuilder()
+          .setLabel('View Stats')
+          .setStyle(ButtonStyle.Secondary)
+          .setCustomId('view_referral_stats')
+          .setEmoji('📊')
+      );
+
+    embed.setFooter({ 
+      text: 'Use /myreferrals to view detailed statistics' 
+    });
+
+    return interaction.editReply({ embeds: [embed], components: [row] });
+
+  } catch (error) {
+    console.error('[Invite Command] Error:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while generating your invite link.'
+    });
   }
 }
 
@@ -8016,6 +8244,10 @@ async function registerCommands(clientInstance) {
       .setDescription('📊 View your referral statistics and invites'),
 
     new SlashCommandBuilder()
+      .setName('invite')
+      .setDescription('🔗 Get your personal invite link to earn rewards'),
+
+    new SlashCommandBuilder()
       .setName('setxp')
       .setDescription('[Admin] Set a user\'s XP')
       .addUserOption((option) =>
@@ -9910,6 +10142,118 @@ app.post('/api/profile/post-message', async (req, res) => {
       success: false, 
       error: error.message || 'Internal server error' 
     });
+  }
+});
+
+app.get('/api/discord/:guildId/invite', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    // Check if this guild uses a custom bot
+    let botClient = client;
+    let guild = client.guilds.cache.get(guildId);
+    
+    if (!guild && customBotManager) {
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+        guild = customBot.guilds.cache.get(guildId);
+        console.log(`🤖 [Invite API] Using custom bot for guild ${guildId}`);
+      }
+    }
+
+    if (!guild) {
+      return res.json({ 
+        success: false, 
+        error: 'Guild not found. Make sure the bot (main or custom) is in the server.' 
+      });
+    }
+
+    // Check if bot has permission to create invites
+    const botMember = guild.members.cache.get(botClient.user.id);
+    if (!botMember) {
+      return res.json({ 
+        success: false, 
+        error: 'Bot member not found in guild.' 
+      });
+    }
+
+    const canCreateInvite = botMember.permissions.has('CreateInstantInvite');
+    if (!canCreateInvite) {
+      return res.json({ 
+        success: false, 
+        error: 'Bot does not have permission to create invites. Please grant the "Create Instant Invite" permission.' 
+      });
+    }
+
+    // Try to find an existing invite first (prefer permanent ones)
+    try {
+      const invites = await guild.invites.fetch();
+      
+      // Look for a permanent invite (no maxUses, no expiresAt, or expiresAt is far in future)
+      const permanentInvite = invites.find(inv => {
+        const now = Date.now();
+        const expiresAt = inv.expiresAt ? inv.expiresAt.getTime() : null;
+        return !inv.maxUses && (!expiresAt || expiresAt > now + 30 * 24 * 60 * 60 * 1000); // 30 days or more
+      });
+
+      if (permanentInvite) {
+        return res.json({ 
+          success: true, 
+          inviteUrl: permanentInvite.url 
+        });
+      }
+
+      // If no permanent invite, use the first available invite
+      if (invites.size > 0) {
+        const firstInvite = invites.first();
+        return res.json({ 
+          success: true, 
+          inviteUrl: firstInvite.url 
+        });
+      }
+    } catch (inviteError) {
+      console.log(`[Invite API] Could not fetch existing invites: ${inviteError.message}`);
+    }
+
+    // No existing invite found, create a new one
+    // Find a suitable channel to create the invite in
+    const channels = guild.channels.cache.filter(ch => 
+      ch.isTextBased() && 
+      ch.permissionsFor(botMember).has('CreateInstantInvite')
+    );
+
+    if (channels.size === 0) {
+      return res.json({ 
+        success: false, 
+        error: 'No channels found where the bot can create invites.' 
+      });
+    }
+
+    // Prefer system channel or first text channel
+    const targetChannel = guild.systemChannel || channels.first();
+    
+    try {
+      const invite = await targetChannel.createInvite({
+        maxAge: 0, // Never expire
+        maxUses: 0, // Unlimited uses
+        unique: false
+      });
+
+      return res.json({ 
+        success: true, 
+        inviteUrl: invite.url 
+      });
+    } catch (createError) {
+      console.error(`[Invite API] Error creating invite: ${createError.message}`);
+      return res.json({ 
+        success: false, 
+        error: `Failed to create invite: ${createError.message}` 
+      });
+    }
+  } catch (error) {
+    console.error('Error in invite API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
   }
 });
 

@@ -128,41 +128,6 @@ class DiscordReferralManager {
         return;
       }
 
-      // Get cached invites (from before this member joined)
-      const cacheKey = guildId;
-      let cached = this.inviteCache.get(cacheKey);
-      let oldInvites = cached?.invites || new Map();
-
-      // If cache is empty or expired, fetch invites first to establish baseline
-      if (!cached || oldInvites.size === 0) {
-        console.log(`[DiscordReferral] Cache empty for ${guildId}, fetching invites to establish baseline...`);
-        oldInvites = await this.getInvites(member.guild);
-        // Store in cache
-        this.inviteCache.set(cacheKey, {
-          invites: oldInvites,
-          timestamp: Date.now()
-        });
-        // Wait a moment for Discord to update invite uses
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      // Get current invites (after member joined)
-      const currentInvites = await this.getInvites(member.guild);
-
-      // Find which invite was used
-      const usedInvite = await this.findUsedInvite(member.guild, oldInvites, currentInvites);
-
-      if (!usedInvite || !usedInvite.inviter) {
-        // Couldn't determine inviter - might be vanity URL or widget invite
-        console.log(`[DiscordReferral] Could not determine inviter for ${member.user.id} in ${guildId}`);
-        return;
-      }
-
-      // Don't allow self-referrals
-      if (usedInvite.inviter === member.user.id) {
-        return;
-      }
-
       // Check if already tracked
       const { data: existing } = await this.supabase
         .from('discord_referrals')
@@ -173,6 +138,102 @@ class DiscordReferralManager {
 
       if (existing) {
         return; // Already tracked
+      }
+
+      // Get cached invites (from before this member joined)
+      const cacheKey = guildId;
+      let cached = this.inviteCache.get(cacheKey);
+      let oldInvites = cached?.invites || new Map();
+      let usedInvite = null;
+
+      // If cache is empty or very old, we need to establish a baseline
+      // Since member already joined, we'll fetch current invites and use a different detection strategy
+      if (!cached || oldInvites.size === 0 || (Date.now() - cached.timestamp) > this.cacheExpiry) {
+        console.log(`[DiscordReferral] ⚠️ Cache empty/expired for ${guildId}, will use fallback detection for ${member.user.id}`);
+        // Don't set oldInvites here - we'll handle it in the fallback logic below
+      }
+
+      // Wait a moment for Discord to update invite uses after member join
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Increased to 2 seconds for better reliability
+
+      // Get current invites (after member joined)
+      const currentInvites = await this.getInvites(member.guild);
+      console.log(`[DiscordReferral] Fetched ${currentInvites.size} current invites for ${guildId}`);
+
+      if (oldInvites.size > 0) {
+        // We have a baseline - compare to find which invite was used
+        usedInvite = await this.findUsedInvite(member.guild, oldInvites, currentInvites);
+        console.log(`[DiscordReferral] Baseline cache found (${oldInvites.size} invites), comparing to find used invite...`);
+      } else {
+        // No baseline - try to find invite that was just used
+        // Strategy: Look for invites that increased in uses OR have uses = 1
+        console.log(`[DiscordReferral] No baseline cache for ${guildId}, trying to detect used invite for ${member.user.id}...`);
+        console.log(`[DiscordReferral] Current invites count: ${currentInvites.size}`);
+        
+        // First, try to find invites with uses = 1 (newly created)
+        for (const [code, invite] of currentInvites) {
+          if (invite.uses === 1 && invite.inviter && invite.inviter !== member.user.id) {
+            usedInvite = invite;
+            console.log(`[DiscordReferral] Detected NEW invite ${code} with uses=1 (inviter: ${invite.inviter})`);
+            break;
+          }
+        }
+        
+        // If not found, try a different approach: check all invites and see which one might have been used
+        // This is less reliable but better than nothing
+        if (!usedInvite) {
+          console.log(`[DiscordReferral] No invite with uses=1 found, checking all invites...`);
+          
+          // Get all invites sorted by uses (ascending) - invites with lower uses are more likely to be the one used
+          const sortedInvites = Array.from(currentInvites.entries())
+            .filter(([code, invite]) => invite.inviter && invite.inviter !== member.user.id)
+            .sort((a, b) => a[1].uses - b[1].uses);
+          
+          if (sortedInvites.length > 0) {
+            // Take the invite with the lowest uses that has an inviter
+            const candidate = sortedInvites[0][1];
+            console.log(`[DiscordReferral] Using fallback: invite with ${candidate.uses} uses (inviter: ${candidate.inviter})`);
+            usedInvite = candidate;
+          }
+        }
+        
+        // If still not found, we can't reliably determine the inviter
+        if (!usedInvite) {
+          console.log(`[DiscordReferral] ❌ Could not determine inviter for ${member.user.id} in ${guildId} (no baseline cache, no suitable invites found)`);
+          console.log(`[DiscordReferral] Available invites: ${Array.from(currentInvites.entries()).map(([code, inv]) => `${code}: uses=${inv.uses}, inviter=${inv.inviter || 'none'}`).join(', ')}`);
+          // Store current state as baseline for next time
+          this.inviteCache.set(cacheKey, {
+            invites: currentInvites,
+            timestamp: Date.now()
+          });
+          return;
+        }
+      }
+
+      if (!usedInvite || !usedInvite.inviter) {
+        // Couldn't determine inviter - might be vanity URL or widget invite
+        console.log(`[DiscordReferral] Could not determine inviter for ${member.user.id} in ${guildId}`);
+        // Update cache with current state for next time
+        this.inviteCache.set(cacheKey, {
+          invites: currentInvites,
+          timestamp: Date.now()
+        });
+        return;
+      }
+
+      // Log the detected invite
+      console.log(`[DiscordReferral] ✅ Detected used invite: ${usedInvite.code} (inviter: ${usedInvite.inviter}, uses: ${usedInvite.uses})`);
+
+      // Update cache with new state
+      this.inviteCache.set(cacheKey, {
+        invites: currentInvites,
+        timestamp: Date.now()
+      });
+
+      // Don't allow self-referrals
+      if (usedInvite.inviter === member.user.id) {
+        console.log(`[DiscordReferral] Skipping self-referral for ${member.user.id}`);
+        return;
       }
 
       // Check account age requirement
