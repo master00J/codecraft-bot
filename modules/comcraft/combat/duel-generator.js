@@ -23,8 +23,8 @@ class DuelGifGenerator {
     this.frameWidth = options.frameWidth || 200;
     this.frameHeight = options.frameHeight || 200;
 
-    // Animation settings - slower for smoother hits
-    this.frameDelay = options.frameDelay || 120; // ms per frame (langzamer voor betere zichtbaarheid)
+    // Animation settings - gebalanceerd voor langere duels zonder te grote GIF
+    this.frameDelay = options.frameDelay || 100; // ms per frame (was 150, nu 100 voor betere balans)
 
     // Sprite sheets (will be loaded)
     this.sprites = {};
@@ -120,6 +120,64 @@ class DuelGifGenerator {
     
     this.spritesLoaded = true;
     return loadedCount > 0;
+  }
+
+  /**
+   * Load a separate sprite pack for a specific character folder
+   * Returns { sprites, backgroundImage } without modifying this.sprites
+   */
+  async loadSpritePack(spritePath) {
+    const spriteFiles = {
+      idle: ["Idle.png", "idle.png", "IDLE.png"],
+      attack1: ["Attack1.png", "attack1.png", "Attack.png", "attack.png", "ATTACK.png"],
+      attack2: ["Attack2.png", "attack2.png", "ATTACK.png"],
+      takeHit: ["Take_Hit.png", "Take Hit.png", "take_hit.png", "TakeHit.png", "Hurt.png", "hurt.png", "HURT.png"],
+      death: ["Death.png", "death.png", "Die.png", "die.png", "DEATH.png"],
+    };
+
+    const sprites = {};
+    let loadedCount = 0;
+
+    for (const [key, filenames] of Object.entries(spriteFiles)) {
+      for (const filename of filenames) {
+        const filePath = path.join(spritePath, filename);
+        if (fs.existsSync(filePath)) {
+          try {
+            sprites[key] = await loadImage(filePath);
+            loadedCount++;
+            break;
+          } catch (error) {
+            console.error(`Failed to load sprite pack ${filename}:`, error.message);
+          }
+        }
+      }
+    }
+
+    // Load background
+    let backgroundImage = null;
+    const bgFiles = ["background duel.png", "background_duel.png", "background.png", "bg.png", "Background.png"];
+    for (const bgFile of bgFiles) {
+      const bgPath = path.join(spritePath, bgFile);
+      if (fs.existsSync(bgPath)) {
+        try {
+          backgroundImage = await loadImage(bgPath);
+          break;
+        } catch (e) {}
+      }
+    }
+
+    // Essential: must have idle
+    if (!sprites.idle) {
+      throw new Error(`Essential sprite "Idle.png" not found in ${spritePath}`);
+    }
+
+    // Fallbacks
+    if (!sprites.attack1) sprites.attack1 = sprites.idle;
+    if (!sprites.attack2) sprites.attack2 = sprites.attack1;
+    if (!sprites.takeHit) sprites.takeHit = sprites.idle;
+    if (!sprites.death) sprites.death = sprites.takeHit;
+
+    return { sprites, backgroundImage };
   }
 
   /**
@@ -314,7 +372,7 @@ class DuelGifGenerator {
    * @param {boolean} battleData.isFinal - Is this the final round?
    * @param {number} battleData.winner - 1 or 2 (only if isFinal)
    */
-  async generateLiveHitGif(battleData) {
+  async generateLiveHitGif(battleData, spritePacks = null) {
     const {
       player1,
       player2,
@@ -339,9 +397,14 @@ class DuelGifGenerator {
       throw new Error("Sprites not loaded!");
     }
 
+    // Determine sprites to use
+    const p1Sprites = spritePacks?.p1 || this.sprites;
+    const p2Sprites = spritePacks?.p2 || this.sprites;
+    const backgroundOverride = spritePacks?.backgroundImage || null;
+
     const encoder = new GIFEncoder(this.width, this.height);
     encoder.setDelay(this.frameDelay);
-    encoder.setRepeat(0); // Loop
+    encoder.setRepeat(-1); // Geen loop - stopt aan het einde
     encoder.setQuality(10);
     encoder.start();
 
@@ -349,31 +412,44 @@ class DuelGifGenerator {
     const ctx = canvas.getContext("2d");
 
     // Get frame counts
-    const idleFrames = this.getFrameCount(this.sprites.idle);
-    const attackFrames = this.getFrameCount(this.sprites.attack1);
-    const hitFrames = this.getFrameCount(this.sprites.takeHit);
-    const deathFrames = this.getFrameCount(this.sprites.death);
+    const idleFramesP1 = this.getFrameCount(p1Sprites.idle);
+    const idleFramesP2 = this.getFrameCount(p2Sprites.idle);
+    const attackFramesP1 = this.getFrameCount(p1Sprites.attack1);
+    const attackFramesP2 = this.getFrameCount(p2Sprites.attack1);
+    const hitFramesP1 = this.getFrameCount(p1Sprites.takeHit);
+    const hitFramesP2 = this.getFrameCount(p2Sprites.takeHit);
+    const deathFramesP1 = this.getFrameCount(p1Sprites.death);
+    const deathFramesP2 = this.getFrameCount(p2Sprites.death);
 
     // Get actual sprite dimensions
-    const idleFrame = this.getFrame(this.sprites.idle, 0, idleFrames);
-    const actualSpriteWidth = idleFrame.sw;
-    const actualSpriteHeight = idleFrame.sh;
+    const idleFrameP1 = this.getFrame(p1Sprites.idle, 0, idleFramesP1);
+    const idleFrameP2 = this.getFrame(p2Sprites.idle, 0, idleFramesP2);
 
-    // Scale and positioning - sprites OVERLAPPING for combat
-    const scale = 1.4; // Groter voor betere zichtbaarheid
-    const scaledWidth = actualSpriteWidth * scale;
-    const scaledHeight = actualSpriteHeight * scale;
-    const spacing = -120; // Meer overlap - dichter bij elkaar
-    
-    const totalWidth = (scaledWidth * 2) + spacing;
+    // === Dynamic Layout Calculation ===
+    const uiTop = 70; // Ruimte voor naam + HP bar
+    const groundY = this.height - 15; // Grondlijn
+    const availableHeight = Math.max(60, groundY - uiTop);
+    const desiredCharHeight = Math.min(240, availableHeight); // GROTER (was 200)
+
+    // Scale beide sprites naar dezelfde DOEL hoogte
+    const scaleP1 = Math.max(0.5, Math.min(4.0, desiredCharHeight / idleFrameP1.sh));
+    const scaleP2 = Math.max(0.5, Math.min(4.0, desiredCharHeight / idleFrameP2.sh));
+
+    const p1ScaledW = idleFrameP1.sw * scaleP1;
+    const p2ScaledW = idleFrameP2.sw * scaleP2;
+    const p1ScaledH = idleFrameP1.sh * scaleP1;
+    const p2ScaledH = idleFrameP2.sh * scaleP2;
+
+    const overlap = Math.min(p1ScaledW, p2ScaledW) * 0.20;
+    const spacing = -overlap;
+    const totalWidth = p1ScaledW + p2ScaledW + spacing;
     const startX = (this.width - totalWidth) / 2;
-    
-    const p1X = startX;
-    const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight + 90; // Veel lager voor goede grondpositie
 
-    const p1Center = p1X + scaledWidth / 2;
-    const p2Center = p2X + scaledWidth / 2;
+    const p1X = startX;
+    const p2X = startX + p1ScaledW + spacing;
+
+    const p1Center = p1X + p1ScaledW / 2;
+    const p2Center = p2X + p2ScaledW / 2;
 
     // Track HP through the animation
     let currentP1Hp = player1.maxHp;
@@ -390,42 +466,59 @@ class DuelGifGenerator {
       ? [{ attacker: 1, ...p1Attack }, { attacker: 2, ...p2Attack }]
       : [{ attacker: 2, ...p2Attack }, { attacker: 1, ...p1Attack }];
 
+    // VASTE Y-positie voor beide characters (op dezelfde grondlijn)
+    const p1Y = groundY - p1ScaledH;
+    const p2Y = groundY - p2ScaledH;
+
     // Helper to draw a frame
     const drawFrame = (p1Frame, p2Frame, showSplat = null, splatDamage = 0) => {
-      this.drawBackground(ctx);
-      this.drawCharacter(ctx, p1Frame, p1X, charY, scale, false);
-      this.drawCharacter(ctx, p2Frame, p2X, charY, scale, true);
+      if (backgroundOverride) {
+        ctx.drawImage(backgroundOverride, 0, 0, this.width, this.height);
+      } else {
+        this.drawBackground(ctx);
+      }
+      
+      // Gebruik vaste Y-positie zodat beide characters op dezelfde hoogte staan
+      this.drawCharacter(ctx, p1Frame, p1X, p1Y, scaleP1, false);
+      this.drawCharacter(ctx, p2Frame, p2X, p2Y, scaleP2, true);
       
       // Draw hit splat
       if (showSplat === 1) {
-        this.drawHitSplat(ctx, p1Center, charY + scaledHeight * 0.4, splatDamage);
+        this.drawHitSplat(ctx, p1Center, groundY - (p1ScaledH * 0.6), splatDamage);
       } else if (showSplat === 2) {
-        this.drawHitSplat(ctx, p2Center, charY + scaledHeight * 0.4, splatDamage);
+        this.drawHitSplat(ctx, p2Center, groundY - (p2ScaledH * 0.6), splatDamage);
       }
       
       this.drawName(ctx, player1.name, p1Center, 15);
       this.drawName(ctx, player2.name, p2Center, 15);
-      this.drawHpBar(ctx, p1Center - 40, 28, Math.max(0, currentP1Hp), player1.maxHp);
-      this.drawHpBar(ctx, p2Center - 40, 28, Math.max(0, currentP2Hp), player2.maxHp);
+      this.drawHpBar(ctx, p1Center - 40, 32, Math.max(0, currentP1Hp), player1.maxHp);
+      this.drawHpBar(ctx, p2Center - 40, 32, Math.max(0, currentP2Hp), player2.maxHp);
       
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
     };
 
-    // ====== START MET IDLE FRAME (zelfde als einde voor naadloze loop) ======
-    const startIdleFrame = this.getFrame(this.sprites.idle, 0, idleFrames);
-    drawFrame(startIdleFrame, startIdleFrame);
+    // ====== START MET IDLE FRAMES ======
+    const introIdleFrames = 4; // Korte intro
+    for (let i = 0; i < introIdleFrames; i++) {
+      const p1Idle = this.getFrame(p1Sprites.idle, i % idleFramesP1, idleFramesP1);
+      const p2Idle = this.getFrame(p2Sprites.idle, i % idleFramesP2, idleFramesP2);
+      drawFrame(p1Idle, p2Idle);
+    }
 
     // Process each attack in order
     for (const attack of attacks) {
       const { attacker, damage, isMiss } = attack;
       const actualDamage = isMiss ? 0 : (damage || 0);
 
-      // Attack animation (6 frames voor langzamere hits)
-      for (let i = 0; i < 6; i++) {
-        const progress = i / 5;
-        const attackFrameIdx = Math.floor(progress * (attackFrames - 1));
-        const hitFrameIdx = Math.floor(progress * (hitFrames - 1));
-        const showSplat = progress >= 0.6;
+      // Attack animation - gebalanceerd voor goede zichtbaarheid
+      const attackAnimFrames = 8; // Gebalanceerd (niet te kort, niet te lang)
+      for (let i = 0; i < attackAnimFrames; i++) {
+        const progress = i / (attackAnimFrames - 1);
+        const attackFrameIdxP1 = Math.floor(progress * (attackFramesP1 - 1));
+        const attackFrameIdxP2 = Math.floor(progress * (attackFramesP2 - 1));
+        const hitFrameIdxP1 = Math.floor(progress * (hitFramesP1 - 1));
+        const hitFrameIdxP2 = Math.floor(progress * (hitFramesP2 - 1));
+        const showSplat = progress >= 0.5;
 
         let p1Frame, p2Frame;
         let splatTarget = null;
@@ -433,89 +526,101 @@ class DuelGifGenerator {
 
         if (attacker === 1) {
           // Player 1 attacks Player 2
-          p1Frame = this.getFrame(this.sprites.attack1, attackFrameIdx, attackFrames);
+          p1Frame = this.getFrame(p1Sprites.attack1, attackFrameIdxP1, attackFramesP1);
           p2Frame = (showSplat && actualDamage > 0)
-            ? this.getFrame(this.sprites.takeHit, hitFrameIdx, hitFrames)
-            : this.getFrame(this.sprites.idle, 0, idleFrames);
+            ? this.getFrame(p2Sprites.takeHit, hitFrameIdxP2, hitFramesP2)
+            : this.getFrame(p2Sprites.idle, 0, idleFramesP2);
           
           if (showSplat) {
             splatTarget = 2;
-            // Apply damage to P2 (op frame 3 van 6)
-            if (i === 3) currentP2Hp = Math.max(0, currentP2Hp - actualDamage);
+            // HP update op frame 4 (midden van 8 frames)
+            if (i === 4) currentP2Hp = Math.max(0, currentP2Hp - actualDamage);
           }
         } else {
           // Player 2 attacks Player 1
-          p2Frame = this.getFrame(this.sprites.attack1, attackFrameIdx, attackFrames);
+          p2Frame = this.getFrame(p2Sprites.attack1, attackFrameIdxP2, attackFramesP2);
           p1Frame = (showSplat && actualDamage > 0)
-            ? this.getFrame(this.sprites.takeHit, hitFrameIdx, hitFrames)
-            : this.getFrame(this.sprites.idle, 0, idleFrames);
+            ? this.getFrame(p1Sprites.takeHit, hitFrameIdxP1, hitFramesP1)
+            : this.getFrame(p1Sprites.idle, 0, idleFramesP1);
           
           if (showSplat) {
             splatTarget = 1;
-            // Apply damage to P1 (op frame 3 van 6)
-            if (i === 3) currentP1Hp = Math.max(0, currentP1Hp - actualDamage);
+            // HP update op frame 4 (midden van 8 frames)
+            if (i === 4) currentP1Hp = Math.max(0, currentP1Hp - actualDamage);
           }
         }
 
         drawFrame(p1Frame, p2Frame, showSplat ? splatTarget : null, splatDamage);
       }
 
-      // Brief idle pause between attacks (1 frame)
-      const idleF = this.getFrame(this.sprites.idle, 0, idleFrames);
-      drawFrame(idleF, idleF);
+      // Idle pauze tussen aanvallen
+      for (let j = 0; j < 3; j++) { // Gebalanceerd
+        const p1Idle = this.getFrame(p1Sprites.idle, j % idleFramesP1, idleFramesP1);
+        const p2Idle = this.getFrame(p2Sprites.idle, j % idleFramesP2, idleFramesP2);
+        drawFrame(p1Idle, p2Idle);
+      }
     }
 
-    // ====== EINDE: Lange idle pauze (zelfde frame als begin voor naadloze loop) ======
-    const endIdleFrame = this.getFrame(this.sprites.idle, 0, idleFrames);
-    
     if (isFinal && winner) {
-      // Winner celebration - langere dood animatie voor betere zichtbaarheid
-      const finalFrames = 18; // Meer frames voor langere zichtbaarheid
+      // Winner celebration
+      const finalFrames = 16; // Gebalanceerd
       for (let i = 0; i < finalFrames; i++) {
-        const idleAnim = this.getFrame(this.sprites.idle, i % idleFrames, idleFrames);
-        const deathProgress = Math.min(i / (finalFrames - 1), 1); // 0 tot 1 over alle frames
-        const deathFrameIdx = Math.floor(deathProgress * (deathFrames - 1));
-        const deathF = this.getFrame(this.sprites.death, deathFrameIdx, deathFrames);
+        const p1Idle = this.getFrame(p1Sprites.idle, i % idleFramesP1, idleFramesP1);
+        const p2Idle = this.getFrame(p2Sprites.idle, i % idleFramesP2, idleFramesP2);
+        const deathProgress = Math.min(i / (finalFrames - 1), 1);
+        const deathFrameIdxP1 = Math.floor(deathProgress * (deathFramesP1 - 1));
+        const deathFrameIdxP2 = Math.floor(deathProgress * (deathFramesP2 - 1));
+        const p1Death = this.getFrame(p1Sprites.death, deathFrameIdxP1, deathFramesP1);
+        const p2Death = this.getFrame(p2Sprites.death, deathFrameIdxP2, deathFramesP2);
 
-        this.drawBackground(ctx);
-        if (winner === 1) {
-          this.drawCharacter(ctx, idleAnim, p1X, charY, scale, false);
-          this.drawCharacter(ctx, deathF, p2X, charY, scale, true);
+        if (backgroundOverride) {
+          ctx.drawImage(backgroundOverride, 0, 0, this.width, this.height);
         } else {
-          this.drawCharacter(ctx, deathF, p1X, charY, scale, false);
-          this.drawCharacter(ctx, idleAnim, p2X, charY, scale, true);
+          this.drawBackground(ctx);
+        }
+
+        // Gebruik dezelfde vaste Y-positie voor consistentie
+        if (winner === 1) {
+          this.drawCharacter(ctx, p1Idle, p1X, p1Y, scaleP1, false);
+          this.drawCharacter(ctx, p2Death, p2X, p2Y, scaleP2, true);
+        } else {
+          this.drawCharacter(ctx, p1Death, p1X, p1Y, scaleP1, false);
+          this.drawCharacter(ctx, p2Idle, p2X, p2Y, scaleP2, true);
         }
 
         this.drawName(ctx, player1.name, p1Center, 15);
         this.drawName(ctx, player2.name, p2Center, 15);
-        this.drawHpBar(ctx, p1Center - 40, 28, Math.max(0, currentP1Hp), player1.maxHp);
-        this.drawHpBar(ctx, p2Center - 40, 28, Math.max(0, currentP2Hp), player2.maxHp);
+        this.drawHpBar(ctx, p1Center - 40, 32, Math.max(0, currentP1Hp), player1.maxHp);
+        this.drawHpBar(ctx, p2Center - 40, 32, Math.max(0, currentP2Hp), player2.maxHp);
 
         // Winner text
         const winnerName = winner === 1 ? player1.name : player2.name;
         ctx.fillStyle = "#ffd700";
-        ctx.font = "bold 20px Arial";
+        ctx.font = "bold 22px Arial";
         ctx.textAlign = "center";
         ctx.strokeStyle = "#000";
         ctx.lineWidth = 4;
         ctx.strokeText(`${winnerName} WINS!`, this.width / 2, this.height / 2 - 10);
         ctx.fillText(`${winnerName} WINS!`, this.width / 2, this.height / 2 - 10);
 
-        // Progressieve delay: langzamer aan het einde voor betere zichtbaarheid
-        if (i < 6) {
-          encoder.setDelay(this.frameDelay); // Normale delay voor eerste frames
+        // Laatste frame krijgt zeer lange delay zodat GIF stilstaat
+        if (i === finalFrames - 1) {
+          encoder.setDelay(10000); // 10 seconden - blijft stilstaan
+        } else if (i < 6) {
+          encoder.setDelay(this.frameDelay);
         } else if (i < 12) {
-          encoder.setDelay(200); // 200ms voor midden frames
+          encoder.setDelay(200);
         } else {
-          encoder.setDelay(350); // 350ms voor laatste frames - langzamer voor duidelijkheid
+          encoder.setDelay(350);
         }
+        
         encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
       }
     } else {
-      // Lange statische idle pauze met hetzelfde frame als het begin
-      // Dit zorgt voor naadloze loop: einde -> begin is identiek
-      encoder.setDelay(1500); // 1.5 seconde wachten
-      drawFrame(endIdleFrame, endIdleFrame);
+      encoder.setDelay(10000); // Stilstaand
+      const p1Idle = this.getFrame(p1Sprites.idle, 0, idleFramesP1);
+      const p2Idle = this.getFrame(p2Sprites.idle, 0, idleFramesP2);
+      drawFrame(p1Idle, p2Idle);
     }
 
     encoder.finish();
@@ -547,7 +652,7 @@ class DuelGifGenerator {
    * Generate full battle recap GIF (for final result)
    * Shows all rounds
    */
-  async generateFullBattleGif(battleData) {
+  async generateFullBattleGif(battleData, spritePacks = null) {
     const { player1, player2, rounds, winner } = battleData;
 
     if (!this.isReady()) throw new Error("Sprites not loaded!");
@@ -555,39 +660,60 @@ class DuelGifGenerator {
 
     const encoder = new GIFEncoder(this.width, this.height);
     encoder.setDelay(this.frameDelay);
-    encoder.setRepeat(0); // Loop oneindig - smooth
+    encoder.setRepeat(-1); // Geen loop - stopt aan het einde
     encoder.setQuality(10);
     encoder.start();
 
     const canvas = createCanvas(this.width, this.height);
     const ctx = canvas.getContext("2d");
 
+    // Determine sprites
+    const p1Sprites = spritePacks?.p1 || this.sprites;
+    const p2Sprites = spritePacks?.p2 || this.sprites;
+    const backgroundOverride = spritePacks?.backgroundImage || null;
+
     // Get frame counts
-    const idleFrames = this.getFrameCount(this.sprites.idle);
-    const attackFrames = this.getFrameCount(this.sprites.attack1);
-    const hitFrames = this.getFrameCount(this.sprites.takeHit);
-    const deathFrames = this.getFrameCount(this.sprites.death);
+    const idleFramesP1 = this.getFrameCount(p1Sprites.idle);
+    const idleFramesP2 = this.getFrameCount(p2Sprites.idle);
+    const attackFramesP1 = this.getFrameCount(p1Sprites.attack1);
+    const attackFramesP2 = this.getFrameCount(p2Sprites.attack1);
+    const hitFramesP1 = this.getFrameCount(p1Sprites.takeHit);
+    const hitFramesP2 = this.getFrameCount(p2Sprites.takeHit);
+    const deathFramesP1 = this.getFrameCount(p1Sprites.death);
+    const deathFramesP2 = this.getFrameCount(p2Sprites.death);
 
     // Get actual sprite dimensions
-    const idleFrame = this.getFrame(this.sprites.idle, 0, idleFrames);
-    const actualSpriteWidth = idleFrame.sw;
-    const actualSpriteHeight = idleFrame.sh;
+    const idleFrameP1 = this.getFrame(p1Sprites.idle, 0, idleFramesP1);
+    const idleFrameP2 = this.getFrame(p2Sprites.idle, 0, idleFramesP2);
 
-    // Scale and positioning - sprites OVERLAPPING for combat
-    const scale = 1.4; // Groter voor betere zichtbaarheid
-    const scaledWidth = actualSpriteWidth * scale;
-    const scaledHeight = actualSpriteHeight * scale;
-    const spacing = -120; // Meer overlap - dichter bij elkaar
-    
-    const totalWidth = (scaledWidth * 2) + spacing;
+    // === Dynamic Layout Calculation (zelfde als generateLiveHitGif) ===
+    const uiTop = 70; // Ruimte voor naam + HP bar
+    const groundY = this.height - 15; // Grondlijn
+    const availableHeight = Math.max(60, groundY - uiTop);
+    const desiredCharHeight = Math.min(240, availableHeight); // GROTER
+
+    const scaleP1 = Math.max(0.5, Math.min(4.0, desiredCharHeight / idleFrameP1.sh));
+    const scaleP2 = Math.max(0.5, Math.min(4.0, desiredCharHeight / idleFrameP2.sh));
+
+    const p1ScaledW = idleFrameP1.sw * scaleP1;
+    const p2ScaledW = idleFrameP2.sw * scaleP2;
+    const p1ScaledH = idleFrameP1.sh * scaleP1;
+    const p2ScaledH = idleFrameP2.sh * scaleP2;
+
+    const overlap = Math.min(p1ScaledW, p2ScaledW) * 0.20;
+    const spacing = -overlap;
+    const totalWidth = p1ScaledW + p2ScaledW + spacing;
     const startX = (this.width - totalWidth) / 2;
-    
-    const p1X = startX;
-    const p2X = startX + scaledWidth + spacing;
-    const charY = this.height - scaledHeight + 90; // Veel lager voor goede grondpositie
 
-    const p1Center = p1X + scaledWidth / 2;
-    const p2Center = p2X + scaledWidth / 2;
+    const p1X = startX;
+    const p2X = startX + p1ScaledW + spacing;
+
+    const p1Center = p1X + p1ScaledW / 2;
+    const p2Center = p2X + p2ScaledW / 2;
+
+    // VASTE Y-positie voor beide characters
+    const p1Y = groundY - p1ScaledH;
+    const p2Y = groundY - p2ScaledH;
 
     // Track HP through the battle
     let currentP1Hp = player1.maxHp;
@@ -602,90 +728,111 @@ class DuelGifGenerator {
       const { attacker, damage, p1Hp, p2Hp } = round;
 
       // Phase 1: Brief idle (1 frame)
-      this.drawBackground(ctx);
-      const idleFrame1 = this.getFrame(this.sprites.idle, roundIndex % idleFrames, idleFrames);
-      this.drawCharacter(ctx, idleFrame1, p1X, charY, scale, false);
-      this.drawCharacter(ctx, idleFrame1, p2X, charY, scale, true);
+      if (backgroundOverride) {
+        ctx.drawImage(backgroundOverride, 0, 0, this.width, this.height);
+      } else {
+        this.drawBackground(ctx);
+      }
+      const p1Idle = this.getFrame(p1Sprites.idle, roundIndex % idleFramesP1, idleFramesP1);
+      const p2Idle = this.getFrame(p2Sprites.idle, roundIndex % idleFramesP2, idleFramesP2);
+      
+      // Gebruik vaste Y-positie
+      this.drawCharacter(ctx, p1Idle, p1X, p1Y, scaleP1, false);
+      this.drawCharacter(ctx, p2Idle, p2X, p2Y, scaleP2, true);
+      
       this.drawName(ctx, player1.name, p1Center, 15);
       this.drawName(ctx, player2.name, p2Center, 15);
-      this.drawHpBar(ctx, p1Center - 40, 25, currentP1Hp, player1.maxHp);
-      this.drawHpBar(ctx, p2Center - 40, 25, currentP2Hp, player2.maxHp);
+      this.drawHpBar(ctx, p1Center - 40, 32, currentP1Hp, player1.maxHp);
+      this.drawHpBar(ctx, p2Center - 40, 32, currentP2Hp, player2.maxHp);
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
 
-      // Phase 2: Attack animation (6 frames voor langzamere hits)
-      for (let i = 0; i < 6; i++) {
-        this.drawBackground(ctx);
+      // Phase 2: Attack animation - gebalanceerd
+      const attackAnimFrames = 8; // Gebalanceerd
+      for (let i = 0; i < attackAnimFrames; i++) {
+        if (backgroundOverride) {
+          ctx.drawImage(backgroundOverride, 0, 0, this.width, this.height);
+        } else {
+          this.drawBackground(ctx);
+        }
 
-        const progress = i / 5;
-        const attackFrameIdx = Math.floor(progress * (attackFrames - 1));
-        const hitFrameIdx = Math.floor(progress * (hitFrames - 1));
+        const progress = i / (attackAnimFrames - 1);
+        const attackFrameIdxP1 = Math.floor(progress * (attackFramesP1 - 1));
+        const attackFrameIdxP2 = Math.floor(progress * (attackFramesP2 - 1));
+        const hitFrameIdxP1 = Math.floor(progress * (hitFramesP1 - 1));
+        const hitFrameIdxP2 = Math.floor(progress * (hitFramesP2 - 1));
         const showSplat = progress >= 0.5;
 
-        // Update HP when splat shows
-        if (showSplat) {
+        // Update HP when splat shows (op frame 4)
+        if (showSplat && i === 4) {
           currentP1Hp = Math.max(0, p1Hp);
           currentP2Hp = Math.max(0, p2Hp);
         }
 
+        let p1Frame, p2Frame;
         if (attacker === 1) {
-          const attackFrame = this.getFrame(this.sprites.attack1, attackFrameIdx, attackFrames);
-          const defenderFrame = showSplat && damage > 0
-            ? this.getFrame(this.sprites.takeHit, hitFrameIdx, hitFrames)
-            : this.getFrame(this.sprites.idle, 0, idleFrames);
-
-          this.drawCharacter(ctx, attackFrame, p1X, charY, scale, false);
-          this.drawCharacter(ctx, defenderFrame, p2X, charY, scale, true);
-
-          if (showSplat && damage > 0) {
-            this.drawHitSplat(ctx, p2Center, charY + scaledHeight * 0.4, damage);
-          }
+          p1Frame = this.getFrame(p1Sprites.attack1, attackFrameIdxP1, attackFramesP1);
+          p2Frame = showSplat && damage > 0
+            ? this.getFrame(p2Sprites.takeHit, hitFrameIdxP2, hitFramesP2)
+            : this.getFrame(p2Sprites.idle, 0, idleFramesP2);
         } else {
-          const defenderFrame = showSplat && damage > 0
-            ? this.getFrame(this.sprites.takeHit, hitFrameIdx, hitFrames)
-            : this.getFrame(this.sprites.idle, 0, idleFrames);
-          const attackFrame = this.getFrame(this.sprites.attack1, attackFrameIdx, attackFrames);
+          p2Frame = this.getFrame(p2Sprites.attack1, attackFrameIdxP2, attackFramesP2);
+          p1Frame = showSplat && damage > 0
+            ? this.getFrame(p1Sprites.takeHit, hitFrameIdxP1, hitFramesP1)
+            : this.getFrame(p1Sprites.idle, 0, idleFramesP1);
+        }
 
-          this.drawCharacter(ctx, defenderFrame, p1X, charY, scale, false);
-          this.drawCharacter(ctx, attackFrame, p2X, charY, scale, true);
+        // Gebruik vaste Y-positie
+        this.drawCharacter(ctx, p1Frame, p1X, p1Y, scaleP1, false);
+        this.drawCharacter(ctx, p2Frame, p2X, p2Y, scaleP2, true);
 
-          if (showSplat && damage > 0) {
-            this.drawHitSplat(ctx, p1Center, charY + scaledHeight * 0.4, damage);
+        if (showSplat && damage > 0) {
+          if (attacker === 1) {
+            this.drawHitSplat(ctx, p2Center, groundY - (p2ScaledH * 0.6), damage);
+          } else {
+            this.drawHitSplat(ctx, p1Center, groundY - (p1ScaledH * 0.6), damage);
           }
         }
 
         this.drawName(ctx, player1.name, p1Center, 15);
         this.drawName(ctx, player2.name, p2Center, 15);
-        this.drawHpBar(ctx, p1Center - 40, 25, currentP1Hp, player1.maxHp);
-        this.drawHpBar(ctx, p2Center - 40, 25, currentP2Hp, player2.maxHp);
+        this.drawHpBar(ctx, p1Center - 40, 32, currentP1Hp, player1.maxHp);
+        this.drawHpBar(ctx, p2Center - 40, 32, currentP2Hp, player2.maxHp);
         encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
       }
     }
 
-    // Final frames: Winner celebration - langere dood animatie voor betere zichtbaarheid
-    const finalFrames = 18; // Meer frames voor langere zichtbaarheid
+    // Final frames: Winner celebration
+    const finalFrames = 16; // Gebalanceerd
     for (let i = 0; i < finalFrames; i++) {
-      this.drawBackground(ctx);
-
-      const idleFrameIdx = i % idleFrames;
-      const deathProgress = Math.min(i / (finalFrames - 1), 1); // 0 tot 1 over alle frames
-      const deathFrameIdx = Math.floor(deathProgress * (deathFrames - 1));
-
-      if (winner === 1) {
-        const winnerFrame = this.getFrame(this.sprites.idle, idleFrameIdx, idleFrames);
-        const loserFrame = this.getFrame(this.sprites.death, deathFrameIdx, deathFrames);
-        this.drawCharacter(ctx, winnerFrame, p1X, charY, scale, false);
-        this.drawCharacter(ctx, loserFrame, p2X, charY, scale, true);
+      if (backgroundOverride) {
+        ctx.drawImage(backgroundOverride, 0, 0, this.width, this.height);
       } else {
-        const loserFrame = this.getFrame(this.sprites.death, deathFrameIdx, deathFrames);
-        const winnerFrame = this.getFrame(this.sprites.idle, idleFrameIdx, idleFrames);
-        this.drawCharacter(ctx, loserFrame, p1X, charY, scale, false);
-        this.drawCharacter(ctx, winnerFrame, p2X, charY, scale, true);
+        this.drawBackground(ctx);
       }
+
+      const idleFrameIdxP1 = i % idleFramesP1;
+      const idleFrameIdxP2 = i % idleFramesP2;
+      const deathProgress = Math.min(i / (finalFrames - 1), 1);
+      const deathFrameIdxP1 = Math.floor(deathProgress * (deathFramesP1 - 1));
+      const deathFrameIdxP2 = Math.floor(deathProgress * (deathFramesP2 - 1));
+
+      let p1Frame, p2Frame;
+      if (winner === 1) {
+        p1Frame = this.getFrame(p1Sprites.idle, idleFrameIdxP1, idleFramesP1);
+        p2Frame = this.getFrame(p2Sprites.death, deathFrameIdxP2, deathFramesP2);
+      } else {
+        p1Frame = this.getFrame(p1Sprites.death, deathFrameIdxP1, deathFramesP1);
+        p2Frame = this.getFrame(p2Sprites.idle, idleFrameIdxP2, idleFramesP2);
+      }
+
+      // Gebruik vaste Y-positie
+      this.drawCharacter(ctx, p1Frame, p1X, p1Y, scaleP1, false);
+      this.drawCharacter(ctx, p2Frame, p2X, p2Y, scaleP2, true);
 
       this.drawName(ctx, player1.name, p1Center, 15);
       this.drawName(ctx, player2.name, p2Center, 15);
-      this.drawHpBar(ctx, p1Center - 40, 25, currentP1Hp, player1.maxHp);
-      this.drawHpBar(ctx, p2Center - 40, 25, currentP2Hp, player2.maxHp);
+      this.drawHpBar(ctx, p1Center - 40, 32, currentP1Hp, player1.maxHp);
+      this.drawHpBar(ctx, p2Center - 40, 32, currentP2Hp, player2.maxHp);
 
       // Winner text (with pulsing effect)
       const winnerName = winner === 1 ? player1.name : player2.name;
@@ -696,7 +843,7 @@ class DuelGifGenerator {
       ctx.scale(pulse, pulse);
       
       ctx.fillStyle = "#ffd700";
-      ctx.font = "bold 20px Arial";
+      ctx.font = "bold 22px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.strokeStyle = "#000";
@@ -706,13 +853,15 @@ class DuelGifGenerator {
       
       ctx.restore();
 
-      // Progressieve delay: langzamer aan het einde voor betere zichtbaarheid
-      if (i < 6) {
-        encoder.setDelay(this.frameDelay); // Normale delay voor eerste frames
+      // Progressieve delay - laatste frame krijgt zeer lange delay
+      if (i === finalFrames - 1) {
+        encoder.setDelay(10000); // 10 seconden - blijft stilstaan aan het einde
+      } else if (i < 6) {
+        encoder.setDelay(this.frameDelay);
       } else if (i < 12) {
-        encoder.setDelay(200); // 200ms voor midden frames
+        encoder.setDelay(200);
       } else {
-        encoder.setDelay(350); // 350ms voor laatste frames - langzamer voor duidelijkheid
+        encoder.setDelay(350);
       }
       encoder.addFrame(ctx.getImageData(0, 0, this.width, this.height).data);
     }

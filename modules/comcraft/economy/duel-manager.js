@@ -46,9 +46,11 @@ class DuelManager {
         console.warn(`⚠️ Sprite path does not exist: ${spritePath}`);
       } else {
         this.gifGenerator = new DuelGifGenerator({
-          width: 400,
-          height: 200,
-          frameDelay: 100,
+          width: 600,
+          height: 300,
+          // Smoother playback (Discord GIFs look choppy at high delays)
+          frameDelay: 60,
+          finalHoldMs: 2500,
         });
         // Load sprites for GIF generator (async, but we'll check if loaded before using)
         this.gifGenerator.loadSprites(spritePath)
@@ -67,7 +69,197 @@ class DuelManager {
       this.gifGenerator = null;
       this.spritesLoaded = false;
     }
+    
+    // Character selection storage
+    this.spriteBasePath = null;
+    this.availableCharactersCache = null;
+    this.characterPackCache = new Map();
+    this.userCharacterMemory = new Map(); // fallback if DB unavailable
+    
+    // Set sprite base path
+    try {
+      const path = require('path');
+      this.spriteBasePath = path.join(__dirname, '../combat/sprites');
+    } catch (e) {
+      console.warn('Could not set sprite base path:', e.message);
+    }
   }
+
+  // ==================== CHARACTER SELECTION METHODS ====================
+
+  /**
+   * Get all available character packs from the sprites folder
+   * Alleen werkende characters worden getoond (Gladiator #2 en #3)
+   */
+  async getAvailableCharacters() {
+    if (this.availableCharactersCache) {
+      return this.availableCharactersCache;
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    
+    if (!this.spriteBasePath || !fs.existsSync(this.spriteBasePath)) {
+      return [];
+    }
+
+    // Alleen deze characters werken goed (geen glitches)
+    const allowedCharacters = [
+      'Gladiator #2 2D Pixel Art',
+      'Gladiator #3 2D Pixel Art'
+    ];
+
+    const characters = [];
+    const entries = fs.readdirSync(this.spriteBasePath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.endsWith('.zip')) continue;
+      
+      // Filter: alleen toegestane characters
+      if (!allowedCharacters.includes(entry.name)) continue;
+
+      const charPath = path.join(this.spriteBasePath, entry.name);
+      
+      // Check for Idle.png in the folder or a Sprites subfolder
+      let spritesDir = charPath;
+      const subSpritesDir = path.join(charPath, 'Sprites');
+      if (fs.existsSync(subSpritesDir)) {
+        spritesDir = subSpritesDir;
+      }
+
+      const hasIdle = fs.existsSync(path.join(spritesDir, 'Idle.png')) ||
+                      fs.existsSync(path.join(spritesDir, 'idle.png')) ||
+                      fs.existsSync(path.join(spritesDir, 'IDLE.png'));
+
+      if (hasIdle) {
+        // Check for preview image (can be in parent folder or sprites folder)
+        let previewPath = null;
+        const previewLocations = [charPath, spritesDir]; // Check parent first, then sprites dir
+        const previewCandidates = ['Preview.png', 'preview.png', 'IDLE.png', 'Idle.png', 'idle.png'];
+        
+        for (const loc of previewLocations) {
+          for (const prev of previewCandidates) {
+            const pPath = path.join(loc, prev);
+            if (fs.existsSync(pPath)) {
+              previewPath = pPath;
+              break;
+            }
+          }
+          if (previewPath) break;
+        }
+
+        characters.push({
+          key: entry.name,
+          name: entry.name.replace(/[-_]/g, ' ').replace(/#/g, '').replace('2D Pixel Art', '').trim(),
+          path: spritesDir,
+          previewPath
+        });
+      }
+    }
+
+    this.availableCharactersCache = characters;
+    return characters;
+  }
+
+  /**
+   * Get user's selected character key
+   */
+  async getUserCharacterKey(userId) {
+    // Try memory first
+    if (this.userCharacterMemory.has(userId)) {
+      return this.userCharacterMemory.get(userId);
+    }
+
+    // Try database
+    try {
+      const { data } = await this.supabase
+        .from('combat_character_selections')
+        .select('character_key')
+        .eq('user_id', userId)
+        .single();
+
+      if (data?.character_key) {
+        this.userCharacterMemory.set(userId, data.character_key);
+        return data.character_key;
+      }
+    } catch (e) {
+      // Table might not exist, ignore
+    }
+
+    return null; // No selection, use default
+  }
+
+  /**
+   * Set user's selected character key
+   */
+  async setUserCharacterKey(userId, characterKey) {
+    this.userCharacterMemory.set(userId, characterKey);
+
+    try {
+      await this.supabase
+        .from('combat_character_selections')
+        .upsert({
+          user_id: userId,
+          character_key: characterKey,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+      
+      return { success: true, characterKey };
+    } catch (e) {
+      // Table might not exist, but memory fallback works
+      return { success: true, characterKey };
+    }
+  }
+
+  /**
+   * Load a character's sprite pack
+   */
+  async getCharacterPackByKey(characterKey) {
+    if (!characterKey) return null;
+    
+    // Check cache
+    if (this.characterPackCache.has(characterKey)) {
+      return this.characterPackCache.get(characterKey);
+    }
+
+    const characters = await this.getAvailableCharacters();
+    const char = characters.find(c => c.key === characterKey);
+    
+    if (!char) return null;
+
+    try {
+      const pack = await this.gifGenerator.loadSpritePack(char.path);
+      this.characterPackCache.set(characterKey, pack);
+      return pack;
+    } catch (e) {
+      console.error(`Failed to load character pack ${characterKey}:`, e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get a user's full character pack (sprites + background)
+   * Returns { key, pack } where pack has .sprites and .backgroundImage
+   */
+  async getUserCharacterPack(userId) {
+    try {
+      const key = await this.getUserCharacterKey(userId);
+      
+      if (!key) {
+        // No custom character, use default sprites
+        return { key: null, pack: null };
+      }
+
+      const pack = await this.getCharacterPackByKey(key);
+      return { key, pack };
+    } catch (e) {
+      console.error('Error getting user character pack:', e.message);
+      return { key: null, pack: null };
+    }
+  }
+
+  // ==================== END CHARACTER SELECTION METHODS ====================
 
   /**
    * Generate a unique duel ID
@@ -507,6 +699,12 @@ class DuelManager {
     let battleGif = null;
     if (this.gifGenerator && this.spritesLoaded && duel.gifRounds.length > 0) {
       try {
+        // Load per-user character packs
+        const [{ key: p1Key, pack: p1Pack }, { key: p2Key, pack: p2Pack }] = await Promise.all([
+          this.getUserCharacterPack(player1User.id),
+          this.getUserCharacterPack(player2User.id)
+        ]);
+
         const battleData = {
           player1: { name: player1User.username, maxHp: originalP1Hp },
           player2: { name: player2User.username, maxHp: originalP2Hp },
@@ -514,8 +712,12 @@ class DuelManager {
           winner: winnerNum,
         };
         
-        console.log(`🎬 Generating full battle GIF with ${battleData.rounds.length} attacks (${duel.round} combat rounds)`);
-        const gifBuffer = await this.gifGenerator.generateFullBattleGif(battleData);
+        console.log(`🎬 Generating full battle GIF with ${battleData.rounds.length} attacks`);
+        const gifBuffer = await this.gifGenerator.generateFullBattleGif(battleData, {
+          p1: p1Pack?.sprites || null,
+          p2: p2Pack?.sprites || null,
+          backgroundImage: p1Pack?.backgroundImage || p2Pack?.backgroundImage || null
+        });
         
         if (gifBuffer && gifBuffer.length > 0) {
           const { AttachmentBuilder } = require('discord.js');
@@ -689,6 +891,12 @@ class DuelManager {
       // Random who attacks first (like OSRS)
       const firstAttacker = Math.random() < 0.5 ? 1 : 2;
 
+      // Load per-user character packs
+      const [{ key: p1Key, pack: p1Pack }, { key: p2Key, pack: p2Pack }] = await Promise.all([
+        this.getUserCharacterPack(player1User.id),
+        this.getUserCharacterPack(player2User.id)
+      ]);
+
       const gifBuffer = await this.gifGenerator.generateLiveHitGif({
         player1: { name: player1User.username, maxHp: duel.player1.maxHp },
         player2: { name: player2User.username, maxHp: duel.player2.maxHp },
@@ -705,6 +913,10 @@ class DuelManager {
         firstAttacker: firstAttacker,
         isFinal: isFinal,
         winner: winnerNum,
+      }, {
+        p1: p1Pack?.sprites || null,
+        p2: p2Pack?.sprites || null,
+        backgroundImage: p1Pack?.backgroundImage || p2Pack?.backgroundImage || null
       });
 
       if (!gifBuffer || gifBuffer.length === 0) {

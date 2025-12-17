@@ -70,6 +70,24 @@ try {
   console.warn('⚠️ RouletteGenerator not available:', error.message);
 }
 
+// Import HorseRaceGifGenerator for animated horse races
+let HorseRaceGifGenerator;
+try {
+  HorseRaceGifGenerator = require('./horse-race-generator');
+  if (HorseRaceGifGenerator && typeof HorseRaceGifGenerator === 'function') {
+    console.log('✓ HorseRaceGifGenerator imported successfully');
+  } else {
+    console.warn('⚠️ HorseRaceGifGenerator is not a valid constructor');
+    HorseRaceGifGenerator = null;
+  }
+} catch (error) {
+  console.warn('⚠️ HorseRaceGifGenerator not available:', error.message);
+  if (error.stack) {
+    console.warn('⚠️ Stack:', error.stack.split('\n').slice(0, 3).join('\n'));
+  }
+  HorseRaceGifGenerator = null;
+}
+
 class CasinoManager {
   constructor() {
     if (!process.env.SUPABASE_URL) {
@@ -137,6 +155,22 @@ class CasinoManager {
           resultFrames: 20,
         });
         console.log('✓ RouletteGenerator initialized');
+      }
+      
+      // Initialize horse race generator for animated horse races
+      if (HorseRaceGifGenerator) {
+        try {
+          this.horseRaceGenerator = new HorseRaceGifGenerator({
+            width: 600,
+            height: 400,
+            frameDelay: 100,
+            raceFrames: 60,
+          });
+          console.log('✓ HorseRaceGifGenerator initialized');
+        } catch (error) {
+          console.warn('⚠️ Failed to initialize HorseRaceGifGenerator:', error.message);
+          this.horseRaceGenerator = null;
+        }
       }
     } catch (error) {
       console.error('Error creating CasinoManager:', error);
@@ -244,7 +278,9 @@ class CasinoManager {
       .setTimestamp();
 
     const row = new ActionRowBuilder();
+    const row2 = new ActionRowBuilder();
 
+    // Add buttons to first row (max 5 per row)
     if (config.dice_enabled) {
       row.addComponents(
         new ButtonBuilder()
@@ -291,7 +327,35 @@ class CasinoManager {
       );
     }
 
-    const row2 = new ActionRowBuilder().addComponents(
+    // Add horse race to second row if first row is full (5 buttons)
+    if (config.horse_race_enabled !== false) {
+      if (row.components.length >= 5) {
+        row2.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`casino_horse_race_${userId}`)
+            .setLabel('🐴 Horse Race')
+            .setStyle(ButtonStyle.Primary)
+        );
+      } else {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`casino_horse_race_${userId}`)
+            .setLabel('🐴 Horse Race')
+            .setStyle(ButtonStyle.Primary)
+        );
+      }
+    }
+
+    // Build components array dynamically
+    const components = [row];
+    
+    // Add row2 if it has buttons
+    if (row2.components.length > 0) {
+      components.push(row2);
+    }
+    
+    // Add stats and leaderboard buttons
+    const row3 = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`casino_stats_${userId}`)
         .setLabel('📊 Statistieken')
@@ -301,10 +365,12 @@ class CasinoManager {
         .setLabel('🏆 Leaderboard')
         .setStyle(ButtonStyle.Secondary)
     );
+    
+    components.push(row3);
 
     return {
       embed,
-      components: [row, row2],
+      components,
     };
   }
 
@@ -1447,17 +1513,162 @@ class CasinoManager {
       success: true,
       result,
       winningNumber,
-      winningColor,
-      winningOddEven,
-      winningHighLow,
       betType,
       betValue,
-      betAmount,
       winAmount,
-      payoutMultiplier,
       netResult: result === 'win' ? winAmount - betAmount : -betAmount,
       gifBuffer, // Animated roulette GIF
     };
+  }
+
+  /**
+   * Play horse race game
+   */
+  async playHorseRace(guildId, userId, username, betAmount, selectedHorse) {
+    const config = await this.getCasinoConfig(guildId);
+    if (!config || config.horse_race_enabled === false) {
+      return { success: false, error: 'Horse race is disabled' };
+    }
+
+    // Validate bet
+    if (betAmount < config.min_bet || betAmount > config.max_bet) {
+      return {
+        success: false,
+        error: `Bet must be between ${config.min_bet.toLocaleString()} and ${config.max_bet.toLocaleString()} coins`,
+      };
+    }
+
+    // Check balance
+    const userEconomy = await this.economyManager.getUserEconomy(guildId, userId, username);
+    if (!userEconomy || BigInt(userEconomy.balance) < BigInt(betAmount)) {
+      return { success: false, error: 'Insufficient balance' };
+    }
+
+    // Validate selected horse (1-4)
+    const horseNumber = parseInt(selectedHorse);
+    if (isNaN(horseNumber) || horseNumber < 1 || horseNumber > 4) {
+      return { success: false, error: 'Invalid horse selection. Choose horse 1-4.' };
+    }
+
+    // Simulate race - determine winner
+    // Each horse has a base speed with some randomness
+    const numHorses = 4;
+    const horseSpeeds = [];
+    for (let i = 0; i < numHorses; i++) {
+      // Base speed with randomness (0.7 to 1.0)
+      horseSpeeds.push(0.7 + Math.random() * 0.3);
+    }
+
+    // Determine winner order based on speeds
+    const horseIndices = Array.from({ length: numHorses }, (_, i) => i);
+    horseIndices.sort((a, b) => horseSpeeds[b] - horseSpeeds[a]);
+    const winnerOrder = horseIndices.map((idx, pos) => ({ horse: idx + 1, position: pos + 1 }));
+    
+    const winningHorse = winnerOrder[0].horse;
+    const userWon = winningHorse === horseNumber;
+
+    let result = 'loss';
+    let winAmount = 0;
+
+    if (userWon) {
+      // Win: 3x bet (minus house edge) for winning horse
+      const payout = Math.floor(betAmount * 3 * (1 - config.house_edge / 100));
+      winAmount = payout;
+      result = 'win';
+    }
+
+    // Update balance
+    if (result === 'win') {
+      const netWin = winAmount - betAmount;
+      await this.economyManager.addCoins(
+        guildId,
+        userId,
+        netWin,
+        'casino_win',
+        `Horse race: Horse ${winningHorse} won (you bet on ${horseNumber})`,
+        { game_type: 'horse_race', selected_horse: horseNumber, winning_horse: winningHorse }
+      );
+    } else {
+      // Loss: remove bet
+      await this.economyManager.removeCoins(
+        guildId,
+        userId,
+        betAmount,
+        'casino_loss',
+        `Horse race: Horse ${winningHorse} won (you bet on ${horseNumber})`,
+        { game_type: 'horse_race', selected_horse: horseNumber, winning_horse: winningHorse }
+      );
+    }
+
+    // Log game
+    await this.logGame(guildId, userId, username, 'horse_race', betAmount, winAmount, result, {
+      selected_horse: horseNumber,
+      winning_horse: winningHorse,
+      winner_order: winnerOrder.map(w => w.horse),
+    });
+
+    // Update stats
+    await this.updateStats(guildId, userId, 'horse_race', betAmount, winAmount, result);
+
+    // Generate animated race GIF
+    let gifBuffer = null;
+    if (this.horseRaceGenerator) {
+      try {
+        const horses = [
+          { name: 'Horse 1', color: '#FF0000' },
+          { name: 'Horse 2', color: '#0000FF' },
+          { name: 'Horse 3', color: '#00FF00' },
+          { name: 'Horse 4', color: '#FFFF00' },
+        ];
+        
+        const winnerOrderArray = winnerOrder.map(w => w.horse);
+        
+        const gifResult = await this.horseRaceGenerator.race({
+          horses,
+          winnerOrder: winnerOrderArray,
+        });
+        gifBuffer = gifResult.buffer;
+        console.log(`✅ HorseRaceGenerator: Created GIF buffer of ${gifBuffer.length} bytes`);
+      } catch (gifError) {
+        console.warn('⚠️ Failed to generate horse race GIF:', gifError.message);
+      }
+    } else {
+      console.warn('⚠️ HorseRaceGenerator not initialized');
+    }
+
+    return {
+      success: true,
+      result,
+      selectedHorse: horseNumber,
+      winningHorse,
+      winnerOrder: winnerOrder.map(w => w.horse),
+      betAmount,
+      winAmount,
+      netResult: result === 'win' ? winAmount - betAmount : -betAmount,
+      gifBuffer, // Animated race GIF
+    };
+  }
+
+  /**
+   * Get bet modal for casino games
+   */
+  getBetModal(gameType) {
+    const modal = new ModalBuilder()
+      .setCustomId(`casino_bet_${gameType}`)
+      .setTitle(`🎰 ${gameType.charAt(0).toUpperCase() + gameType.slice(1)} - Place Bet`);
+
+    const betInput = new TextInputBuilder()
+      .setCustomId('bet_amount')
+      .setLabel('Bet Amount')
+      .setPlaceholder('Enter amount to bet...')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(1)
+      .setMaxLength(10);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(betInput));
+
+    return modal;
   }
 }
 

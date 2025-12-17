@@ -103,10 +103,20 @@ CREATE TABLE IF NOT EXISTS public.portfolio (
 
 -- 7. Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_discord_id ON public.users(discord_id);
-CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
+
+-- Conditionally create user_id indexes (only if column exists)
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tickets' AND column_name = 'user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id);
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_discord_id ON public.orders(discord_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_ticket_id ON public.messages(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_messages_order_id ON public.messages(order_id);
 
@@ -173,6 +183,69 @@ CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON public.orders
 
 CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON public.tickets
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- 12. Create combat character selections table
+CREATE TABLE IF NOT EXISTS public.combat_character_selections (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id TEXT UNIQUE NOT NULL,
+  character_key TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on combat_character_selections
+ALTER TABLE public.combat_character_selections ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist (for re-running the script)
+DROP POLICY IF EXISTS "Service role can manage character selections" ON public.combat_character_selections;
+
+-- Policy: Service role can manage all character selections
+CREATE POLICY "Service role can manage character selections" ON public.combat_character_selections
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_combat_character_selections_updated_at ON public.combat_character_selections;
+CREATE TRIGGER update_combat_character_selections_updated_at BEFORE UPDATE ON public.combat_character_selections
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_combat_character_selections_user_id ON public.combat_character_selections(user_id);
+
+-- 13. Create TikTok monitors table
+CREATE TABLE IF NOT EXISTS public.tiktok_monitors (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  tiktok_username TEXT NOT NULL,
+  notification_message TEXT DEFAULT '{username} just posted a new TikTok!',
+  ping_role_id TEXT,
+  custom_bot_id TEXT,
+  enabled BOOLEAN DEFAULT TRUE,
+  last_video_id TEXT,
+  last_checked TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(guild_id, tiktok_username)
+);
+
+-- Enable RLS on tiktok_monitors
+ALTER TABLE public.tiktok_monitors ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Service role can manage tiktok monitors" ON public.tiktok_monitors;
+
+-- Policy: Service role can manage all TikTok monitors
+CREATE POLICY "Service role can manage tiktok monitors" ON public.tiktok_monitors
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_tiktok_monitors_updated_at ON public.tiktok_monitors;
+CREATE TRIGGER update_tiktok_monitors_updated_at BEFORE UPDATE ON public.tiktok_monitors
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_tiktok_monitors_guild_id ON public.tiktok_monitors(guild_id);
+CREATE INDEX IF NOT EXISTS idx_tiktok_monitors_enabled ON public.tiktok_monitors(enabled);
 
 -- Success message
 DO $$

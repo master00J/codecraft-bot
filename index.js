@@ -42,6 +42,7 @@ const welcomeHandler = require('./modules/comcraft/welcome/handler');
 const TwitchMonitor = require('./modules/comcraft/streaming/twitch-monitor');
 const TwitchEventSubManager = require('./modules/comcraft/streaming/twitch-eventsub-manager');
 const YouTubeMonitor = require('./modules/comcraft/streaming/youtube-monitor');
+const TikTokMonitor = require('./modules/comcraft/streaming/tiktok-monitor');
 const DiscordManager = require('./modules/comcraft/discord-manager');
 const analyticsTracker = require('./modules/comcraft/analytics-tracker');
 const AutoRolesManager = require('./modules/comcraft/autoroles/manager');
@@ -466,6 +467,7 @@ const {
 let twitchMonitor;
 let twitchEventSubManager;
 let youtubeMonitor;
+let tiktokMonitor;
 let discordManager;
 let autoRolesManager;
 let giveawayManager;
@@ -687,9 +689,6 @@ client.once('ready', async () => {
   // Register slash commands (will include music commands if initialized)
   await registerCommands(client);
 
-  // Start vote reminder system
-  startVoteReminderSystem(client);
-
   // Ensure all guilds are in database
   console.log('🔄 Syncing all guilds to database...');
   let syncedCount = 0;
@@ -762,6 +761,15 @@ client.once('ready', async () => {
   if (process.env.YOUTUBE_API_KEY) {
     youtubeMonitor = new YouTubeMonitor(client);
     youtubeMonitor.startMonitoring();
+  }
+
+  // Initialize TikTok Monitor
+  if (process.env.RAPIDAPI_KEY) {
+    tiktokMonitor = new TikTokMonitor(client, customBotManager, null);
+    tiktokMonitor.start();
+    console.log('🎵 TikTok Monitor initialized');
+  } else {
+    console.log('⚠️ TikTok Monitor disabled: RAPIDAPI_KEY not set');
   }
 
   birthdayManager.startScheduler(client);
@@ -1783,13 +1791,6 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // Handle vote reminder dismiss button
-    if (interaction.customId === 'vote_reminder_dismiss') {
-      await interaction.deferUpdate();
-      await interaction.message.delete().catch(() => {});
-      return;
-    }
-
     // Handle duel challenge button from embed builder
     if (interaction.customId === 'duel_challenge' || interaction.customId.startsWith('duel_challenge_')) {
       const allowed = await featureGate.checkFeatureOrReply(
@@ -1944,6 +1945,20 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
     
+    // Handle character selection
+    if (interaction.customId.startsWith('character_select:')) {
+      const allowed = await featureGate.checkFeatureOrReply(
+        interaction,
+        interaction.guild?.id,
+        'pvp_duels',
+        'Premium'
+      );
+      if (!allowed) return;
+      
+      await handleCharacterSelectInteraction(interaction);
+      return;
+    }
+
     // Handle shop item selection
     if (interaction.customId.startsWith('shop_select_')) {
       return await handleShopItemSelect(interaction);
@@ -2400,6 +2415,19 @@ client.on('interactionCreate', async (interaction) => {
         break;
       }
 
+      // ============ CHARACTER SELECTION ============
+      case 'character': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'pvp_duels',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleCharacterCommand(interaction);
+        break;
+      }
+
       // ============ SHOP COMMANDS ============
       case 'shop': {
         const allowed = await featureGate.checkFeatureOrReply(
@@ -2648,6 +2676,19 @@ client.on('interactionCreate', async (interaction) => {
       // ============ VOTE COMMAND ============
       case 'vote': {
         await handleVoteCommand(interaction);
+        break;
+      }
+
+      // ============ TIKTOK COMMANDS ============
+      case 'tiktok': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'streaming_notifications',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleTikTokCommand(interaction);
         break;
       }
 
@@ -5609,6 +5650,153 @@ async function handleDuelButton(interaction) {
 }
 
 // ================================================================
+// CHARACTER SELECTION COMMAND HANDLER
+// ================================================================
+
+async function handleCharacterCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!duelManager) {
+    return interaction.editReply({
+      content: '❌ Duel system is not available.',
+    });
+  }
+
+  try {
+    const userId = interaction.user.id;
+    
+    // Get available characters - MUST use await since it's async!
+    const available = await duelManager.getAvailableCharacters();
+    
+    if (!available || available.length === 0) {
+      return interaction.editReply({
+        content: '❌ No character packs available. Please add sprite folders to the sprites directory.',
+      });
+    }
+
+    // Get current selection
+    const currentKey = await duelManager.getUserCharacterKey(userId);
+    const current = available.find(c => c.key === currentKey);
+
+    // Build select menu options
+    const { ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
+    
+    const options = available.slice(0, 25).map(char => ({
+      label: char.name,
+      value: char.key,
+      description: char.key === currentKey ? '✅ Currently selected' : 'Click to select',
+      default: char.key === currentKey
+    }));
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`character_select:${userId}`)
+      .setPlaceholder('Choose your character...')
+      .addOptions(options);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    const embed = new EmbedBuilder()
+      .setColor('#9B59B6')
+      .setTitle('🎭 Character Selection')
+      .setDescription(
+        `Choose your duel character!\n\n` +
+        `**Current:** ${current ? current.name : 'Default'}\n` +
+        `**Available:** ${available.length} characters`
+      );
+
+    // Try to attach preview image if available
+    const files = [];
+    if (current?.previewPath) {
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(current.previewPath)) {
+          const preview = new AttachmentBuilder(current.previewPath, { name: 'preview.png' });
+          files.push(preview);
+          embed.setThumbnail('attachment://preview.png');
+        }
+      } catch (e) {
+        // Ignore preview errors
+      }
+    }
+
+    return interaction.editReply({
+      embeds: [embed],
+      components: [row],
+      files
+    });
+  } catch (error) {
+    console.error('Error handling character command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while loading characters.',
+    });
+  }
+}
+
+async function handleCharacterSelectInteraction(interaction) {
+  try {
+    const userId = interaction.customId.split(':')[1];
+    
+    // Verify user owns this interaction
+    if (interaction.user.id !== userId) {
+      return interaction.reply({
+        content: '❌ This is not your character selection!',
+        ephemeral: true
+      });
+    }
+
+    const selectedKey = interaction.values[0];
+    
+    if (!duelManager) {
+      return interaction.reply({
+        content: '❌ Duel system is not available.',
+        ephemeral: true
+      });
+    }
+
+    // Set the user's character
+    const result = await duelManager.setUserCharacterKey(userId, selectedKey);
+    
+    // Get character info for display
+    const available = await duelManager.getAvailableCharacters();
+    const chosen = available.find(c => c.key === selectedKey);
+
+    const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+    
+    const embed = new EmbedBuilder()
+      .setColor('#2ECC71')
+      .setTitle('✅ Character Selected!')
+      .setDescription(`Your character has been set to **${chosen?.name || selectedKey}**.`);
+
+    // Try to attach preview
+    const files = [];
+    if (chosen?.previewPath) {
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(chosen.previewPath)) {
+          const preview = new AttachmentBuilder(chosen.previewPath, { name: 'preview.png' });
+          files.push(preview);
+          embed.setThumbnail('attachment://preview.png');
+        }
+      } catch (e) {
+        // Ignore preview errors
+      }
+    }
+
+    return interaction.reply({
+      embeds: [embed],
+      ephemeral: true,
+      files
+    });
+  } catch (error) {
+    console.error('Error handling character selection:', error);
+    return interaction.reply({
+      content: '❌ An error occurred while selecting your character.',
+      ephemeral: true
+    });
+  }
+}
+
+// ================================================================
 // COMBAT XP COMMAND HANDLERS
 // ================================================================
 
@@ -5740,16 +5928,30 @@ async function handleCombatLeaderboardCommand(interaction) {
 async function handleCasinoCommand(interaction) {
   await interaction.deferReply({ ephemeral: false });
 
+  // Check if casinoManager is initialized
+  if (!casinoManager) {
+    return interaction.editReply({
+      content: '❌ Casino system is not available. Please contact an administrator.',
+    });
+  }
+
   const userId = interaction.user.id;
   const guildId = interaction.guild.id;
   const username = interaction.user.username;
 
-  const menu = await casinoManager.buildCasinoMenu(guildId, userId);
+  try {
+    const menu = await casinoManager.buildCasinoMenu(guildId, userId);
 
-  await interaction.editReply({
-    embeds: [menu.embed],
-    components: menu.components,
-  });
+    await interaction.editReply({
+      embeds: [menu.embed],
+      components: menu.components,
+    });
+  } catch (error) {
+    console.error('Error in handleCasinoCommand:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while loading the casino menu. Please try again later.',
+    });
+  }
 }
 
 // ================================================================
@@ -5757,6 +5959,14 @@ async function handleCasinoCommand(interaction) {
 // ================================================================
 
 async function handleCasinoButton(interaction, featureGate) {
+  // Check if casinoManager is initialized
+  if (!casinoManager) {
+    return interaction.reply({
+      content: '❌ Casino system is not available. Please contact an administrator.',
+      ephemeral: true,
+    });
+  }
+
   const customId = interaction.customId;
   
   // Coinflip button - check if already deferred (deferred in interactionCreate)
@@ -5803,6 +6013,125 @@ async function handleCasinoButton(interaction, featureGate) {
     );
 
     return interaction.editReply({ embeds: [embed], components: [row] });
+  }
+
+  // Horse Race button - show horse selection
+  if (customId.startsWith('casino_horse_race_') && !customId.startsWith('casino_horse_race_select_')) {
+    // customId format: casino_horse_race_${userId}
+    const userId = customId.replace('casino_horse_race_', '');
+    
+    // Check feature access first
+    const hasFeature = await featureGate.checkFeature(interaction.guild.id, 'casino');
+    if (!hasFeature) {
+      return interaction.reply({
+        content: '❌ Casino is a Premium feature. Upgrade to access this feature!',
+        ephemeral: true
+      });
+    }
+    
+    // Defer before any async operations
+    await interaction.deferReply({ ephemeral: false });
+    
+    // Ensure both are strings for comparison - but allow anyone to start a race
+    // The userId in customId is just for tracking, not for restriction
+    // if (String(interaction.user.id) !== String(userId)) {
+    //   console.log(`[Horse Race] User ID mismatch: interaction.user.id=${interaction.user.id}, userId=${userId}, customId=${customId}`);
+    //   return interaction.editReply({
+    //     content: '❌ This is not your horse race game!',
+    //   });
+    // }
+    
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🐴 Horse Race - Choose Your Horse')
+      .setDescription('Select which horse you want to bet on:')
+      .addFields(
+        {
+          name: '🐴 Horse 1',
+          value: 'Red Horse',
+          inline: true
+        },
+        {
+          name: '🐴 Horse 2',
+          value: 'Blue Horse',
+          inline: true
+        },
+        {
+          name: '🐴 Horse 3',
+          value: 'Green Horse',
+          inline: true
+        },
+        {
+          name: '🐴 Horse 4',
+          value: 'Yellow Horse',
+          inline: true
+        }
+      )
+      .addFields({
+        name: '💰 Payout',
+        value: '**3:1** (minus house edge)',
+        inline: false
+      })
+      .setFooter({ text: 'Choose your horse, then place your bet!' })
+      .setTimestamp();
+    
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`casino_horse_race_select_1_${userId}`)
+        .setLabel('Horse 1')
+        .setEmoji('🐴')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`casino_horse_race_select_2_${userId}`)
+        .setLabel('Horse 2')
+        .setEmoji('🐴')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`casino_horse_race_select_3_${userId}`)
+        .setLabel('Horse 3')
+        .setEmoji('🐴')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`casino_horse_race_select_4_${userId}`)
+        .setLabel('Horse 4')
+        .setEmoji('🐴')
+        .setStyle(ButtonStyle.Secondary)
+    );
+    
+    return interaction.editReply({ embeds: [embed], components: [row] });
+  }
+
+  // Horse Race horse selection - show bet modal
+  if (customId.startsWith('casino_horse_race_select_')) {
+    // customId format: casino_horse_race_select_${horseNumber}_${userId}
+    const parts = customId.split('_');
+    const horseNumber = parts[4];
+    const userId = parts.slice(5).join('_'); // Join remaining parts in case userId has underscores
+    
+    if (String(interaction.user.id) !== String(userId)) {
+      console.log(`[Horse Race Select] User ID mismatch: interaction.user.id=${interaction.user.id}, userId=${userId}, customId=${customId}`);
+      return interaction.reply({
+        content: '❌ This is not your horse race game!',
+        ephemeral: true
+      });
+    }
+    
+    // Store selected horse and show bet modal
+    const modal = new ModalBuilder()
+      .setCustomId(`casino_bet_horse_race_${horseNumber}_${userId}`)
+      .setTitle(`🐴 Horse Race - Bet on Horse ${horseNumber}`);
+
+    const betInput = new TextInputBuilder()
+      .setCustomId('bet_amount')
+      .setLabel('Bet Amount')
+      .setPlaceholder('Enter amount to bet...')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(1)
+      .setMaxLength(10);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(betInput));
+    return interaction.showModal(modal);
   }
 
   // Roulette button - show bet type selection
@@ -5947,6 +6276,12 @@ async function handleCasinoButton(interaction, featureGate) {
       (customId.startsWith('casino_blackjack_') && 
        !customId.startsWith('casino_blackjack_hit_') && 
        !customId.startsWith('casino_blackjack_stand_'))) {
+    if (!casinoManager) {
+      return interaction.reply({
+        content: '❌ Casino system is not available. Please contact an administrator.',
+        ephemeral: true,
+      });
+    }
     const gameType = customId.split('_')[1];
     const modal = casinoManager.buildBetModal(gameType);
     return interaction.showModal(modal);
@@ -6046,6 +6381,13 @@ async function handleCasinoButton(interaction, featureGate) {
     await interaction.editReply({ embeds: [loadingEmbed] });
     } catch (error) {
       console.error('❌ Error showing loading embed:', error);
+    }
+
+    // Check if casinoManager is initialized
+    if (!casinoManager) {
+      return interaction.editReply({
+        content: '❌ Casino system is not available. Please contact an administrator.',
+      });
     }
 
     // First, validate bet and balance (but don't execute yet)
@@ -7007,6 +7349,104 @@ async function handleStockOrderCommand(interaction) {
 }
 
 /**
+ * Handle TikTok monitoring commands
+ */
+async function handleTikTokCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!tiktokMonitor) {
+    return interaction.editReply({
+      content: '❌ TikTok Monitor is not available. Please configure RAPIDAPI_KEY.',
+    });
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+  const guildId = interaction.guild.id;
+
+  try {
+    switch (subcommand) {
+      case 'add': {
+        const username = interaction.options.getString('username');
+        const channel = interaction.options.getChannel('channel');
+        const pingRole = interaction.options.getRole('ping_role');
+        const message = interaction.options.getString('message');
+
+        const result = await tiktokMonitor.addMonitor(guildId, channel.id, username, {
+          pingRole: pingRole?.id,
+          message: message
+        });
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#000000')
+          .setTitle('🎵 TikTok Monitor Added!')
+          .setDescription(`Now monitoring **@${result.username}** for new videos.`)
+          .addFields(
+            { name: '📺 Channel', value: `<#${channel.id}>`, inline: true },
+            { name: '🔔 Ping Role', value: pingRole ? `<@&${pingRole.id}>` : 'None', inline: true }
+          )
+          .setFooter({ text: 'New videos will be posted automatically' });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      case 'remove': {
+        const username = interaction.options.getString('username');
+        const result = await tiktokMonitor.removeMonitor(guildId, username);
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        return interaction.editReply({
+          content: `✅ Stopped monitoring **@${username.replace('@', '')}**.`,
+        });
+      }
+
+      case 'list': {
+        const result = await tiktokMonitor.listMonitors(guildId);
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        if (result.monitors.length === 0) {
+          return interaction.editReply({
+            content: '📭 No TikTok accounts are being monitored in this server.',
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#000000')
+          .setTitle('🎵 TikTok Monitors')
+          .setDescription(
+            result.monitors.map((m, i) => 
+              `${i + 1}. **@${m.tiktok_username}** → <#${m.channel_id}> ${m.enabled ? '✅' : '❌'}`
+            ).join('\n')
+          )
+          .setFooter({ text: `${result.monitors.length} account(s) monitored` });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+    }
+  } catch (error) {
+    console.error('Error handling TikTok command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while processing the command.',
+    });
+  }
+}
+
+/**
  * Handle vote command - Show voting information and link
  */
 async function handleVoteCommand(interaction) {
@@ -7106,120 +7546,6 @@ async function handleVoteCommand(interaction) {
     await interaction.editReply({
       content: '❌ An error occurred while fetching vote information.'
     });
-  }
-}
-
-/**
- * Start vote reminder system - Sends periodic reminders to encourage voting
- */
-function startVoteReminderSystem(client) {
-  // Send reminders every 12 hours (43200000 ms)
-  const reminderInterval = 12 * 60 * 60 * 1000;
-  
-  // Also send reminder 1 hour after bot starts
-  setTimeout(() => {
-    sendVoteReminders(client);
-  }, 60 * 60 * 1000); // 1 hour
-  
-  // Then send reminders every 12 hours
-  setInterval(() => {
-    sendVoteReminders(client);
-  }, reminderInterval);
-  
-  console.log('✅ Vote reminder system started (reminders every 12 hours)');
-}
-
-/**
- * Send vote reminders to all guilds
- */
-async function sendVoteReminders(client) {
-  try {
-    if (!client.isReady()) {
-      console.log('[Vote Reminder] Bot not ready, skipping reminders');
-      return;
-    }
-
-    const botId = process.env.DISCORD_BOT_ID || process.env.DISCORD_CLIENT_ID || '1436442594715373610';
-    const voteUrl = `https://top.gg/bot/${botId}/vote`;
-    const dashboardUrl = process.env.WEBAPP_URL || 'https://codecraft-solutions.com';
-    
-    // Get all guilds where bot is present
-    const guilds = client.guilds.cache;
-    let remindersSent = 0;
-    let remindersSkipped = 0;
-    
-    for (const [guildId, guild] of guilds) {
-      try {
-        // Get system channel or first available text channel
-        let channel = guild.systemChannel;
-        if (!channel || !channel.isTextBased()) {
-          // Try to find first text channel
-          channel = guild.channels.cache.find(
-            ch => ch.isTextBased() && ch.permissionsFor(guild.members.me)?.has(['SendMessages', 'EmbedLinks'])
-          );
-        }
-        
-        if (!channel) {
-          remindersSkipped++;
-          continue;
-        }
-        
-        // Check if we sent a reminder to this guild in the last 12 hours
-        // (Simple check - in production you might want to track this in database)
-        const embed = new EmbedBuilder()
-          .setColor(0xFFD700) // Gold
-          .setTitle('⭐ Vote for ComCraft on Top.gg!')
-          .setDescription(
-            `Support the bot by voting on Top.gg! Every vote helps us grow and reach more servers.\n\n` +
-            `**🎁 Rewards:**\n` +
-            `• Earn **vote points** for each vote\n` +
-            `• **2x points** on weekends!\n` +
-            `• Redeem points for **free tier unlocks** and premium features\n\n` +
-            `Use \`/vote\` to check your vote status and points!`
-          )
-          .addFields(
-            {
-              name: '🔗 Links',
-              value: `[Vote on Top.gg](${voteUrl})\n[View Rewards](${dashboardUrl}/comcraft/account/vote-rewards)`,
-              inline: false
-            }
-          )
-          .setFooter({ text: 'Thank you for supporting ComCraft! 💙' })
-          .setTimestamp();
-
-        const row = new ActionRowBuilder()
-          .addComponents(
-            new ButtonBuilder()
-              .setLabel('Vote on Top.gg')
-              .setStyle(ButtonStyle.Link)
-              .setURL(voteUrl)
-              .setEmoji('⭐'),
-            new ButtonBuilder()
-              .setLabel('View Rewards')
-              .setStyle(ButtonStyle.Link)
-              .setURL(`${dashboardUrl}/comcraft/account/vote-rewards`)
-              .setEmoji('🎁'),
-            new ButtonBuilder()
-              .setCustomId('vote_reminder_dismiss')
-              .setLabel('Dismiss')
-              .setStyle(ButtonStyle.Secondary)
-              .setEmoji('❌')
-          );
-
-        await channel.send({ embeds: [embed], components: [row] });
-        remindersSent++;
-        
-        // Rate limit: wait 1 second between sends to avoid hitting Discord rate limits
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        console.error(`[Vote Reminder] Error sending reminder to guild ${guildId}:`, error.message);
-        remindersSkipped++;
-      }
-    }
-    
-    console.log(`[Vote Reminder] Sent ${remindersSent} reminders, skipped ${remindersSkipped} guilds`);
-  } catch (error) {
-    console.error('[Vote Reminder] Error in reminder system:', error);
   }
 }
 
@@ -7452,6 +7778,154 @@ async function handleCasinoBetModal(interaction) {
   }
 
   const customId = interaction.customId;
+  
+  // Handle horse race bet (has horse number in customId)
+  if (customId.startsWith('casino_bet_horse_race_')) {
+    // customId format: casino_bet_horse_race_${horseNumber}_${userId}
+    const parts = customId.split('_');
+    const horseNumber = parseInt(parts[4]);
+    const targetUserId = parts.slice(5).join('_'); // Join remaining parts in case userId has underscores
+    
+    if (String(interaction.user.id) !== String(targetUserId)) {
+      console.log(`[Horse Race Bet] User ID mismatch: interaction.user.id=${interaction.user.id}, targetUserId=${targetUserId}, customId=${customId}`);
+      return interaction.editReply({
+        content: '❌ This is not your horse race game!',
+      });
+    }
+    
+    const betAmountInput = interaction.fields.getTextInputValue('bet_amount');
+    const betAmount = parseInt(betAmountInput);
+    
+    if (isNaN(betAmount) || betAmount <= 0) {
+      return interaction.editReply({
+        content: '❌ Invalid bet amount.',
+      });
+    }
+    
+    const userId = interaction.user.id;
+    const guildId = interaction.guild.id;
+    const username = interaction.user.username;
+    
+    // Check feature access after defer
+    const hasFeature = await featureGate.checkFeature(guildId, 'casino');
+    if (!hasFeature) {
+      return interaction.editReply({
+        content: '❌ Casino is a Premium feature. Upgrade to access this feature!',
+      });
+    }
+    
+    console.log(`🐴 [Horse Race] Starting race for ${username} on horse ${horseNumber}`);
+    const result = await casinoManager.playHorseRace(guildId, userId, username, betAmount, horseNumber);
+    
+    if (!result.success) {
+      return interaction.editReply({
+        content: `❌ ${result.error}`,
+      });
+    }
+    
+    console.log(`🐴 [Horse Race] Race result: selected=${result.selectedHorse}, winner=${result.winningHorse}, hasGif=${!!result.gifBuffer}`);
+    
+    // Check if we have a GIF to show
+    let raceGif = null;
+    if (result.gifBuffer && Buffer.isBuffer(result.gifBuffer) && result.gifBuffer.length > 0) {
+      const header = result.gifBuffer.slice(0, 6).toString('ascii');
+      if (header.startsWith('GIF')) {
+        raceGif = new AttachmentBuilder(result.gifBuffer, {
+          name: 'horse-race.gif',
+          description: 'Horse race animation',
+        });
+        console.log(`✅ [Horse Race] GIF attachment created: ${result.gifBuffer.length} bytes`);
+      }
+    }
+    
+    // GIF animation duration (~6 seconds)
+    const gifDuration = 6000;
+    
+    if (raceGif) {
+      // STEP 1: Show GIF with "Racing..." embed
+      const racingEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🐴 Horse Race in Progress...')
+        .setDescription('The horses are racing!')
+        .addFields(
+          {
+            name: '💰 Bet Amount',
+            value: `${economyManager.formatCoins(betAmount)} coins`,
+            inline: true,
+          },
+          {
+            name: '🐴 Your Horse',
+            value: `Horse ${horseNumber}`,
+            inline: true,
+          }
+        )
+        .setImage('attachment://horse-race.gif')
+        .setTimestamp();
+      
+      await interaction.editReply({
+        content: null,
+        embeds: [racingEmbed],
+        files: [raceGif],
+        components: [],
+      });
+      
+      // Wait for GIF to play
+      await new Promise(resolve => setTimeout(resolve, gifDuration));
+    }
+    
+    // STEP 2: Show result embed
+    const embed = new EmbedBuilder()
+      .setColor(result.result === 'win' ? '#22C55E' : '#EF4444')
+      .setTitle(
+        result.result === 'win'
+          ? '🏆 You Won!'
+          : '😢 You Lost'
+      )
+      .setDescription(
+        `\`\`\`\n` +
+        `🐴 HORSE RACE 🐴\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `\n` +
+        `  🏁 WINNER: Horse ${result.winningHorse}\n` +
+        `  🎯 YOUR BET: Horse ${result.selectedHorse}\n` +
+        `\n` +
+        `  📊 FINISH ORDER:\n` +
+        result.winnerOrder.map((horse, idx) => `    ${idx + 1}. Horse ${horse}`).join('\n') +
+        `\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `\`\`\``
+      )
+      .addFields(
+        {
+          name: '💰 Bet Amount',
+          value: `${economyManager.formatCoins(betAmount)} coins`,
+          inline: true,
+        },
+        {
+          name: result.result === 'win' ? '🎁 Win Amount' : '💸 Loss',
+          value: result.result === 'win' 
+            ? `+${economyManager.formatCoins(result.netResult)} coins`
+            : `-${economyManager.formatCoins(result.netResult)} coins`,
+          inline: true,
+        }
+      )
+      .setTimestamp();
+    
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`casino_horse_race_${userId}`)
+        .setLabel('🐴 Race Again')
+        .setStyle(ButtonStyle.Primary)
+    );
+    
+    return interaction.editReply({ 
+      content: null,
+      embeds: [embed], 
+      files: [], // Remove GIF from result
+      components: [row] 
+    });
+  }
+  
   const gameType = customId.replace('casino_bet_', '');
   const betAmountInput = interaction.fields.getTextInputValue('bet_amount');
   const betAmount = parseInt(betAmountInput);
@@ -8836,6 +9310,11 @@ async function registerCommands(clientInstance) {
           .setMinValue(1)
       ),
 
+    // ============ CHARACTER SELECTION ============
+    new SlashCommandBuilder()
+      .setName('character')
+      .setDescription('🎭 Choose your duel character (sprite pack)'),
+
     // ============ SHOP COMMANDS ============
     new SlashCommandBuilder()
       .setName('shop')
@@ -8998,6 +9477,57 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('vote')
       .setDescription('⭐ Vote for the bot on Top.gg and earn rewards!'),
+
+    // ============ TIKTOK COMMANDS ============
+    new SlashCommandBuilder()
+      .setName('tiktok')
+      .setDescription('🎵 Manage TikTok video notifications')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('add')
+          .setDescription('Add a TikTok account to monitor')
+          .addStringOption(option =>
+            option
+              .setName('username')
+              .setDescription('TikTok username (e.g. @username)')
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('Channel to post notifications')
+              .setRequired(true)
+          )
+          .addRoleOption(option =>
+            option
+              .setName('ping_role')
+              .setDescription('Role to ping when new video is posted')
+              .setRequired(false)
+          )
+          .addStringOption(option =>
+            option
+              .setName('message')
+              .setDescription('Custom notification message (use {username} and {url})')
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('remove')
+          .setDescription('Stop monitoring a TikTok account')
+          .addStringOption(option =>
+            option
+              .setName('username')
+              .setDescription('TikTok username to remove')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('list')
+          .setDescription('List all monitored TikTok accounts')
+      ),
 
     new SlashCommandBuilder()
       .setName('stockorder')

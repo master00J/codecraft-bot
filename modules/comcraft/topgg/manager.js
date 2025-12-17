@@ -172,15 +172,34 @@ class TopGGManager {
       if (!userData) {
         // User doesn't exist, try to fetch from Discord and create
         try {
-          const discordUser = await this.client.users.fetch(user).catch(() => null);
+          const discordUser = await this.client.users.fetch(user).catch((err) => {
+            console.error(`[Top.gg] Error fetching Discord user ${user}:`, err.message);
+            return null;
+          });
+          
           if (discordUser) {
+            // Format discord_tag properly
+            let discordTag = discordUser.tag;
+            if (!discordTag) {
+              // Fallback: construct tag from username and discriminator
+              const discriminator = discordUser.discriminator && discordUser.discriminator !== '0' 
+                ? discordUser.discriminator 
+                : '0';
+              discordTag = `${discordUser.username}#${discriminator}`;
+            }
+            
+            // Get avatar URL
+            const avatarUrl = discordUser.displayAvatarURL ? discordUser.displayAvatarURL() : null;
+            
+            console.log(`[Top.gg] Creating user ${user} with tag: ${discordTag}`);
+            
             // Create user with Discord info
             const { data: newUser, error: createError } = await this.supabase
               .from('users')
               .insert({
                 discord_id: user,
-                discord_tag: discordUser.tag || `${discordUser.username}#${discordUser.discriminator || '0'}`,
-                avatar_url: discordUser.displayAvatarURL() || null,
+                discord_tag: discordTag,
+                avatar_url: avatarUrl,
                 is_admin: false
               })
               .select()
@@ -188,18 +207,80 @@ class TopGGManager {
 
             if (createError) {
               console.error(`❌ [Top.gg] Error creating user ${user}:`, createError);
-              return { success: false, error: 'Failed to create user' };
+              console.error(`   Error code: ${createError.code}`);
+              console.error(`   Error message: ${createError.message}`);
+              console.error(`   Error details:`, JSON.stringify(createError, null, 2));
+              
+              // Check if it's a duplicate key error (user already exists)
+              if (createError.code === '23505') {
+                // User already exists, try to fetch again
+                console.log(`[Top.gg] User ${user} already exists, fetching...`);
+                const { data: existingUser } = await this.supabase
+                  .from('users')
+                  .select('*')
+                  .eq('discord_id', user)
+                  .maybeSingle();
+                
+                if (existingUser) {
+                  userData = existingUser;
+                  console.log(`✅ [Top.gg] Found existing user ${user} in database`);
+                } else {
+                  return { success: false, error: 'Failed to create user: duplicate key but user not found' };
+                }
+              } else {
+                return { success: false, error: `Failed to create user: ${createError.message}` };
+              }
+            } else {
+              userData = newUser;
+              console.log(`✅ [Top.gg] Created user ${user} in database`);
             }
-
-            userData = newUser;
-            console.log(`✅ [Top.gg] Created user ${user} in database`);
           } else {
-            console.log(`⚠️  [Top.gg] User ${user} not found in Discord and database`);
-            return { success: false, error: 'User not found' };
+            console.log(`⚠️  [Top.gg] User ${user} not found in Discord, creating with minimal info...`);
+            
+            // Try to create user with minimal info if Discord fetch fails
+            const { data: newUser, error: createError } = await this.supabase
+              .from('users')
+              .insert({
+                discord_id: user,
+                discord_tag: `User#${user.slice(-4)}`, // Fallback tag
+                avatar_url: null,
+                is_admin: false
+              })
+              .select()
+              .single();
+
+            if (createError) {
+              console.error(`❌ [Top.gg] Error creating user ${user} with minimal info:`, createError);
+              console.error(`   Error code: ${createError.code}`);
+              console.error(`   Error message: ${createError.message}`);
+              
+              // Check if it's a duplicate key error
+              if (createError.code === '23505') {
+                // User already exists, try to fetch again
+                const { data: existingUser } = await this.supabase
+                  .from('users')
+                  .select('*')
+                  .eq('discord_id', user)
+                  .maybeSingle();
+                
+                if (existingUser) {
+                  userData = existingUser;
+                  console.log(`✅ [Top.gg] Found existing user ${user} in database`);
+                } else {
+                  return { success: false, error: 'User not found and failed to create' };
+                }
+              } else {
+                return { success: false, error: `Failed to create user: ${createError.message}` };
+              }
+            } else {
+              userData = newUser;
+              console.log(`✅ [Top.gg] Created user ${user} with minimal info`);
+            }
           }
         } catch (error) {
           console.error(`❌ [Top.gg] Error fetching/creating user ${user}:`, error);
-          return { success: false, error: 'Failed to process user' };
+          console.error(`   Error stack:`, error.stack);
+          return { success: false, error: `Failed to process user: ${error.message}` };
         }
       }
 
