@@ -7437,6 +7437,21 @@ async function handleTikTokCommand(interaction) {
 
         return interaction.editReply({ embeds: [embed] });
       }
+
+      case 'test': {
+        const username = interaction.options.getString('username');
+        const result = await tiktokMonitor.testNotification(guildId, username);
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        return interaction.editReply({
+          content: `✅ Test notification sent for **@${username.replace('@', '')}**! Check the configured channel.`,
+        });
+      }
     }
   } catch (error) {
     console.error('Error handling TikTok command:', error);
@@ -9527,6 +9542,17 @@ async function registerCommands(clientInstance) {
         subcommand
           .setName('list')
           .setDescription('List all monitored TikTok accounts')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('test')
+          .setDescription('Send a test notification for a TikTok account')
+          .addStringOption(option =>
+            option
+              .setName('username')
+              .setDescription('TikTok username to test')
+              .setRequired(true)
+          )
       ),
 
     new SlashCommandBuilder()
