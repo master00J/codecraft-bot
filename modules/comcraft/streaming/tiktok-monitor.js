@@ -65,6 +65,27 @@ class TikTokMonitor {
     try {
       const cleanUsername = username.replace('@', '');
       
+      console.log(`🔍 Fetching TikTok user info for @${cleanUsername} to get secUid...`);
+      
+      // First get user info to retrieve secUid
+      const userResponse = await axios.get('https://tiktok-api23.p.rapidapi.com/api/user/info', {
+        headers: {
+          'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+          'X-RapidAPI-Host': 'tiktok-api23.p.rapidapi.com'
+        },
+        params: {
+          uniqueId: cleanUsername
+        }
+      });
+
+      if (!userResponse.data || !userResponse.data.userInfo || !userResponse.data.userInfo.user) {
+        console.error(`❌ Could not get user info for @${cleanUsername}`);
+        return [];
+      }
+
+      const secUid = userResponse.data.userInfo.user.secUid;
+      console.log(`✅ Got secUid for @${cleanUsername}: ${secUid.substring(0, 20)}...`);
+      
       console.log(`🔍 Fetching TikTok videos for @${cleanUsername}...`);
       
       const response = await axios.get('https://tiktok-api23.p.rapidapi.com/api/user/posts', {
@@ -73,7 +94,7 @@ class TikTokMonitor {
           'X-RapidAPI-Host': 'tiktok-api23.p.rapidapi.com'
         },
         params: {
-          uniqueId: cleanUsername,
+          secUid: secUid,
           count: limit.toString()
         }
       });
