@@ -65,6 +65,8 @@ class TikTokMonitor {
     try {
       const cleanUsername = username.replace('@', '');
       
+      console.log(`🔍 Fetching TikTok videos for @${cleanUsername}...`);
+      
       const response = await axios.get('https://tiktok-api23.p.rapidapi.com/api/user/posts', {
         headers: {
           'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
@@ -76,7 +78,11 @@ class TikTokMonitor {
         }
       });
 
+      console.log(`✅ TikTok API Response status: ${response.status}`);
+      console.log(`📦 TikTok API Response data keys:`, Object.keys(response.data || {}));
+
       if (response.data && response.data.itemList) {
+        console.log(`📹 Found ${response.data.itemList.length} videos for @${cleanUsername}`);
         return response.data.itemList.map(video => ({
           id: video.id,
           description: video.desc || 'No description',
@@ -96,9 +102,15 @@ class TikTokMonitor {
           }
         }));
       }
+      
+      console.log(`⚠️ No itemList found in TikTok API response for @${cleanUsername}`);
+      console.log(`📦 Full response data:`, JSON.stringify(response.data).substring(0, 500));
       return [];
     } catch (error) {
-      console.error(`❌ Error getting TikTok videos for ${username}:`, error.message);
+      console.error(`❌ Error getting TikTok videos for ${username}:`);
+      console.error(`   Status: ${error.response?.status}`);
+      console.error(`   Message: ${error.message}`);
+      console.error(`   Response data:`, error.response?.data);
       return [];
     }
   }
