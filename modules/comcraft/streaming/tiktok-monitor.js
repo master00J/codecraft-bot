@@ -102,9 +102,12 @@ class TikTokMonitor {
       console.log(`✅ TikTok API Response status: ${response.status}`);
       console.log(`📦 TikTok API Response data keys:`, Object.keys(response.data || {}));
 
-      if (response.data && response.data.itemList) {
-        console.log(`📹 Found ${response.data.itemList.length} videos for @${cleanUsername}`);
-        return response.data.itemList.map(video => ({
+      // Check for itemList in response.data.data (new API structure)
+      const itemList = response.data?.data?.itemList || response.data?.itemList;
+
+      if (itemList && itemList.length > 0) {
+        console.log(`📹 Found ${itemList.length} videos for @${cleanUsername}`);
+        return itemList.map(video => ({
           id: video.id,
           description: video.desc || 'No description',
           createTime: video.createTime * 1000, // Convert to ms
