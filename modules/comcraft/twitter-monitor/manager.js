@@ -329,7 +329,7 @@ class TwitterMonitorManager {
           'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
           'X-RapidAPI-Host': 'twitter-api45.p.rapidapi.com'
         },
-        timeout: 10000
+        timeout: 5000 // Reduced timeout to 5s for faster fallback
       });
 
       if (!response.data || !response.data.timeline) {
@@ -350,7 +350,18 @@ class TwitterMonitorManager {
 
       return tweets;
     } catch (error) {
-      throw new Error(`RapidAPI fetch failed: ${error.message}`);
+      // Log detailed error for debugging
+      if (error.response) {
+        console.error(`RapidAPI Error: Status ${error.response.status}`);
+        if (error.response.status === 429) {
+          console.error('⚠️ RapidAPI quota exceeded - using free Nitter fallback');
+        }
+        throw new Error(`RapidAPI HTTP ${error.response.status}: ${error.response.data?.message || 'Unknown error'}`);
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('RapidAPI timeout - trying fallback');
+      } else {
+        throw new Error(`RapidAPI fetch failed: ${error.message}`);
+      }
     }
   }
 
