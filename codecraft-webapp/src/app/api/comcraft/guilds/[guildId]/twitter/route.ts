@@ -48,7 +48,7 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch monitors' }, { status: 500 });
     }
 
-    // Fetch subscription limits
+    // Fetch subscription limits from database
     const { data: config } = await supabase
       .from('guild_configs')
       .select('subscription_tier')
@@ -56,14 +56,24 @@ export async function GET(
       .single();
 
     const tier = config?.subscription_tier || 'free';
-    const tierLimits: Record<string, number> = {
+    
+    // Get limits from subscription_tiers table
+    const { data: tierData } = await supabase
+      .from('subscription_tiers')
+      .select('limits')
+      .eq('tier_name', tier)
+      .eq('is_active', true)
+      .single();
+
+    // Fallback limits if not in database
+    const fallbackLimits: Record<string, number> = {
       free: 0,
       basic: 2,
       premium: 5,
       enterprise: -1
     };
 
-    const maxMonitors = tierLimits[tier] || 0;
+    const maxMonitors = tierData?.limits?.twitter_monitors ?? fallbackLimits[tier] ?? 0;
     const currentCount = monitors?.length || 0;
 
     return NextResponse.json({ 

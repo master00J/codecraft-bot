@@ -266,6 +266,15 @@ const LIMIT_DEFINITIONS: LimitDefinition[] = [
     min: -1,
   },
   {
+    id: 'twitter_monitors',
+    label: 'Twitter monitors',
+    description: 'Maximum number of Twitter accounts a guild can monitor for new tweets (-1 for unlimited).',
+    defaultValue: 0,
+    step: 1,
+    allowUnlimited: true,
+    min: -1,
+  },
+  {
     id: 'xp_boost',
     label: 'XP boost multiplier',
     description: 'Multiplier applied to XP gain for the leveling system (e.g. 1.5).',
