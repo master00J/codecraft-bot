@@ -101,26 +101,31 @@ CREATE TABLE IF NOT EXISTS public.portfolio (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 7. Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_users_discord_id ON public.users(discord_id);
-
--- Conditionally create user_id indexes (only if column exists)
+-- 7. Add user_id columns if they don't exist (for existing tables)
 DO $$ 
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'user_id') THEN
-    CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
+  -- Add user_id to orders if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'user_id') THEN
+    ALTER TABLE public.orders ADD COLUMN user_id UUID REFERENCES public.users(id) ON DELETE SET NULL;
   END IF;
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tickets' AND column_name = 'user_id') THEN
-    CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id);
+  
+  -- Add user_id to tickets if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tickets' AND column_name = 'user_id') THEN
+    ALTER TABLE public.tickets ADD COLUMN user_id UUID REFERENCES public.users(id) ON DELETE CASCADE;
   END IF;
 END $$;
+
+-- 8. Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_users_discord_id ON public.users(discord_id);
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_discord_id ON public.orders(discord_id);
 CREATE INDEX IF NOT EXISTS idx_messages_ticket_id ON public.messages(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_messages_order_id ON public.messages(order_id);
 
--- 8. Enable Row Level Security (RLS)
+-- 9. Enable Row Level Security (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
@@ -128,7 +133,7 @@ ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.portfolio ENABLE ROW LEVEL SECURITY;
 
--- 9. Create RLS Policies
+-- 10. Create RLS Policies
 
 -- Users: Users can read their own data, service role can do anything
 DROP POLICY IF EXISTS "Users can view own data" ON public.users;
@@ -173,7 +178,7 @@ DROP POLICY IF EXISTS "Service role can manage reviews" ON public.reviews;
 CREATE POLICY "Service role can manage reviews" ON public.reviews
   FOR ALL USING (auth.role() = 'service_role');
 
--- 10. Create function to update updated_at timestamp
+-- 11. Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -182,7 +187,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 11. Create triggers for updated_at
+-- 12. Create triggers for updated_at
 DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -195,7 +200,7 @@ DROP TRIGGER IF EXISTS update_tickets_updated_at ON public.tickets;
 CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON public.tickets
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 12. Create combat character selections table
+-- 13. Create combat character selections table
 CREATE TABLE IF NOT EXISTS public.combat_character_selections (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id TEXT UNIQUE NOT NULL,
@@ -222,7 +227,7 @@ CREATE TRIGGER update_combat_character_selections_updated_at BEFORE UPDATE ON pu
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_combat_character_selections_user_id ON public.combat_character_selections(user_id);
 
--- 13. Create TikTok monitors table
+-- 14. Create TikTok monitors table
 CREATE TABLE IF NOT EXISTS public.tiktok_monitors (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   guild_id TEXT NOT NULL,
@@ -258,7 +263,7 @@ CREATE TRIGGER update_tiktok_monitors_updated_at BEFORE UPDATE ON public.tiktok_
 CREATE INDEX IF NOT EXISTS idx_tiktok_monitors_guild_id ON public.tiktok_monitors(guild_id);
 CREATE INDEX IF NOT EXISTS idx_tiktok_monitors_enabled ON public.tiktok_monitors(enabled);
 
--- 14. Create vouches/reputation table
+-- 15. Create vouches/reputation table
 CREATE TABLE IF NOT EXISTS public.vouches (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   guild_id TEXT NOT NULL,
