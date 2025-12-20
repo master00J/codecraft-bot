@@ -177,21 +177,22 @@ class TwitterMonitorManager {
 
       if (error) throw error;
       if (!monitors || monitors.length === 0) {
-        console.log('⚠️ No Twitter monitors found or all disabled');
-        return;
+        return; // Silent when no monitors
       }
 
-      console.log(`🔍 Checking ${monitors.length} Twitter monitors...`);
+      console.log(`\n🐦 ========== TWITTER MONITOR: Checking ${monitors.length} account(s) ==========`);
 
       // Check each monitor
       for (const monitor of monitors) {
-        console.log(`🐦 Checking @${monitor.twitter_username}...`);
+        console.log(`🐦 [TWITTER] Checking @${monitor.twitter_username}...`);
         await this.checkMonitor(monitor);
         // Small delay between checks to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
+      
+      console.log(`🐦 ========== TWITTER MONITOR: Check complete ==========\n`);
     } catch (error) {
-      console.error('❌ Error checking all monitors:', error);
+      console.error('🐦 [TWITTER] ❌ Error checking all monitors:', error);
     }
   }
 
@@ -207,11 +208,11 @@ class TwitterMonitorManager {
       });
 
       if (!tweets || tweets.length === 0) {
-        console.log(`⚠️ No tweets found for @${monitor.twitter_username}`);
+        console.log(`🐦 [TWITTER] ⚠️ No tweets found for @${monitor.twitter_username}`);
         return;
       }
 
-      console.log(`📝 Found ${tweets.length} tweets for @${monitor.twitter_username}`);
+      console.log(`🐦 [TWITTER] 📝 Found ${tweets.length} tweets for @${monitor.twitter_username}`);
 
       // Get last processed tweet timestamp
       const lastCheck = monitor.last_tweet_at ? new Date(monitor.last_tweet_at) : null;
@@ -222,21 +223,19 @@ class TwitterMonitorManager {
       for (const tweet of tweets) {
         const tweetTime = new Date(tweet.created_at);
         
-        // Skip if older than last check
+        // Skip if older than last check (silent)
         if (lastCheck && tweetTime <= lastCheck) {
-          console.log(`⏭️ Skipping old tweet (${tweetTime.toISOString()} <= ${lastCheck.toISOString()})`);
           continue;
         }
         
-        // Skip if already processed (duplicate prevention)
+        // Skip if already processed (silent)
         const tweetId = tweet.id_str || tweet.id;
         if (this.processedTweets.has(tweetId)) {
-          console.log(`⏭️ Skipping duplicate tweet ${tweetId}`);
           continue;
         }
 
         // Post to Discord
-        console.log(`📤 Posting tweet ${tweetId} to Discord...`);
+        console.log(`🐦 [TWITTER] 📤 Posting NEW tweet from @${monitor.twitter_username} to Discord...`);
         await this.postTweetToDiscord(monitor, tweet);
         newTweetsPosted++;
         
@@ -253,9 +252,7 @@ class TwitterMonitorManager {
       }
 
       if (newTweetsPosted > 0) {
-        console.log(`✅ Posted ${newTweetsPosted} new tweet(s) for @${monitor.twitter_username}`);
-      } else {
-        console.log(`ℹ️ No new tweets to post for @${monitor.twitter_username}`);
+        console.log(`🐦 [TWITTER] ✅ Successfully posted ${newTweetsPosted} new tweet(s) for @${monitor.twitter_username}`);
       }
 
       // Update last check timestamp
@@ -284,16 +281,14 @@ class TwitterMonitorManager {
    * Uses Nitter RSS (free, no API key required)
    */
   async fetchUserTweets(username, options = {}) {
-    console.log(`🔍 Fetching tweets for @${username}...`);
+    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username} via Nitter RSS...`);
     
-    // Use Nitter RSS (free, no API key required)
-    console.log('🔄 Using Nitter RSS...');
     try {
       const tweets = await this.fetchTweetsViaNitter(username, options);
-      console.log(`✅ Nitter returned ${tweets.length} tweets`);
+      console.log(`🐦 [TWITTER] ✅ Nitter returned ${tweets.length} tweets`);
       return tweets;
     } catch (error) {
-      console.error('❌ Nitter method failed:', error.message);
+      console.error(`🐦 [TWITTER] ❌ Failed to fetch tweets: ${error.message}`);
       return [];
     }
   }
@@ -408,10 +403,10 @@ class TwitterMonitorManager {
             filtered = filtered.filter(t => !t.in_reply_to_screen_name);
           }
 
-          console.log(`✅ Fetched ${filtered.length} tweets from ${instance}`);
+          console.log(`🐦 [TWITTER] ✅ Success! Fetched ${filtered.length} tweets from ${instance}`);
           return filtered;
         } catch (err) {
-          console.log(`⚠️ Nitter instance ${instance} failed, trying next...`);
+          console.log(`🐦 [TWITTER] ⚠️ Instance ${instance} failed, trying next...`);
           continue;
         }
       }
@@ -483,9 +478,9 @@ class TwitterMonitorManager {
         embeds: [embed]
       });
 
-      console.log(`✅ Posted tweet from @${username} to ${channel.name}`);
+      console.log(`🐦 [TWITTER] ✅ Tweet posted from @${username} to #${channel.name}`);
     } catch (error) {
-      console.error('Error posting tweet to Discord:', error);
+      console.error('🐦 [TWITTER] ❌ Error posting tweet to Discord:', error);
     }
   }
 }
