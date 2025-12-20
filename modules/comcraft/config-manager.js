@@ -658,10 +658,10 @@ class ConfigManager {
         return tierConfig.limits;
       }
       const fallback = {
-        free: { custom_commands: 5, stream_notifications: 1, twitter_monitors: 0, twitter_tweets_per_check: 5, xp_boost: 1.0, ai_tokens_monthly: 50000 },
-        basic: { custom_commands: 25, stream_notifications: 5, twitter_monitors: 2, twitter_tweets_per_check: 10, xp_boost: 1.2, ai_tokens_monthly: 250000 },
-        premium: { custom_commands: -1, stream_notifications: -1, twitter_monitors: 5, twitter_tweets_per_check: 25, xp_boost: 1.5, ai_tokens_monthly: 1000000 },
-        enterprise: { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, xp_boost: 2.0, ai_tokens_monthly: -1 }
+        free: { custom_commands: 5, stream_notifications: 1, twitter_monitors: 0, twitter_tweets_per_check: 5, twitter_check_interval: 120, xp_boost: 1.0, ai_tokens_monthly: 50000 },
+        basic: { custom_commands: 25, stream_notifications: 5, twitter_monitors: 2, twitter_tweets_per_check: 10, twitter_check_interval: 60, xp_boost: 1.2, ai_tokens_monthly: 250000 },
+        premium: { custom_commands: -1, stream_notifications: -1, twitter_monitors: 5, twitter_tweets_per_check: 25, twitter_check_interval: 30, xp_boost: 1.5, ai_tokens_monthly: 1000000 },
+        enterprise: { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, twitter_check_interval: 10, xp_boost: 2.0, ai_tokens_monthly: -1 }
       };
       return fallback[license.tier] || fallback.free;
     }
@@ -673,7 +673,7 @@ class ConfigManager {
       
       if (now < trialEnd) {
         // Trial is still active - use enterprise limits
-        return { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, xp_boost: 2.0, ai_tokens_monthly: -1, multi_guild: 5 };
+        return { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, twitter_check_interval: 10, xp_boost: 2.0, ai_tokens_monthly: -1, multi_guild: 5 };
       }
     }
 
@@ -688,10 +688,10 @@ class ConfigManager {
     }
 
     const fallback = {
-      free: { custom_commands: 5, stream_notifications: 1, twitter_monitors: 0, twitter_tweets_per_check: 5, xp_boost: 1.0, ai_tokens_monthly: 50000 },
-      basic: { custom_commands: 25, stream_notifications: 5, twitter_monitors: 2, twitter_tweets_per_check: 10, xp_boost: 1.2, ai_tokens_monthly: 250000 },
-      premium: { custom_commands: -1, stream_notifications: -1, twitter_monitors: 5, twitter_tweets_per_check: 25, xp_boost: 1.5, ai_tokens_monthly: 1000000 },
-      enterprise: { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, xp_boost: 2.0, ai_tokens_monthly: -1 }
+      free: { custom_commands: 5, stream_notifications: 1, twitter_monitors: 0, twitter_tweets_per_check: 5, twitter_check_interval: 120, xp_boost: 1.0, ai_tokens_monthly: 50000 },
+      basic: { custom_commands: 25, stream_notifications: 5, twitter_monitors: 2, twitter_tweets_per_check: 10, twitter_check_interval: 60, xp_boost: 1.2, ai_tokens_monthly: 250000 },
+      premium: { custom_commands: -1, stream_notifications: -1, twitter_monitors: 5, twitter_tweets_per_check: 25, twitter_check_interval: 30, xp_boost: 1.5, ai_tokens_monthly: 1000000 },
+      enterprise: { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, twitter_check_interval: 10, xp_boost: 2.0, ai_tokens_monthly: -1 }
     };
 
     return fallback[tier];

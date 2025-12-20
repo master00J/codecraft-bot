@@ -438,9 +438,9 @@ export default function TwitterDashboard() {
           <li>• Add Twitter/X accounts to monitor for new tweets</li>
           <li>• Choose whether to include retweets and replies</li>
           <li>• New tweets are automatically posted to your Discord channel</li>
-          <li>• Uses RSS.app for reliable and affordable tweet fetching</li>
-          <li>• Checks for new tweets every 2 minutes</li>
-          <li>• Number of tweets fetched per check depends on your subscription tier</li>
+          <li>• Uses RapidAPI for reliable tweet fetching (same key as TikTok!)</li>
+          <li>• Check frequency depends on your tier: Free (2h), Basic (1h), Premium (30min), Enterprise (10min)</li>
+          <li>• Number of tweets fetched per check also depends on your subscription tier</li>
         </ul>
       </Card>
     </div>

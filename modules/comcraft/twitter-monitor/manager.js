@@ -1,11 +1,13 @@
 /**
  * Comcraft Twitter/X Monitor Manager
  * Monitor Twitter accounts and post new tweets to Discord channels
+ * Uses RapidAPI Twitter API with tier-based check intervals
  */
 
 const { createClient } = require('@supabase/supabase-js');
 const { EmbedBuilder } = require('discord.js');
 const axios = require('axios');
+const ConfigManager = require('../config-manager');
 
 class TwitterMonitorManager {
   constructor(client) {
@@ -14,40 +16,36 @@ class TwitterMonitorManager {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
-    this.monitorInterval = null;
-    this.checkIntervalMs = 2 * 60 * 1000; // Check every 2 minutes
+    this.configManager = new ConfigManager();
+    this.monitorIntervals = new Map(); // Store intervals per guild
     this.processedTweets = new Set(); // Cache to prevent duplicates
+    this.guildCheckTimes = new Map(); // Track last check time per guild
   }
 
   /**
-   * Start monitoring all configured Twitter accounts
+   * Start monitoring all configured Twitter accounts with tier-based intervals
    */
   startMonitoring() {
-    if (this.monitorInterval) {
-      console.log('⚠️ Twitter monitor already running');
-      return;
-    }
-
-    console.log('🐦 Starting Twitter monitor...');
+    console.log('🐦 Starting Twitter monitor with tier-based intervals...');
     
-    // Initial check
+    // Check all monitors initially
     this.checkAllMonitors();
     
-    // Set up interval
-    this.monitorInterval = setInterval(() => {
+    // Set up interval to check monitors (runs every minute, but respects per-guild intervals)
+    this.globalInterval = setInterval(() => {
       this.checkAllMonitors();
-    }, this.checkIntervalMs);
+    }, 60 * 1000); // Check every minute
 
-    console.log('✅ Twitter monitor started');
+    console.log('✅ Twitter monitor started with dynamic tier-based intervals');
   }
 
   /**
    * Stop monitoring
    */
   stopMonitoring() {
-    if (this.monitorInterval) {
-      clearInterval(this.monitorInterval);
-      this.monitorInterval = null;
+    if (this.globalInterval) {
+      clearInterval(this.globalInterval);
+      this.globalInterval = null;
       console.log('🛑 Twitter monitor stopped');
     }
   }
@@ -175,22 +173,53 @@ class TwitterMonitorManager {
         .select('*')
         .eq('enabled', true);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '42P01') return; // Table doesn't exist
+        throw error;
+      }
       if (!monitors || monitors.length === 0) {
         return; // Silent when no monitors
       }
 
-      console.log(`\n🐦 ========== TWITTER MONITOR: Checking ${monitors.length} account(s) ==========`);
-
-      // Check each monitor
+      // Group monitors by guild to check intervals
+      const guildMonitors = {};
       for (const monitor of monitors) {
-        console.log(`🐦 [TWITTER] Checking @${monitor.twitter_username}...`);
-        await this.checkMonitor(monitor);
-        // Small delay between checks to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (!guildMonitors[monitor.guild_id]) {
+          guildMonitors[monitor.guild_id] = [];
+        }
+        guildMonitors[monitor.guild_id].push(monitor);
       }
-      
-      console.log(`🐦 ========== TWITTER MONITOR: Check complete ==========\n`);
+
+      // Check each guild's monitors based on their tier interval
+      for (const [guildId, guildMonitorList] of Object.entries(guildMonitors)) {
+        // Get guild's check interval from subscription tier
+        const limits = await this.configManager.getSubscriptionLimits(guildId);
+        const checkIntervalMinutes = limits.twitter_check_interval || 120; // Default 2 hours
+        const checkIntervalMs = checkIntervalMinutes * 60 * 1000;
+
+        // Check if enough time has passed since last check
+        const lastCheckTime = this.guildCheckTimes.get(guildId) || 0;
+        const timeSinceLastCheck = Date.now() - lastCheckTime;
+
+        if (timeSinceLastCheck < checkIntervalMs) {
+          // Not time to check yet
+          continue;
+        }
+
+        // Time to check this guild's monitors!
+        console.log(`\n🐦 ========== TWITTER: Checking guild ${guildId} (${guildMonitorList.length} monitor(s), interval: ${checkIntervalMinutes} min) ==========`);
+        
+        for (const monitor of guildMonitorList) {
+          console.log(`🐦 [TWITTER] Checking @${monitor.twitter_username}...`);
+          await this.checkMonitor(monitor);
+          // Small delay between checks
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        // Update last check time for this guild
+        this.guildCheckTimes.set(guildId, Date.now());
+        console.log(`🐦 ========== TWITTER: Guild ${guildId} check complete ==========\n`);
+      }
     } catch (error) {
       console.error('🐦 [TWITTER] ❌ Error checking all monitors:', error);
     }
@@ -307,105 +336,66 @@ class TwitterMonitorManager {
   }
 
   /**
-   * Fetch tweets from Twitter/X account
-   * Uses RSS.app as primary method
+   * Fetch tweets from Twitter/X account via RapidAPI
+   * Uses RapidAPI Twitter API (same key as TikTok!)
    */
   async fetchUserTweets(username, options = {}) {
     console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username}...`);
     
-    // Primary: Use RSS.app (reliable and affordable)
-    console.log(`🐦 [TWITTER] 📡 Using RSS.app...`);
-    try {
-      const tweets = await this.fetchTweetsViaRSSApp(username, options);
-      console.log(`🐦 [TWITTER] ✅ RSS.app returned ${tweets.length} tweets`);
-      return tweets;
-    } catch (error) {
-      console.error(`🐦 [TWITTER] ❌ RSS.app failed: ${error.message}`);
-      console.log(`🐦 [TWITTER] 🔄 Falling back to Nitter RSS...`);
-    }
-    
-    // Fallback to Nitter RSS (unreliable but free)
-    try {
-      const tweets = await this.fetchTweetsViaNitter(username, options);
-      console.log(`🐦 [TWITTER] ✅ Nitter returned ${tweets.length} tweets`);
-      return tweets;
-    } catch (error) {
-      console.error(`🐦 [TWITTER] ❌ All methods failed: ${error.message}`);
+    if (!process.env.RAPIDAPI_KEY) {
+      console.error(`🐦 [TWITTER] ❌ RAPIDAPI_KEY not configured`);
       return [];
     }
-  }
 
-  /**
-   * Fetch tweets via RSS.app
-   * Requires RSSAPP_API_KEY environment variable
-   */
-  async fetchTweetsViaRSSApp(username, options = {}) {
     try {
       const cleanUsername = username.replace('@', '');
       const maxTweets = options.maxTweets || 10;
       
-      // RSS.app API endpoint
-      // Format: https://rss.app/feeds/[feed_id].json or RSS endpoint
-      const apiKey = process.env.RSSAPP_API_KEY;
+      console.log(`🐦 [TWITTER] 📡 Using RapidAPI Twitter API...`);
       
-      if (!apiKey) {
-        throw new Error('RSSAPP_API_KEY not configured');
-      }
-
-      // Create or get RSS feed for this Twitter account
-      // RSS.app format: twitter/username
-      const feedResponse = await axios.get(
-        `https://rss.app/api/v1/feeds`,
+      // RapidAPI Twitter API endpoint
+      const response = await axios.get(
+        `https://twitter-api45.p.rapidapi.com/timeline.php`,
         {
           params: {
-            url: `https://twitter.com/${cleanUsername}`,
-            api_key: apiKey
+            screenname: cleanUsername,
+            count: maxTweets
+          },
+          headers: {
+            'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+            'X-RapidAPI-Host': 'twitter-api45.p.rapidapi.com'
           },
           timeout: 10000
         }
       );
 
-      if (!feedResponse.data || !feedResponse.data.feed_url) {
-        throw new Error('Failed to get RSS feed from RSS.app');
+      if (!response.data || !response.data.timeline) {
+        console.log(`🐦 [TWITTER] ⚠️ No tweets found in response for @${cleanUsername}`);
+        return [];
       }
 
-      // Fetch the RSS feed
-      const Parser = require('rss-parser');
-      const parser = new Parser({
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-
-      const feed = await parser.parseURL(feedResponse.data.feed_url);
-
-      if (!feed || !feed.items || feed.items.length === 0) {
-        throw new Error('RSS feed is empty');
-      }
-
-      // Convert RSS items to tweet format
-      let tweets = feed.items.map(item => {
-        const isRetweet = item.title && (item.title.startsWith('RT @') || item.title.startsWith('RT by @'));
-        const isReply = item.title && item.title.includes('Replying to @');
+      // Parse tweets from response
+      let tweets = response.data.timeline.map(tweet => {
+        const isRetweet = tweet.retweeted || tweet.text?.startsWith('RT @');
+        const isReply = tweet.in_reply_to_screen_name || tweet.in_reply_to_status_id;
 
         return {
-          id_str: item.guid || item.link?.split('/').pop() || Date.now().toString(),
-          id: item.guid || item.link?.split('/').pop() || Date.now().toString(),
-          text: item.title || item.contentSnippet || '',
-          created_at: item.pubDate || item.isoDate || new Date().toISOString(),
+          id_str: tweet.tweet_id || tweet.id_str,
+          id: tweet.tweet_id || tweet.id_str,
+          text: tweet.text || '',
+          created_at: tweet.created_at,
           user: {
-            screen_name: cleanUsername,
-            name: feed.title ? feed.title.split('(')[0].trim() : cleanUsername,
-            profile_image_url_https: null
+            screen_name: tweet.author?.screen_name || cleanUsername,
+            name: tweet.author?.name || cleanUsername,
+            profile_image_url_https: tweet.author?.avatar
           },
           entities: {
-            urls: [],
-            media: []
+            urls: tweet.entities?.urls || [],
+            media: tweet.entities?.media || []
           },
-          url: item.link || `https://twitter.com/${cleanUsername}`,
+          url: `https://twitter.com/${cleanUsername}/status/${tweet.tweet_id || tweet.id_str}`,
           is_retweet: isRetweet,
-          in_reply_to_screen_name: isReply ? 'someone' : null
+          in_reply_to_screen_name: isReply ? (tweet.in_reply_to_screen_name || 'someone') : null
         };
       });
 
@@ -417,12 +407,15 @@ class TwitterMonitorManager {
         tweets = tweets.filter(t => !t.in_reply_to_screen_name);
       }
 
-      // Limit to max tweets
-      tweets = tweets.slice(0, maxTweets);
-
+      console.log(`🐦 [TWITTER] ✅ RapidAPI returned ${tweets.length} tweets (after filters)`);
       return tweets;
     } catch (error) {
-      throw new Error(`RSS.app fetch failed: ${error.message}`);
+      if (error.response?.status === 429) {
+        console.error(`🐦 [TWITTER] ❌ Rate limit exceeded (429). Upgrade your RapidAPI plan!`);
+      } else {
+        console.error(`🐦 [TWITTER] ❌ RapidAPI failed: ${error.message}`);
+      }
+      return [];
     }
   }
 

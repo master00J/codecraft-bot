@@ -284,6 +284,15 @@ const LIMIT_DEFINITIONS: LimitDefinition[] = [
     min: 1,
   },
   {
+    id: 'twitter_check_interval',
+    label: 'Twitter check interval (minutes)',
+    description: 'How often to check for new tweets (in minutes). Lower = more frequent checks. Recommended: Free=120, Basic=60, Premium=30, Enterprise=10',
+    defaultValue: 120,
+    step: 5,
+    allowUnlimited: false,
+    min: 10,
+  },
+  {
     id: 'xp_boost',
     label: 'XP boost multiplier',
     description: 'Multiplier applied to XP gain for the leveling system (e.g. 1.5).',
