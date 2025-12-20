@@ -176,18 +176,22 @@ class TwitterMonitorManager {
         .eq('enabled', true);
 
       if (error) throw error;
-      if (!monitors || monitors.length === 0) return;
+      if (!monitors || monitors.length === 0) {
+        console.log('⚠️ No Twitter monitors found or all disabled');
+        return;
+      }
 
       console.log(`🔍 Checking ${monitors.length} Twitter monitors...`);
 
       // Check each monitor
       for (const monitor of monitors) {
+        console.log(`🐦 Checking @${monitor.twitter_username}...`);
         await this.checkMonitor(monitor);
         // Small delay between checks to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } catch (error) {
-      console.error('Error checking all monitors:', error);
+      console.error('❌ Error checking all monitors:', error);
     }
   }
 
@@ -202,25 +206,39 @@ class TwitterMonitorManager {
         includeReplies: monitor.include_replies
       });
 
-      if (!tweets || tweets.length === 0) return;
+      if (!tweets || tweets.length === 0) {
+        console.log(`⚠️ No tweets found for @${monitor.twitter_username}`);
+        return;
+      }
+
+      console.log(`📝 Found ${tweets.length} tweets for @${monitor.twitter_username}`);
 
       // Get last processed tweet timestamp
       const lastCheck = monitor.last_tweet_at ? new Date(monitor.last_tweet_at) : null;
       let newestTweetTime = lastCheck;
 
       // Process tweets (newest first)
+      let newTweetsPosted = 0;
       for (const tweet of tweets) {
         const tweetTime = new Date(tweet.created_at);
         
         // Skip if older than last check
-        if (lastCheck && tweetTime <= lastCheck) continue;
+        if (lastCheck && tweetTime <= lastCheck) {
+          console.log(`⏭️ Skipping old tweet (${tweetTime.toISOString()} <= ${lastCheck.toISOString()})`);
+          continue;
+        }
         
         // Skip if already processed (duplicate prevention)
         const tweetId = tweet.id_str || tweet.id;
-        if (this.processedTweets.has(tweetId)) continue;
+        if (this.processedTweets.has(tweetId)) {
+          console.log(`⏭️ Skipping duplicate tweet ${tweetId}`);
+          continue;
+        }
 
         // Post to Discord
+        console.log(`📤 Posting tweet ${tweetId} to Discord...`);
         await this.postTweetToDiscord(monitor, tweet);
+        newTweetsPosted++;
         
         // Mark as processed
         this.processedTweets.add(tweetId);
@@ -233,6 +251,11 @@ class TwitterMonitorManager {
         // Small delay between posts
         await new Promise(resolve => setTimeout(resolve, 500));
       }
+
+      if (newTweetsPosted > 0) {
+        console.log(`✅ Posted ${newTweetsPosted} new tweet(s) for @${monitor.twitter_username}`);
+      } else {
+        console.log(`ℹ️ No new tweets to post for @${monitor.twitter_username}`);
 
       // Update last check timestamp
       if (newestTweetTime && newestTweetTime !== lastCheck) {
@@ -260,24 +283,34 @@ class TwitterMonitorManager {
    * Using multiple fallback methods
    */
   async fetchUserTweets(username, options = {}) {
+    console.log(`🔍 Fetching tweets for @${username}...`);
+    
     // Try RapidAPI first (if available)
     if (process.env.RAPIDAPI_KEY) {
+      console.log('🔑 Trying RapidAPI...');
       try {
-        return await this.fetchTweetsViaRapidAPI(username, options);
+        const tweets = await this.fetchTweetsViaRapidAPI(username, options);
+        console.log(`✅ RapidAPI returned ${tweets.length} tweets`);
+        return tweets;
       } catch (error) {
-        console.error('RapidAPI method failed, trying fallback:', error.message);
+        console.error('❌ RapidAPI method failed, trying fallback:', error.message);
       }
+    } else {
+      console.log('⚠️ No RAPIDAPI_KEY found, using Nitter fallback');
     }
 
     // Fallback to Nitter RSS (free, no API key required)
+    console.log('🔄 Trying Nitter RSS...');
     try {
-      return await this.fetchTweetsViaNitter(username, options);
+      const tweets = await this.fetchTweetsViaNitter(username, options);
+      console.log(`✅ Nitter returned ${tweets.length} tweets`);
+      return tweets;
     } catch (error) {
-      console.error('Nitter method failed:', error.message);
+      console.error('❌ Nitter method failed:', error.message);
     }
 
     // If all methods fail
-    console.error(`❌ Could not fetch tweets for @${username}`);
+    console.error(`❌ Could not fetch tweets for @${username} - all methods failed`);
     return [];
   }
 
