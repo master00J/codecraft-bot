@@ -7514,16 +7514,15 @@ async function handleVouchCommand(interaction) {
         rating: rating,
         comment: comment,
         updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'guild_id,from_user_id,to_user_id'
       })
       .select()
       .single();
 
     if (error) {
       console.error('Error creating vouch:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       return interaction.editReply({
-        content: '❌ Failed to save vouch. Please try again.',
+        content: `❌ Failed to save vouch: ${error.message || 'Unknown error'}`,
       });
     }
 
