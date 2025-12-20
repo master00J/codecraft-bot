@@ -33,12 +33,13 @@ export async function GET(
     }
 
     const { guildId } = await params;
+    const userId = session.user?.id || session.user?.sub || 'unknown';
 
     // Check if user has access to this guild
     const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .eq('guild_id', guildId);
 
     if (!userGuilds || userGuilds.length === 0) {
@@ -75,12 +76,13 @@ export async function POST(
     }
 
     const { guildId } = await params;
+    const userId = session.user?.id || session.user?.sub || 'unknown';
 
     // Check if user has access to this guild
     const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .eq('guild_id', guildId);
 
     if (!userGuilds || userGuilds.length === 0) {
@@ -129,7 +131,7 @@ export async function POST(
     // Log activity
     await logActivity(
       guildId,
-      session.user.id,
+      userId,
       'application_config_updated',
       'Updated staff application configuration'
     );

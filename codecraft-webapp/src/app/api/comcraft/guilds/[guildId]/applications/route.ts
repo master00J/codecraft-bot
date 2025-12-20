@@ -33,12 +33,13 @@ export async function GET(
     }
 
     const { guildId } = await params;
+    const userId = session.user?.id || session.user?.sub || 'unknown';
 
     // Check if user has access to this guild
     const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .eq('guild_id', guildId);
 
     if (!userGuilds || userGuilds.length === 0) {
@@ -80,6 +81,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = session.user?.id || session.user?.sub || 'unknown';
     const { searchParams } = new URL(request.url);
     const applicationId = searchParams.get('applicationId');
     const guildId = searchParams.get('guildId');
@@ -92,7 +94,7 @@ export async function DELETE(request: NextRequest) {
     const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .eq('guild_id', guildId);
 
     if (!userGuilds || userGuilds.length === 0) {
@@ -114,7 +116,7 @@ export async function DELETE(request: NextRequest) {
     // Log activity
     await logActivity(
       guildId,
-      session.user.id,
+      userId,
       'application_deleted',
       `Deleted application ${applicationId}`
     );
