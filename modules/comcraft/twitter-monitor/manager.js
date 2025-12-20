@@ -7,7 +7,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { EmbedBuilder } = require('discord.js');
 const axios = require('axios');
-const ConfigManager = require('../config-manager');
+const configManager = require('../config-manager');
 
 class TwitterMonitorManager {
   constructor(client) {
@@ -16,7 +16,7 @@ class TwitterMonitorManager {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
-    this.configManager = new ConfigManager();
+    this.configManager = configManager; // Use singleton instance directly
     this.monitorIntervals = new Map(); // Store intervals per guild
     this.processedTweets = new Set(); // Cache to prevent duplicates
     this.guildCheckTimes = new Map(); // Track last check time per guild
