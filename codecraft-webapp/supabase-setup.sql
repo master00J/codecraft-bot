@@ -107,10 +107,10 @@ CREATE INDEX IF NOT EXISTS idx_users_discord_id ON public.users(discord_id);
 -- Conditionally create user_id indexes (only if column exists)
 DO $$ 
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'user_id') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'user_id') THEN
     CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
   END IF;
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tickets' AND column_name = 'user_id') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tickets' AND column_name = 'user_id') THEN
     CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id);
   END IF;
 END $$;
