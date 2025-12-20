@@ -118,15 +118,24 @@ END $$;
 -- 8. Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_discord_id ON public.users(discord_id);
 
--- Conditionally create user_id indexes (only if column exists now)
+-- Create user_id indexes with exception handling (skip if column doesn't exist)
 DO $$ 
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'user_id') THEN
+  -- Try to create index for orders.user_id
+  BEGIN
     CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
-  END IF;
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tickets' AND column_name = 'user_id') THEN
+  EXCEPTION WHEN undefined_column THEN
+    -- Column doesn't exist, skip index creation
+    NULL;
+  END;
+  
+  -- Try to create index for tickets.user_id
+  BEGIN
     CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id);
-  END IF;
+  EXCEPTION WHEN undefined_column THEN
+    -- Column doesn't exist, skip index creation
+    NULL;
+  END;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
