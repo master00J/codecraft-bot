@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/supabase-admin';
-import { logActivity } from '@/lib/activity-logger';
+import { supabaseAdmin } from '@/lib/supabase/server';
+
+const supabase = supabaseAdmin;
+
+/**
+ * Log activity to database
+ */
+async function logActivity(guildId: string, userId: string, action: string, details: string) {
+  try {
+    await supabase.from('activity_logs').insert({
+      guild_id: guildId,
+      user_id: userId,
+      action,
+      details,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +35,7 @@ export async function GET(
     const { guildId } = await params;
 
     // Check if user has access to this guild
-    const { data: userGuilds } = await supabaseAdmin
+    const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
       .eq('user_id', session.user.id)
@@ -31,7 +49,7 @@ export async function GET(
     const status = searchParams.get('status');
 
     // Get applications
-    let query = supabaseAdmin
+    let query = supabase
       .from('applications')
       .select('*')
       .eq('guild_id', guildId)
@@ -71,7 +89,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if user has access to this guild
-    const { data: userGuilds } = await supabaseAdmin
+    const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
       .eq('user_id', session.user.id)
@@ -82,7 +100,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete the application
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('applications')
       .delete()
       .eq('id', applicationId)

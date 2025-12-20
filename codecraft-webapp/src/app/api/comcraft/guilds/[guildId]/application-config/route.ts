@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/supabase-admin';
-import { logActivity } from '@/lib/activity-logger';
+import { supabaseAdmin } from '@/lib/supabase/server';
+
+const supabase = supabaseAdmin;
+
+/**
+ * Log activity to database
+ */
+async function logActivity(guildId: string, userId: string, action: string, details: string) {
+  try {
+    await supabase.from('activity_logs').insert({
+      guild_id: guildId,
+      user_id: userId,
+      action,
+      details,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +35,7 @@ export async function GET(
     const { guildId } = await params;
 
     // Check if user has access to this guild
-    const { data: userGuilds } = await supabaseAdmin
+    const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
       .eq('user_id', session.user.id)
@@ -28,7 +46,7 @@ export async function GET(
     }
 
     // Get config
-    const { data: config, error } = await supabaseAdmin
+    const { data: config, error } = await supabase
       .from('application_configs')
       .select('*')
       .eq('guild_id', guildId)
@@ -59,7 +77,7 @@ export async function POST(
     const { guildId } = await params;
 
     // Check if user has access to this guild
-    const { data: userGuilds } = await supabaseAdmin
+    const { data: userGuilds } = await supabase
       .from('user_guilds')
       .select('guild_id')
       .eq('user_id', session.user.id)
@@ -86,7 +104,7 @@ export async function POST(
     }
 
     // Upsert config
-    const { data: config, error } = await supabaseAdmin
+    const { data: config, error } = await supabase
       .from('application_configs')
       .upsert({
         guild_id: guildId,
