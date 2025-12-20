@@ -100,6 +100,7 @@ const combatCardGenerator = require('./modules/comcraft/combat/combat-card-gener
 const StockMarketManager = require('./modules/comcraft/economy/stock-market-manager');
 const { getSupabase } = require('./modules/supabase-client');
 const StickyMessagesManager = require('./modules/comcraft/sticky-messages/manager');
+const ApplicationsManager = require('./modules/comcraft/applications/manager');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -474,6 +475,7 @@ let discordManager;
 let autoRolesManager;
 let giveawayManager;
 let stickyMessagesManager;
+let applicationsManager;
 let casinoManager;
 let duelManager;
 let combatXPManager;
@@ -784,6 +786,10 @@ client.once('ready', async () => {
   stickyMessagesManager = new StickyMessagesManager(client);
   await stickyMessagesManager.initialize();
   console.log('📌 Sticky Messages Manager initialized');
+
+  // Initialize Applications Manager
+  applicationsManager = new ApplicationsManager(client);
+  console.log('📝 Applications Manager initialized');
   giveawayManager.startScheduler();
   console.log('🎉 Giveaway Manager initialized');
 
@@ -2726,6 +2732,12 @@ client.on('interactionCreate', async (interaction) => {
       // ============ STICKY MESSAGES COMMANDS ============
       case 'sticky': {
         await handleStickyCommand(interaction);
+        break;
+      }
+
+      // ============ STAFF APPLICATIONS COMMANDS ============
+      case 'application': {
+        await handleApplicationCommand(interaction);
         break;
       }
 

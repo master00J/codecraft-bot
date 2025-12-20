@@ -349,6 +349,73 @@ CREATE INDEX IF NOT EXISTS idx_sticky_messages_guild_id ON public.sticky_message
 CREATE INDEX IF NOT EXISTS idx_sticky_messages_channel_id ON public.sticky_messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_sticky_messages_enabled ON public.sticky_messages(enabled);
 
+-- 17. Create staff application configuration table
+CREATE TABLE IF NOT EXISTS public.application_configs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  guild_id TEXT NOT NULL UNIQUE,
+  channel_id TEXT NOT NULL,
+  questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+  enabled BOOLEAN DEFAULT true,
+  min_age INTEGER DEFAULT 0,
+  cooldown_days INTEGER DEFAULT 7,
+  require_account_age_days INTEGER DEFAULT 0,
+  auto_thread BOOLEAN DEFAULT false,
+  ping_role_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 18. Create staff applications table
+CREATE TABLE IF NOT EXISTS public.applications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  answers JSONB NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'withdrawn')),
+  message_id TEXT,
+  thread_id TEXT,
+  votes_for INTEGER DEFAULT 0,
+  votes_against INTEGER DEFAULT 0,
+  voters JSONB DEFAULT '[]'::jsonb,
+  reviewed_by TEXT,
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  review_reason TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.application_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Service role can manage application configs" ON public.application_configs;
+DROP POLICY IF EXISTS "Service role can manage applications" ON public.applications;
+
+-- Policies
+CREATE POLICY "Service role can manage application configs" ON public.application_configs
+  FOR ALL USING (auth.role() = 'service_role');
+
+CREATE POLICY "Service role can manage applications" ON public.applications
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Create triggers
+DROP TRIGGER IF EXISTS update_application_configs_updated_at ON public.application_configs;
+CREATE TRIGGER update_application_configs_updated_at BEFORE UPDATE ON public.application_configs
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_applications_updated_at ON public.applications;
+CREATE TRIGGER update_applications_updated_at BEFORE UPDATE ON public.applications
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_application_configs_guild_id ON public.application_configs(guild_id);
+CREATE INDEX IF NOT EXISTS idx_applications_guild_id ON public.applications(guild_id);
+CREATE INDEX IF NOT EXISTS idx_applications_user_id ON public.applications(user_id);
+CREATE INDEX IF NOT EXISTS idx_applications_status ON public.applications(status);
+CREATE INDEX IF NOT EXISTS idx_applications_created_at ON public.applications(created_at);
+
 -- Success message
 DO $$
 BEGIN
