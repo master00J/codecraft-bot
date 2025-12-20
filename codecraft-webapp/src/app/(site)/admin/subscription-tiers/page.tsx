@@ -275,6 +275,15 @@ const LIMIT_DEFINITIONS: LimitDefinition[] = [
     min: -1,
   },
   {
+    id: 'twitter_tweets_per_check',
+    label: 'Twitter tweets per check',
+    description: 'Maximum number of tweets to fetch per monitor per check (affects API usage).',
+    defaultValue: 5,
+    step: 1,
+    allowUnlimited: false,
+    min: 1,
+  },
+  {
     id: 'xp_boost',
     label: 'XP boost multiplier',
     description: 'Multiplier applied to XP gain for the leveling system (e.g. 1.5).',

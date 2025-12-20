@@ -201,10 +201,40 @@ class TwitterMonitorManager {
    */
   async checkMonitor(monitor) {
     try {
+      // Get subscription limits for this guild
+      const { data: config } = await this.supabase
+        .from('guild_configs')
+        .select('subscription_tier')
+        .eq('guild_id', monitor.guild_id)
+        .single();
+
+      const tier = config?.subscription_tier || 'free';
+      
+      // Get limits from subscription_tiers table
+      const { data: tierData } = await this.supabase
+        .from('subscription_tiers')
+        .select('limits')
+        .eq('tier_name', tier)
+        .eq('is_active', true)
+        .single();
+
+      // Fallback tweet count per tier
+      const fallbackTweetCounts = {
+        free: 5,
+        basic: 10,
+        premium: 25,
+        enterprise: 50
+      };
+
+      const maxTweets = tierData?.limits?.twitter_tweets_per_check ?? fallbackTweetCounts[tier] ?? 10;
+      
+      console.log(`🐦 [TWITTER] 📊 Tier: ${tier}, Max tweets per check: ${maxTweets}`);
+
       // Fetch latest tweets from Twitter
       const tweets = await this.fetchUserTweets(monitor.twitter_username, {
         includeRetweets: monitor.include_retweets,
-        includeReplies: monitor.include_replies
+        includeReplies: monitor.include_replies,
+        maxTweets: maxTweets
       });
 
       if (!tweets || tweets.length === 0) {
@@ -333,11 +363,12 @@ class TwitterMonitorManager {
       const userId = userResponse.data.data.id;
 
       // Step 2: Get user's tweets
+      const maxTweets = Math.min(options.maxTweets || 10, 100); // Twitter API max is 100
       const tweetsResponse = await axios.get(
         `https://api.twitter.com/2/users/${userId}/tweets`,
         {
           params: {
-            max_results: 10,
+            max_results: maxTweets,
             'tweet.fields': 'created_at,author_id,text,referenced_tweets,attachments',
             'expansions': 'attachments.media_keys,author_id',
             'media.fields': 'url,preview_image_url,type',
@@ -426,10 +457,11 @@ class TwitterMonitorManager {
    */
   async fetchTweetsViaRapidAPI(username, options = {}) {
     try {
+      const maxTweets = options.maxTweets || 10;
       const response = await axios.get('https://twitter-api45.p.rapidapi.com/timeline.php', {
         params: {
           screenname: username,
-          count: 10
+          count: maxTweets
         },
         headers: {
           'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
@@ -537,7 +569,11 @@ class TwitterMonitorManager {
             filtered = filtered.filter(t => !t.in_reply_to_screen_name);
           }
 
-          console.log(`🐦 [TWITTER] ✅ Success! Fetched ${filtered.length} tweets from ${instance}`);
+          // Limit number of tweets based on subscription tier
+          const maxTweets = options.maxTweets || 10;
+          filtered = filtered.slice(0, maxTweets);
+
+          console.log(`🐦 [TWITTER] ✅ Success! Fetched ${filtered.length} tweets from ${instance} (limited to ${maxTweets})`);
           return filtered;
         } catch (err) {
           console.log(`🐦 [TWITTER] ⚠️ Instance ${instance} failed, trying next...`);
