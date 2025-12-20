@@ -4,7 +4,7 @@
 
 -- Insert the main update entry
 INSERT INTO updates (version, title, release_date, description, type, is_major, is_published, order_index) VALUES
-('2.2.9', 'Staff Applications & Sticky Messages', CURRENT_DATE, 'Professional staff recruitment system with voting, reviews, and comprehensive application management. Plus sticky messages that automatically stay at the bottom of your channels for important announcements.', 'feature', true, true, 0)
+('2.2.8', 'Staff Applications & Sticky Messages', CURRENT_DATE, 'Professional staff recruitment system with voting, reviews, and comprehensive application management. Plus sticky messages that automatically stay at the bottom of your channels for important announcements.', 'feature', true, true, 0)
 ON CONFLICT DO NOTHING;
 
 -- ============================================
