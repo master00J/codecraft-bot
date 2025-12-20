@@ -281,38 +281,21 @@ class TwitterMonitorManager {
 
   /**
    * Fetch tweets from Twitter/X account
-   * Using multiple fallback methods
+   * Uses Nitter RSS (free, no API key required)
    */
   async fetchUserTweets(username, options = {}) {
     console.log(`🔍 Fetching tweets for @${username}...`);
     
-    // Try RapidAPI first (if available)
-    if (process.env.RAPIDAPI_KEY) {
-      console.log('🔑 Trying RapidAPI...');
-      try {
-        const tweets = await this.fetchTweetsViaRapidAPI(username, options);
-        console.log(`✅ RapidAPI returned ${tweets.length} tweets`);
-        return tweets;
-      } catch (error) {
-        console.error('❌ RapidAPI method failed, trying fallback:', error.message);
-      }
-    } else {
-      console.log('⚠️ No RAPIDAPI_KEY found, using Nitter fallback');
-    }
-
-    // Fallback to Nitter RSS (free, no API key required)
-    console.log('🔄 Trying Nitter RSS...');
+    // Use Nitter RSS (free, no API key required)
+    console.log('🔄 Using Nitter RSS...');
     try {
       const tweets = await this.fetchTweetsViaNitter(username, options);
       console.log(`✅ Nitter returned ${tweets.length} tweets`);
       return tweets;
     } catch (error) {
       console.error('❌ Nitter method failed:', error.message);
+      return [];
     }
-
-    // If all methods fail
-    console.error(`❌ Could not fetch tweets for @${username} - all methods failed`);
-    return [];
   }
 
   /**
