@@ -131,13 +131,16 @@ ALTER TABLE public.portfolio ENABLE ROW LEVEL SECURITY;
 -- 9. Create RLS Policies
 
 -- Users: Users can read their own data, service role can do anything
+DROP POLICY IF EXISTS "Users can view own data" ON public.users;
 CREATE POLICY "Users can view own data" ON public.users
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage users" ON public.users;
 CREATE POLICY "Service role can manage users" ON public.users
   FOR ALL USING (auth.role() = 'service_role');
 
 -- Orders: Users can view their own orders, admins can view all
+DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
 CREATE POLICY "Users can view own orders" ON public.orders
   FOR SELECT USING (
     discord_id = current_setting('request.jwt.claims', true)::json->>'discord_id'
@@ -148,20 +151,25 @@ CREATE POLICY "Users can view own orders" ON public.orders
     )
   );
 
+DROP POLICY IF EXISTS "Service role can manage orders" ON public.orders;
 CREATE POLICY "Service role can manage orders" ON public.orders
   FOR ALL USING (auth.role() = 'service_role');
 
 -- Portfolio: Everyone can read, only service role can manage
+DROP POLICY IF EXISTS "Anyone can view portfolio" ON public.portfolio;
 CREATE POLICY "Anyone can view portfolio" ON public.portfolio
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage portfolio" ON public.portfolio;
 CREATE POLICY "Service role can manage portfolio" ON public.portfolio
   FOR ALL USING (auth.role() = 'service_role');
 
 -- Reviews: Everyone can read, users can create for their orders
+DROP POLICY IF EXISTS "Anyone can view reviews" ON public.reviews;
 CREATE POLICY "Anyone can view reviews" ON public.reviews
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage reviews" ON public.reviews;
 CREATE POLICY "Service role can manage reviews" ON public.reviews
   FOR ALL USING (auth.role() = 'service_role');
 
@@ -175,12 +183,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 11. Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_orders_updated_at ON public.orders;
 CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON public.orders
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_tickets_updated_at ON public.tickets;
 CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON public.tickets
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
