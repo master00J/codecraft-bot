@@ -315,6 +315,40 @@ CREATE INDEX IF NOT EXISTS idx_vouches_to_user_id ON public.vouches(to_user_id);
 CREATE INDEX IF NOT EXISTS idx_vouches_from_user_id ON public.vouches(from_user_id);
 CREATE INDEX IF NOT EXISTS idx_vouches_rating ON public.vouches(rating);
 
+-- 16. Create sticky messages table
+CREATE TABLE IF NOT EXISTS public.sticky_messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_content TEXT NOT NULL,
+  embed_data JSONB,
+  last_message_id TEXT,
+  enabled BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(guild_id, channel_id)
+);
+
+-- Enable RLS on sticky_messages
+ALTER TABLE public.sticky_messages ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Service role can manage sticky messages" ON public.sticky_messages;
+
+-- Policy: Service role can manage all sticky messages
+CREATE POLICY "Service role can manage sticky messages" ON public.sticky_messages
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_sticky_messages_updated_at ON public.sticky_messages;
+CREATE TRIGGER update_sticky_messages_updated_at BEFORE UPDATE ON public.sticky_messages
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_sticky_messages_guild_id ON public.sticky_messages(guild_id);
+CREATE INDEX IF NOT EXISTS idx_sticky_messages_channel_id ON public.sticky_messages(channel_id);
+CREATE INDEX IF NOT EXISTS idx_sticky_messages_enabled ON public.sticky_messages(enabled);
+
 -- Success message
 DO $$
 BEGIN

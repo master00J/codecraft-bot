@@ -99,6 +99,7 @@ const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generato
 const combatCardGenerator = require('./modules/comcraft/combat/combat-card-generator');
 const StockMarketManager = require('./modules/comcraft/economy/stock-market-manager');
 const { getSupabase } = require('./modules/supabase-client');
+const StickyMessagesManager = require('./modules/comcraft/sticky-messages/manager');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -472,6 +473,7 @@ let tiktokMonitor;
 let discordManager;
 let autoRolesManager;
 let giveawayManager;
+let stickyMessagesManager;
 let casinoManager;
 let duelManager;
 let combatXPManager;
@@ -777,6 +779,11 @@ client.once('ready', async () => {
   console.log('🎂 Birthday manager initialized');
 
   giveawayManager = new GiveawayManager(client);
+
+  // Initialize Sticky Messages Manager
+  stickyMessagesManager = new StickyMessagesManager(client);
+  await stickyMessagesManager.initialize();
+  console.log('📌 Sticky Messages Manager initialized');
   giveawayManager.startScheduler();
   console.log('🎉 Giveaway Manager initialized');
 
@@ -1543,6 +1550,13 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // MESSAGE CREATE (XP, Auto-mod, Custom commands)
 // ================================================================
 client.on('messageCreate', handleMessageCreate);
+
+// Handle sticky messages
+client.on('messageCreate', async (message) => {
+  if (stickyMessagesManager) {
+    await stickyMessagesManager.handleMessage(message);
+  }
+});
 
 // ================================================================
 // INTERACTIONS (Commands, Buttons, Select Menus)
@@ -2706,6 +2720,12 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'toprep': {
         await handleTopRepCommand(interaction);
+        break;
+      }
+
+      // ============ STICKY MESSAGES COMMANDS ============
+      case 'sticky': {
+        await handleStickyCommand(interaction);
         break;
       }
 
@@ -7741,6 +7761,145 @@ async function handleTopRepCommand(interaction) {
 }
 
 /**
+ * Handle sticky command - Manage sticky messages
+ */
+async function handleStickyCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    if (!stickyMessagesManager) {
+      return interaction.editReply({
+        content: '❌ Sticky messages system is not available.',
+      });
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    const guildId = interaction.guild.id;
+
+    switch (subcommand) {
+      case 'set': {
+        const channel = interaction.options.getChannel('channel');
+        const message = interaction.options.getString('message');
+
+        if (!channel.isTextBased()) {
+          return interaction.editReply({
+            content: '❌ You can only set sticky messages in text channels!',
+          });
+        }
+
+        const result = await stickyMessagesManager.setSticky(
+          guildId,
+          channel.id,
+          message
+        );
+
+        if (result.success) {
+          // Post initial sticky message
+          await stickyMessagesManager.refreshSticky(channel.id);
+
+          return interaction.editReply({
+            content: `✅ Sticky message set for ${channel}!\n\n**Preview:**\n${message}`,
+          });
+        } else {
+          return interaction.editReply({
+            content: `❌ Failed to set sticky message: ${result.error}`,
+          });
+        }
+      }
+
+      case 'remove': {
+        const channel = interaction.options.getChannel('channel');
+
+        const result = await stickyMessagesManager.removeSticky(guildId, channel.id);
+
+        if (result.success) {
+          return interaction.editReply({
+            content: `✅ Sticky message removed from ${channel}!`,
+          });
+        } else {
+          return interaction.editReply({
+            content: `❌ Failed to remove sticky message: ${result.error}`,
+          });
+        }
+      }
+
+      case 'list': {
+        const result = await stickyMessagesManager.listStickies(guildId);
+
+        if (!result.success || result.stickies.length === 0) {
+          return interaction.editReply({
+            content: '📌 No sticky messages configured in this server.',
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#5865F2')
+          .setTitle('📌 Sticky Messages')
+          .setDescription(`Found ${result.stickies.length} sticky message(s)`)
+          .setTimestamp();
+
+        result.stickies.forEach((sticky, index) => {
+          const channel = interaction.guild.channels.cache.get(sticky.channel_id);
+          const channelName = channel ? `#${channel.name}` : sticky.channel_id;
+          const status = sticky.enabled ? '🟢 Active' : '🔴 Disabled';
+
+          embed.addFields({
+            name: `${index + 1}. ${channelName} ${status}`,
+            value: sticky.message_content.substring(0, 100) + (sticky.message_content.length > 100 ? '...' : ''),
+            inline: false,
+          });
+        });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      case 'toggle': {
+        const channel = interaction.options.getChannel('channel');
+        const enabled = interaction.options.getBoolean('enabled');
+
+        const result = await stickyMessagesManager.toggleSticky(guildId, channel.id, enabled);
+
+        if (result.success) {
+          return interaction.editReply({
+            content: `✅ Sticky message ${enabled ? 'enabled' : 'disabled'} for ${channel}!`,
+          });
+        } else {
+          return interaction.editReply({
+            content: `❌ Failed to toggle sticky message: ${result.error}`,
+          });
+        }
+      }
+
+      case 'refresh': {
+        const channel = interaction.options.getChannel('channel');
+
+        const result = await stickyMessagesManager.refreshSticky(channel.id);
+
+        if (result.success) {
+          return interaction.editReply({
+            content: `✅ Sticky message refreshed in ${channel}!`,
+          });
+        } else {
+          return interaction.editReply({
+            content: `❌ Failed to refresh sticky message: ${result.error}`,
+          });
+        }
+      }
+
+      default:
+        return interaction.editReply({
+          content: '❌ Unknown subcommand.',
+        });
+    }
+  } catch (error) {
+    console.error('Error handling sticky command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while processing the sticky command.',
+    });
+  }
+}
+
+/**
  * Handle vote command - Show voting information and link
  */
 async function handleVoteCommand(interaction) {
@@ -9816,6 +9975,74 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('toprep')
       .setDescription('🏆 View the top 10 most vouched users'),
+
+    // ============ STICKY MESSAGES COMMANDS ============
+    new SlashCommandBuilder()
+      .setName('sticky')
+      .setDescription('📌 Manage sticky messages that stay at the bottom of channels')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('set')
+          .setDescription('Set a sticky message for a channel')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('The channel to add sticky message to')
+              .setRequired(true)
+          )
+          .addStringOption(option =>
+            option
+              .setName('message')
+              .setDescription('The message to stick')
+              .setRequired(true)
+              .setMaxLength(2000)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('remove')
+          .setDescription('Remove sticky message from a channel')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('The channel to remove sticky message from')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('list')
+          .setDescription('List all sticky messages in this server')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('toggle')
+          .setDescription('Enable or disable a sticky message')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('The channel')
+              .setRequired(true)
+          )
+          .addBooleanOption(option =>
+            option
+              .setName('enabled')
+              .setDescription('Enable or disable')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('refresh')
+          .setDescription('Manually refresh a sticky message')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('The channel to refresh')
+              .setRequired(true)
+          )
+      ),
 
     // ============ TIKTOK COMMANDS ============
     new SlashCommandBuilder()
