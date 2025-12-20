@@ -47,7 +47,8 @@ import {
   FileText,
   Heart,
   UserCog,
-  Star
+  Star,
+  ClipboardList
 } from 'lucide-react';
 import {
   DndContext,
@@ -315,7 +316,7 @@ export default function GuildDashboardLayout({
     { name: 'Maid Jobs', href: `/comcraft/dashboard/${guildId}/maid-jobs`, icon: SparklesIcon, tier: featureTiers['Maid Jobs'] },
     { name: 'Referrals', href: `/comcraft/dashboard/${guildId}/referrals`, icon: Gift, tier: featureTiers['Referrals'] },
     { name: 'Vouches', href: `/comcraft/dashboard/${guildId}/vouches`, icon: Star, tier: featureTiers['Vouches'] },
-    { name: 'Applications', href: `/comcraft/dashboard/${guildId}/applications`, icon: FileText, tier: featureTiers['Applications'] },
+    { name: 'Applications', href: `/comcraft/dashboard/${guildId}/applications`, icon: ClipboardList, tier: featureTiers['Applications'] },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
     { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },
