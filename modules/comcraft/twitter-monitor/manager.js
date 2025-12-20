@@ -256,6 +256,7 @@ class TwitterMonitorManager {
         console.log(`✅ Posted ${newTweetsPosted} new tweet(s) for @${monitor.twitter_username}`);
       } else {
         console.log(`ℹ️ No new tweets to post for @${monitor.twitter_username}`);
+      }
 
       // Update last check timestamp
       if (newestTweetTime && newestTweetTime !== lastCheck) {
