@@ -43,6 +43,7 @@ const TwitchMonitor = require('./modules/comcraft/streaming/twitch-monitor');
 const TwitchEventSubManager = require('./modules/comcraft/streaming/twitch-eventsub-manager');
 const YouTubeMonitor = require('./modules/comcraft/streaming/youtube-monitor');
 const TikTokMonitor = require('./modules/comcraft/streaming/tiktok-monitor');
+const TwitterMonitorManager = require('./modules/comcraft/twitter-monitor/manager');
 const DiscordManager = require('./modules/comcraft/discord-manager');
 const analyticsTracker = require('./modules/comcraft/analytics-tracker');
 const AutoRolesManager = require('./modules/comcraft/autoroles/manager');
@@ -471,6 +472,7 @@ let twitchMonitor;
 let twitchEventSubManager;
 let youtubeMonitor;
 let tiktokMonitor;
+let twitterMonitor;
 let discordManager;
 let autoRolesManager;
 let giveawayManager;
@@ -776,6 +778,11 @@ client.once('ready', async () => {
   } else {
     console.log('⚠️ TikTok Monitor disabled: RAPIDAPI_KEY not set');
   }
+
+  // Initialize Twitter Monitor
+  twitterMonitor = new TwitterMonitorManager(client);
+  twitterMonitor.startMonitoring();
+  console.log('🐦 Twitter Monitor initialized');
 
   birthdayManager.startScheduler(client);
   console.log('🎂 Birthday manager initialized');
@@ -2728,6 +2735,19 @@ client.on('interactionCreate', async (interaction) => {
         );
         if (!allowed) break;
         await handleTikTokCommand(interaction);
+        break;
+      }
+
+      // ============ TWITTER COMMANDS ============
+      case 'twitter': {
+        const allowed = await featureGate.checkFeatureOrReply(
+          interaction,
+          interaction.guild?.id,
+          'streaming_notifications',
+          'Premium'
+        );
+        if (!allowed) break;
+        await handleTwitterCommand(interaction);
         break;
       }
 
@@ -7529,6 +7549,176 @@ async function handleTikTokCommand(interaction) {
 }
 
 /**
+ * Handle Twitter/X monitor commands
+ */
+async function handleTwitterCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  if (!twitterMonitor) {
+    return interaction.editReply({
+      content: '❌ Twitter Monitor is not available.',
+    });
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+  const guildId = interaction.guild.id;
+
+  try {
+    switch (subcommand) {
+      case 'add': {
+        const username = interaction.options.getString('username');
+        const channel = interaction.options.getChannel('channel');
+        const includeRetweets = interaction.options.getBoolean('include_retweets') ?? false;
+        const includeReplies = interaction.options.getBoolean('include_replies') ?? false;
+        const mentionRole = interaction.options.getRole('mention_role');
+        const message = interaction.options.getString('message');
+
+        const result = await twitterMonitor.addMonitor(guildId, channel.id, username, {
+          includeRetweets,
+          includeReplies,
+          mentionRoleId: mentionRole?.id,
+          notificationMessage: message
+        });
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#1DA1F2')
+          .setTitle('🐦 Twitter Monitor Added!')
+          .setDescription(`Now monitoring **@${username.replace('@', '')}** for new tweets.`)
+          .addFields(
+            { name: '📺 Channel', value: `<#${channel.id}>`, inline: true },
+            { name: '🔁 Retweets', value: includeRetweets ? 'Yes' : 'No', inline: true },
+            { name: '💬 Replies', value: includeReplies ? 'Yes' : 'No', inline: true }
+          );
+
+        if (mentionRole) {
+          embed.addFields({ name: '🔔 Mention Role', value: `<@&${mentionRole.id}>`, inline: true });
+        }
+
+        embed.setFooter({ text: 'New tweets will be posted automatically' });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      case 'remove': {
+        const username = interaction.options.getString('username');
+        
+        // Find monitor by username
+        const monitorsResult = await twitterMonitor.getGuildMonitors(guildId);
+        if (!monitorsResult.success) {
+          return interaction.editReply({
+            content: `❌ Failed to fetch monitors`,
+          });
+        }
+
+        const cleanUsername = username.replace('@', '').toLowerCase();
+        const monitor = monitorsResult.monitors.find(m => m.twitter_username.toLowerCase() === cleanUsername);
+        
+        if (!monitor) {
+          return interaction.editReply({
+            content: `❌ No monitor found for **@${cleanUsername}**`,
+          });
+        }
+
+        const result = await twitterMonitor.removeMonitor(monitor.id, guildId);
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        return interaction.editReply({
+          content: `✅ Stopped monitoring **@${cleanUsername}**.`,
+        });
+      }
+
+      case 'list': {
+        const result = await twitterMonitor.getGuildMonitors(guildId);
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        if (result.monitors.length === 0) {
+          return interaction.editReply({
+            content: '📭 No Twitter accounts are being monitored in this server.',
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#1DA1F2')
+          .setTitle('🐦 Twitter Monitors')
+          .setDescription(
+            result.monitors.map((m, i) => {
+              const status = m.enabled ? '✅' : '❌';
+              const options = [];
+              if (m.include_retweets) options.push('RT');
+              if (m.include_replies) options.push('Replies');
+              const optStr = options.length > 0 ? ` (${options.join(', ')})` : '';
+              return `${i + 1}. **@${m.twitter_username}** → <#${m.channel_id}> ${status}${optStr}`;
+            }).join('\n')
+          )
+          .setFooter({ text: `${result.monitors.length} account(s) monitored` });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      case 'toggle': {
+        const username = interaction.options.getString('username');
+        const enabled = interaction.options.getBoolean('enabled');
+        
+        // Find monitor by username
+        const monitorsResult = await twitterMonitor.getGuildMonitors(guildId);
+        if (!monitorsResult.success) {
+          return interaction.editReply({
+            content: `❌ Failed to fetch monitors`,
+          });
+        }
+
+        const cleanUsername = username.replace('@', '').toLowerCase();
+        const monitor = monitorsResult.monitors.find(m => m.twitter_username.toLowerCase() === cleanUsername);
+        
+        if (!monitor) {
+          return interaction.editReply({
+            content: `❌ No monitor found for **@${cleanUsername}**`,
+          });
+        }
+
+        const result = await twitterMonitor.updateMonitor(monitor.id, guildId, { enabled });
+
+        if (!result.success) {
+          return interaction.editReply({
+            content: `❌ ${result.error}`,
+          });
+        }
+
+        return interaction.editReply({
+          content: `✅ Monitor for **@${cleanUsername}** has been ${enabled ? 'enabled' : 'disabled'}.`,
+        });
+      }
+
+      default:
+        return interaction.editReply({
+          content: '❌ Unknown subcommand',
+        });
+    }
+  } catch (error) {
+    console.error('Error handling Twitter command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while processing your command.',
+    });
+  }
+}
+
+/**
  * Handle vouch command - Give someone a rating
  */
 async function handleVouchCommand(interaction) {
@@ -10528,6 +10718,86 @@ async function registerCommands(clientInstance) {
             option
               .setName('username')
               .setDescription('TikTok username to test')
+              .setRequired(true)
+          )
+      ),
+    
+    // ============ TWITTER COMMANDS ============
+    new SlashCommandBuilder()
+      .setName('twitter')
+      .setDescription('🐦 Manage Twitter/X account notifications')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('add')
+          .setDescription('Add a Twitter account to monitor')
+          .addStringOption(option =>
+            option
+              .setName('username')
+              .setDescription('Twitter username (e.g. @username)')
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('Channel to post notifications')
+              .setRequired(true)
+          )
+          .addBooleanOption(option =>
+            option
+              .setName('include_retweets')
+              .setDescription('Include retweets? (default: false)')
+              .setRequired(false)
+          )
+          .addBooleanOption(option =>
+            option
+              .setName('include_replies')
+              .setDescription('Include replies? (default: false)')
+              .setRequired(false)
+          )
+          .addRoleOption(option =>
+            option
+              .setName('mention_role')
+              .setDescription('Role to mention when new tweet is posted')
+              .setRequired(false)
+          )
+          .addStringOption(option =>
+            option
+              .setName('message')
+              .setDescription('Custom notification message')
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('remove')
+          .setDescription('Stop monitoring a Twitter account')
+          .addStringOption(option =>
+            option
+              .setName('username')
+              .setDescription('Twitter username to remove')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('list')
+          .setDescription('List all monitored Twitter accounts')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('toggle')
+          .setDescription('Enable or disable a Twitter monitor')
+          .addStringOption(option =>
+            option
+              .setName('username')
+              .setDescription('Twitter username')
+              .setRequired(true)
+          )
+          .addBooleanOption(option =>
+            option
+              .setName('enabled')
+              .setDescription('Enable or disable')
               .setRequired(true)
           )
       ),

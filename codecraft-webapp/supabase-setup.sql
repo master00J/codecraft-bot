@@ -417,6 +417,55 @@ CREATE INDEX IF NOT EXISTS idx_applications_status ON public.applications(status
 CREATE INDEX IF NOT EXISTS idx_applications_created_at ON public.applications(created_at);
 
 -- Success message
+-- 19. Create Twitter monitors table
+CREATE TABLE IF NOT EXISTS public.twitter_monitors (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  twitter_username TEXT NOT NULL,
+  enabled BOOLEAN DEFAULT true,
+  include_retweets BOOLEAN DEFAULT false,
+  include_replies BOOLEAN DEFAULT false,
+  notification_message TEXT,
+  mention_role_id TEXT,
+  last_tweet_at TIMESTAMP WITH TIME ZONE,
+  last_check_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(guild_id, twitter_username)
+);
+
+-- Enable RLS
+ALTER TABLE public.twitter_monitors ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY "Users can view twitter_monitors for their guilds"
+  ON public.twitter_monitors FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can insert twitter_monitors"
+  ON public.twitter_monitors FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Users can update twitter_monitors"
+  ON public.twitter_monitors FOR UPDATE
+  USING (true);
+
+CREATE POLICY "Users can delete twitter_monitors"
+  ON public.twitter_monitors FOR DELETE
+  USING (true);
+
+-- Create trigger for updated_at
+CREATE TRIGGER update_twitter_monitors_updated_at
+  BEFORE UPDATE ON public.twitter_monitors
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_twitter_monitors_guild_id ON public.twitter_monitors(guild_id);
+CREATE INDEX IF NOT EXISTS idx_twitter_monitors_enabled ON public.twitter_monitors(enabled);
+CREATE INDEX IF NOT EXISTS idx_twitter_monitors_username ON public.twitter_monitors(twitter_username);
+
 DO $$
 BEGIN
   RAISE NOTICE 'Database setup completed successfully!';

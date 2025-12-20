@@ -47,7 +47,8 @@ import {
   Heart,
   UserCog,
   Star,
-  ClipboardList
+  ClipboardList,
+  Twitter
 } from 'lucide-react';
 
 // Use Sparkles as icon for Maid Jobs
@@ -298,6 +299,7 @@ export default function GuildDashboardLayout({
     { name: 'Moderation', href: `/comcraft/dashboard/${guildId}#moderation`, icon: Shield, tier: featureTiers['Moderation'] },
     { name: 'Commands', href: `/comcraft/dashboard/${guildId}#commands`, icon: MessageSquare, tier: featureTiers['Commands'] },
     { name: 'Streaming', href: `/comcraft/dashboard/${guildId}#streaming`, icon: Tv, tier: featureTiers['Streaming'] },
+    { name: 'Twitter', href: `/comcraft/dashboard/${guildId}/twitter`, icon: Twitter, tier: featureTiers['Streaming'] },
     { name: 'Birthdays', href: `/comcraft/dashboard/${guildId}#birthdays`, icon: Calendar, tier: featureTiers['Birthdays'] },
     { name: 'Feedback', href: `/comcraft/dashboard/${guildId}#feedback`, icon: MessageCircle, tier: featureTiers['Feedback'] },
     { name: 'Tickets', href: `/comcraft/dashboard/${guildId}#tickets`, icon: Ticket, tier: featureTiers['Tickets'] },
