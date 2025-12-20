@@ -278,23 +278,151 @@ class TwitterMonitorManager {
 
   /**
    * Fetch tweets from Twitter/X account
-   * Uses Nitter RSS (free, no API key required)
+   * Uses official Twitter API v2 (requires TWITTER_BEARER_TOKEN)
    */
   async fetchUserTweets(username, options = {}) {
-    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username} via Nitter RSS...`);
+    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username}...`);
     
+    // Check if Twitter Bearer Token is configured
+    if (process.env.TWITTER_BEARER_TOKEN) {
+      console.log(`🐦 [TWITTER] 🔑 Using official Twitter API v2...`);
+      try {
+        const tweets = await this.fetchTweetsViaTwitterAPIv2(username, options);
+        console.log(`🐦 [TWITTER] ✅ Twitter API returned ${tweets.length} tweets`);
+        return tweets;
+      } catch (error) {
+        console.error(`🐦 [TWITTER] ❌ Twitter API failed: ${error.message}`);
+        console.log(`🐦 [TWITTER] 🔄 Falling back to Nitter RSS...`);
+      }
+    } else {
+      console.log(`🐦 [TWITTER] ⚠️ No TWITTER_BEARER_TOKEN found, using Nitter RSS fallback...`);
+    }
+    
+    // Fallback to Nitter RSS (unreliable)
     try {
       const tweets = await this.fetchTweetsViaNitter(username, options);
       console.log(`🐦 [TWITTER] ✅ Nitter returned ${tweets.length} tweets`);
       return tweets;
     } catch (error) {
-      console.error(`🐦 [TWITTER] ❌ Failed to fetch tweets: ${error.message}`);
+      console.error(`🐦 [TWITTER] ❌ All methods failed: ${error.message}`);
       return [];
     }
   }
 
   /**
-   * Fetch tweets via RapidAPI
+   * Fetch tweets via official Twitter API v2
+   * Requires TWITTER_BEARER_TOKEN environment variable
+   */
+  async fetchTweetsViaTwitterAPIv2(username, options = {}) {
+    try {
+      // Step 1: Get user ID from username
+      const userResponse = await axios.get(
+        `https://api.twitter.com/2/users/by/username/${username}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.TWITTER_BEARER_TOKEN}`
+          },
+          timeout: 10000
+        }
+      );
+
+      if (!userResponse.data || !userResponse.data.data || !userResponse.data.data.id) {
+        throw new Error('User not found');
+      }
+
+      const userId = userResponse.data.data.id;
+
+      // Step 2: Get user's tweets
+      const tweetsResponse = await axios.get(
+        `https://api.twitter.com/2/users/${userId}/tweets`,
+        {
+          params: {
+            max_results: 10,
+            'tweet.fields': 'created_at,author_id,text,referenced_tweets,attachments',
+            'expansions': 'attachments.media_keys,author_id',
+            'media.fields': 'url,preview_image_url,type',
+            'user.fields': 'name,username,profile_image_url'
+          },
+          headers: {
+            'Authorization': `Bearer ${process.env.TWITTER_BEARER_TOKEN}`
+          },
+          timeout: 10000
+        }
+      );
+
+      if (!tweetsResponse.data || !tweetsResponse.data.data) {
+        return [];
+      }
+
+      const tweets = tweetsResponse.data.data;
+      const includes = tweetsResponse.data.includes || {};
+      const users = includes.users || [];
+      const media = includes.media || [];
+
+      // Convert to standard format
+      let formattedTweets = tweets.map(tweet => {
+        const author = users.find(u => u.id === tweet.author_id);
+        const isRetweet = tweet.referenced_tweets?.some(ref => ref.type === 'retweeted');
+        const isReply = tweet.referenced_tweets?.some(ref => ref.type === 'replied_to');
+
+        // Get media
+        let tweetMedia = null;
+        if (tweet.attachments && tweet.attachments.media_keys && tweet.attachments.media_keys.length > 0) {
+          const mediaKey = tweet.attachments.media_keys[0];
+          tweetMedia = media.find(m => m.media_key === mediaKey);
+        }
+
+        return {
+          id_str: tweet.id,
+          id: tweet.id,
+          text: tweet.text,
+          created_at: tweet.created_at,
+          user: {
+            screen_name: author?.username || username,
+            name: author?.name || username,
+            profile_image_url_https: author?.profile_image_url || null
+          },
+          entities: {
+            urls: [],
+            media: tweetMedia ? [{
+              type: tweetMedia.type,
+              media_url_https: tweetMedia.url || tweetMedia.preview_image_url
+            }] : []
+          },
+          url: `https://twitter.com/${username}/status/${tweet.id}`,
+          is_retweet: isRetweet,
+          in_reply_to_screen_name: isReply ? 'someone' : null
+        };
+      });
+
+      // Filter based on options
+      if (!options.includeRetweets) {
+        formattedTweets = formattedTweets.filter(t => !t.is_retweet);
+      }
+      if (!options.includeReplies) {
+        formattedTweets = formattedTweets.filter(t => !t.in_reply_to_screen_name);
+      }
+
+      return formattedTweets;
+    } catch (error) {
+      if (error.response) {
+        const status = error.response.status;
+        const message = error.response.data?.detail || error.response.data?.error || 'Unknown error';
+        
+        if (status === 401) {
+          throw new Error('Invalid Twitter API Bearer Token');
+        } else if (status === 429) {
+          throw new Error('Twitter API rate limit exceeded');
+        } else {
+          throw new Error(`Twitter API HTTP ${status}: ${message}`);
+        }
+      }
+      throw new Error(`Twitter API request failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fetch tweets via RapidAPI (DEPRECATED - not used)
    */
   async fetchTweetsViaRapidAPI(username, options = {}) {
     try {
