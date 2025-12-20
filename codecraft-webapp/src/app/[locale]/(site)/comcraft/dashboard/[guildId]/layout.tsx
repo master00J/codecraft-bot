@@ -45,7 +45,9 @@ import {
   X,
   FileText,
   Heart,
-  UserCog
+  UserCog,
+  Star,
+  ClipboardList
 } from 'lucide-react';
 
 // Use Sparkles as icon for Maid Jobs
@@ -319,6 +321,8 @@ export default function GuildDashboardLayout({
     { name: 'User Profiles', href: `/comcraft/dashboard/${guildId}/user-profiles`, icon: FileText, tier: featureTiers['User Profiles'] },
     { name: 'Maid Jobs', href: `/comcraft/dashboard/${guildId}/maid-jobs`, icon: SparklesIcon, tier: featureTiers['Maid Jobs'] },
     { name: 'Referrals', href: `/comcraft/dashboard/${guildId}/referrals`, icon: Gift, tier: featureTiers['Referrals'] },
+    { name: 'Vouches', href: `/comcraft/dashboard/${guildId}/vouches`, icon: Star },
+    { name: 'Applications', href: `/comcraft/dashboard/${guildId}/applications`, icon: ClipboardList },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
     { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },
