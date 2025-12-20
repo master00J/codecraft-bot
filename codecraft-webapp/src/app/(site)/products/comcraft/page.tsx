@@ -43,6 +43,9 @@ import {
   Clock,
   Image as ImageIcon,
   MessageSquarePlus,
+  Twitter,
+  Pin,
+  ClipboardList,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -846,6 +849,122 @@ export default function ComcraftProductPage() {
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
                   <span>Status tracking & responses</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-sky-500">
+              <div className="bg-sky-100 dark:bg-sky-900/30 p-3 rounded-lg w-fit mb-4">
+                <Twitter className="h-8 w-8 text-sky-600 dark:text-sky-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Twitter/X Monitor</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Automatically post new tweets from Twitter/X accounts to your Discord channels. Monitor multiple accounts with custom notifications and filters.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Monitor unlimited Twitter accounts</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Filter retweets & replies</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Custom notifications & role mentions</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Automatic checks every 2 minutes</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-yellow-500">
+              <div className="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-lg w-fit mb-4">
+                <Star className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Vouch & Reputation System</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Let community members vouch for each other with 1-5 star ratings and comments. Build trust and showcase top contributors with reputation leaderboards.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>1-5 star rating system</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Optional comments & reviews</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Top reputation leaderboards</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Admin management dashboard</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-emerald-500">
+              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-lg w-fit mb-4">
+                <Pin className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Sticky Messages</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Pin important messages that automatically stay at the bottom of your channels. Perfect for rules, announcements, and persistent information.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Auto-repost on new messages</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Rich embed support</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Per-channel configuration</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Easy enable/disable toggle</span>
+                </li>
+              </ul>
+            </Card>
+
+            <Card className="p-8 hover:shadow-xl transition-all border-2 hover:border-blue-500">
+              <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg w-fit mb-4">
+                <ClipboardList className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-3">Staff Applications</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Professional staff recruitment system with custom questions, voting system, and approval workflow. Streamline your hiring process with comprehensive application management.
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Custom application questions</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Voting system for staff</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Approve/reject with reasons</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Cooldowns & account age requirements</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Dashboard management & analytics</span>
                 </li>
               </ul>
             </Card>
