@@ -308,27 +308,23 @@ class TwitterMonitorManager {
 
   /**
    * Fetch tweets from Twitter/X account
-   * Uses official Twitter API v2 (requires TWITTER_BEARER_TOKEN)
+   * Uses RSS.app as primary method
    */
   async fetchUserTweets(username, options = {}) {
-    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username} via Nitter RSS...`);
+    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username}...`);
     
-    // Check if Twitter Bearer Token is configured
-    if (process.env.TWITTER_BEARER_TOKEN) {
-      console.log(`🐦 [TWITTER] 🔑 Using official Twitter API v2...`);
-      try {
-        const tweets = await this.fetchTweetsViaTwitterAPIv2(username, options);
-        console.log(`🐦 [TWITTER] ✅ Twitter API returned ${tweets.length} tweets`);
-        return tweets;
-      } catch (error) {
-        console.error(`🐦 [TWITTER] ❌ Twitter API failed: ${error.message}`);
-        console.log(`🐦 [TWITTER] 🔄 Falling back to Nitter RSS...`);
-      }
-    } else {
-      console.log(`🐦 [TWITTER] ⚠️ No TWITTER_BEARER_TOKEN found, using Nitter RSS fallback...`);
+    // Primary: Use RSS.app (reliable and affordable)
+    console.log(`🐦 [TWITTER] 📡 Using RSS.app...`);
+    try {
+      const tweets = await this.fetchTweetsViaRSSApp(username, options);
+      console.log(`🐦 [TWITTER] ✅ RSS.app returned ${tweets.length} tweets`);
+      return tweets;
+    } catch (error) {
+      console.error(`🐦 [TWITTER] ❌ RSS.app failed: ${error.message}`);
+      console.log(`🐦 [TWITTER] 🔄 Falling back to Nitter RSS...`);
     }
     
-    // Fallback to Nitter RSS (unreliable)
+    // Fallback to Nitter RSS (unreliable but free)
     try {
       const tweets = await this.fetchTweetsViaNitter(username, options);
       console.log(`🐦 [TWITTER] ✅ Nitter returned ${tweets.length} tweets`);
@@ -336,6 +332,97 @@ class TwitterMonitorManager {
     } catch (error) {
       console.error(`🐦 [TWITTER] ❌ All methods failed: ${error.message}`);
       return [];
+    }
+  }
+
+  /**
+   * Fetch tweets via RSS.app
+   * Requires RSSAPP_API_KEY environment variable
+   */
+  async fetchTweetsViaRSSApp(username, options = {}) {
+    try {
+      const cleanUsername = username.replace('@', '');
+      const maxTweets = options.maxTweets || 10;
+      
+      // RSS.app API endpoint
+      // Format: https://rss.app/feeds/[feed_id].json or RSS endpoint
+      const apiKey = process.env.RSSAPP_API_KEY;
+      
+      if (!apiKey) {
+        throw new Error('RSSAPP_API_KEY not configured');
+      }
+
+      // Create or get RSS feed for this Twitter account
+      // RSS.app format: twitter/username
+      const feedResponse = await axios.get(
+        `https://rss.app/api/v1/feeds`,
+        {
+          params: {
+            url: `https://twitter.com/${cleanUsername}`,
+            api_key: apiKey
+          },
+          timeout: 10000
+        }
+      );
+
+      if (!feedResponse.data || !feedResponse.data.feed_url) {
+        throw new Error('Failed to get RSS feed from RSS.app');
+      }
+
+      // Fetch the RSS feed
+      const Parser = require('rss-parser');
+      const parser = new Parser({
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      const feed = await parser.parseURL(feedResponse.data.feed_url);
+
+      if (!feed || !feed.items || feed.items.length === 0) {
+        throw new Error('RSS feed is empty');
+      }
+
+      // Convert RSS items to tweet format
+      let tweets = feed.items.map(item => {
+        const isRetweet = item.title && (item.title.startsWith('RT @') || item.title.startsWith('RT by @'));
+        const isReply = item.title && item.title.includes('Replying to @');
+
+        return {
+          id_str: item.guid || item.link?.split('/').pop() || Date.now().toString(),
+          id: item.guid || item.link?.split('/').pop() || Date.now().toString(),
+          text: item.title || item.contentSnippet || '',
+          created_at: item.pubDate || item.isoDate || new Date().toISOString(),
+          user: {
+            screen_name: cleanUsername,
+            name: feed.title ? feed.title.split('(')[0].trim() : cleanUsername,
+            profile_image_url_https: null
+          },
+          entities: {
+            urls: [],
+            media: []
+          },
+          url: item.link || `https://twitter.com/${cleanUsername}`,
+          is_retweet: isRetweet,
+          in_reply_to_screen_name: isReply ? 'someone' : null
+        };
+      });
+
+      // Filter based on options
+      if (!options.includeRetweets) {
+        tweets = tweets.filter(t => !t.is_retweet);
+      }
+      if (!options.includeReplies) {
+        tweets = tweets.filter(t => !t.in_reply_to_screen_name);
+      }
+
+      // Limit to max tweets
+      tweets = tweets.slice(0, maxTweets);
+
+      return tweets;
+    } catch (error) {
+      throw new Error(`RSS.app fetch failed: ${error.message}`);
     }
   }
 
