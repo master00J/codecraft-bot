@@ -350,18 +350,24 @@ class TwitterMonitorManager {
     try {
       const Parser = require('rss-parser');
       const parser = new Parser({
-        timeout: 10000,
+        timeout: 15000, // Increased timeout to 15s
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       });
 
       // Use multiple Nitter instances as fallbacks
+      // Note: Nitter instances are frequently blocked by Twitter/X
       const nitterInstances = [
-        'nitter.net',
-        'nitter.privacydev.net',
         'nitter.poast.org',
-        'nitter.1d4.us'
+        'nitter.privacydev.net',
+        'nitter.net',
+        'nitter.unixfox.eu',
+        'nitter.cz',
+        'nitter.kavin.rocks',
+        'nitter.fdn.fr',
+        'nitter.1d4.us',
+        'nitter.nixnet.services'
       ];
 
       for (const instance of nitterInstances) {
