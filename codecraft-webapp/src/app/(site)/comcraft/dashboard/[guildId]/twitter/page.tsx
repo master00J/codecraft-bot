@@ -42,6 +42,7 @@ export default function TwitterDashboard() {
   const [creating, setCreating] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [monitorToDelete, setMonitorToDelete] = useState<string | null>(null);
+  const [limits, setLimits] = useState<{ current: number; max: number; tier: string }>({ current: 0, max: 0, tier: 'free' });
 
   const [newMonitor, setNewMonitor] = useState({
     twitter_username: '',
@@ -64,6 +65,11 @@ export default function TwitterDashboard() {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/twitter`);
       const data = await response.json();
       setMonitors(data.monitors || []);
+      
+      // Fetch limits
+      if (data.limits) {
+        setLimits(data.limits);
+      }
     } catch (error) {
       console.error('Error fetching Twitter monitors:', error);
       toast({
@@ -206,6 +212,9 @@ export default function TwitterDashboard() {
     );
   }
 
+  const isAtLimit = limits.max !== -1 && limits.current >= limits.max;
+  const limitColor = isAtLimit ? 'destructive' : limits.current >= limits.max * 0.8 ? 'warning' : 'default';
+  
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -215,11 +224,45 @@ export default function TwitterDashboard() {
           <p className="text-muted-foreground mt-2">
             Automatically post new tweets from Twitter/X accounts to your Discord channels
           </p>
+          {limits.max !== -1 && (
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant={limitColor as any}>
+                {limits.current}/{limits.max === -1 ? '∞' : limits.max} monitors used
+              </Badge>
+              <span className="text-sm text-muted-foreground">({limits.tier} tier)</span>
+            </div>
+          )}
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button 
+          onClick={() => setShowForm(!showForm)}
+          disabled={isAtLimit}
+        >
           {showForm ? 'Cancel' : '+ Add Monitor'}
         </Button>
       </div>
+
+      {/* Limit Warning */}
+      {isAtLimit && (
+        <Card className="p-4 border-amber-500 bg-amber-50 dark:bg-amber-950">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <h3 className="font-semibold text-amber-900 dark:text-amber-100">Monitor Limit Reached</h3>
+              <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
+                You&apos;ve reached your limit of {limits.max} Twitter monitors. Upgrade to add more!
+              </p>
+              <a 
+                href="https://codecraft-solutions.com/en/products/comcraft" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-amber-900 dark:text-amber-100 underline mt-2 inline-block"
+              >
+                View upgrade options →
+              </a>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Add Monitor Form */}
       {showForm && (

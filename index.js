@@ -7573,6 +7573,30 @@ async function handleTwitterCommand(interaction) {
         const mentionRole = interaction.options.getRole('mention_role');
         const message = interaction.options.getString('message');
 
+        // Check current monitor count
+        const monitorsResult = await twitterMonitor.getGuildMonitors(guildId);
+        if (!monitorsResult.success) {
+          return interaction.editReply({
+            content: `❌ Failed to check current monitors`,
+          });
+        }
+
+        const currentCount = monitorsResult.monitors.length;
+
+        // Check limit
+        const withinLimit = await featureGate.checkLimitOrReply(
+          interaction,
+          guildId,
+          'twitter_monitors',
+          currentCount,
+          'Twitter Monitors',
+          'Basic'
+        );
+
+        if (!withinLimit) {
+          return; // featureGate already replied
+        }
+
         const result = await twitterMonitor.addMonitor(guildId, channel.id, username, {
           includeRetweets,
           includeReplies,

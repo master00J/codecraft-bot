@@ -42,13 +42,38 @@ export async function GET(
     if (error) {
       // Table might not exist yet
       if (error.code === '42P01') {
-        return NextResponse.json({ monitors: [] });
+        return NextResponse.json({ monitors: [], limits: { current: 0, max: 0, tier: 'free' } });
       }
       console.error('Error fetching Twitter monitors:', error);
       return NextResponse.json({ error: 'Failed to fetch monitors' }, { status: 500 });
     }
 
-    return NextResponse.json({ monitors: monitors || [] });
+    // Fetch subscription limits
+    const { data: config } = await supabase
+      .from('guild_configs')
+      .select('subscription_tier')
+      .eq('guild_id', guildId)
+      .single();
+
+    const tier = config?.subscription_tier || 'free';
+    const tierLimits: Record<string, number> = {
+      free: 0,
+      basic: 2,
+      premium: 5,
+      enterprise: -1
+    };
+
+    const maxMonitors = tierLimits[tier] || 0;
+    const currentCount = monitors?.length || 0;
+
+    return NextResponse.json({ 
+      monitors: monitors || [],
+      limits: {
+        current: currentCount,
+        max: maxMonitors,
+        tier
+      }
+    });
   } catch (error) {
     console.error('Error in Twitter GET:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -281,7 +281,7 @@ class TwitterMonitorManager {
    * Uses official Twitter API v2 (requires TWITTER_BEARER_TOKEN)
    */
   async fetchUserTweets(username, options = {}) {
-    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username}...`);
+    console.log(`🐦 [TWITTER] 🔍 Fetching tweets for @${username} via Nitter RSS...`);
     
     // Check if Twitter Bearer Token is configured
     if (process.env.TWITTER_BEARER_TOKEN) {
