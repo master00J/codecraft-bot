@@ -98,6 +98,7 @@ const userStatsManager = require('./modules/comcraft/stats/user-stats-manager');
 const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generator');
 const combatCardGenerator = require('./modules/comcraft/combat/combat-card-generator');
 const StockMarketManager = require('./modules/comcraft/economy/stock-market-manager');
+const { getSupabase } = require('./modules/supabase-client');
 // Load auto-reactions manager with error handling
 let getAutoReactionsManager;
 try {
@@ -7490,6 +7491,14 @@ async function handleVouchCommand(interaction) {
     const guildId = interaction.guild.id;
     const fromUserId = interaction.user.id;
 
+    // Get Supabase client
+    const supabase = getSupabase();
+    if (!supabase) {
+      return interaction.editReply({
+        content: '❌ Database is not available. Please contact an administrator.',
+      });
+    }
+
     // Can't vouch yourself
     if (targetUser.id === fromUserId) {
       return interaction.editReply({
@@ -7560,6 +7569,14 @@ async function handleReputationCommand(interaction) {
   try {
     const targetUser = interaction.options.getUser('user') || interaction.user;
     const guildId = interaction.guild.id;
+
+    // Get Supabase client
+    const supabase = getSupabase();
+    if (!supabase) {
+      return interaction.editReply({
+        content: '❌ Database is not available. Please contact an administrator.',
+      });
+    }
 
     // Get all vouches for this user
     const { data: vouches, error } = await supabase
@@ -7637,6 +7654,14 @@ async function handleTopRepCommand(interaction) {
 
   try {
     const guildId = interaction.guild.id;
+
+    // Get Supabase client
+    const supabase = getSupabase();
+    if (!supabase) {
+      return interaction.editReply({
+        content: '❌ Database is not available. Please contact an administrator.',
+      });
+    }
 
     // Get all vouches for this guild and calculate averages
     const { data: vouches, error } = await supabase
