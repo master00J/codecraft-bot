@@ -247,6 +247,40 @@ CREATE TRIGGER update_tiktok_monitors_updated_at BEFORE UPDATE ON public.tiktok_
 CREATE INDEX IF NOT EXISTS idx_tiktok_monitors_guild_id ON public.tiktok_monitors(guild_id);
 CREATE INDEX IF NOT EXISTS idx_tiktok_monitors_enabled ON public.tiktok_monitors(enabled);
 
+-- 14. Create vouches/reputation table
+CREATE TABLE IF NOT EXISTS public.vouches (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  from_user_id TEXT NOT NULL,
+  to_user_id TEXT NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(guild_id, from_user_id, to_user_id)
+);
+
+-- Enable RLS on vouches
+ALTER TABLE public.vouches ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Service role can manage vouches" ON public.vouches;
+
+-- Policy: Service role can manage all vouches
+CREATE POLICY "Service role can manage vouches" ON public.vouches
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_vouches_updated_at ON public.vouches;
+CREATE TRIGGER update_vouches_updated_at BEFORE UPDATE ON public.vouches
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_vouches_guild_id ON public.vouches(guild_id);
+CREATE INDEX IF NOT EXISTS idx_vouches_to_user_id ON public.vouches(to_user_id);
+CREATE INDEX IF NOT EXISTS idx_vouches_from_user_id ON public.vouches(from_user_id);
+CREATE INDEX IF NOT EXISTS idx_vouches_rating ON public.vouches(rating);
+
 -- Success message
 DO $$
 BEGIN

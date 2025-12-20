@@ -2692,6 +2692,22 @@ client.on('interactionCreate', async (interaction) => {
         break;
       }
 
+      // ============ VOUCH/REPUTATION COMMANDS ============
+      case 'vouch': {
+        await handleVouchCommand(interaction);
+        break;
+      }
+
+      case 'reputation': {
+        await handleReputationCommand(interaction);
+        break;
+      }
+
+      case 'toprep': {
+        await handleTopRepCommand(interaction);
+        break;
+      }
+
       case 'help':
         await handleHelpCommand(interaction);
         break;
@@ -7462,6 +7478,245 @@ async function handleTikTokCommand(interaction) {
 }
 
 /**
+ * Handle vouch command - Give someone a rating
+ */
+async function handleVouchCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  try {
+    const targetUser = interaction.options.getUser('user');
+    const rating = interaction.options.getInteger('rating');
+    const comment = interaction.options.getString('comment') || null;
+    const guildId = interaction.guild.id;
+    const fromUserId = interaction.user.id;
+
+    // Can't vouch yourself
+    if (targetUser.id === fromUserId) {
+      return interaction.editReply({
+        content: '❌ You cannot vouch for yourself!',
+      });
+    }
+
+    // Can't vouch bots
+    if (targetUser.bot) {
+      return interaction.editReply({
+        content: '❌ You cannot vouch for bots!',
+      });
+    }
+
+    // Upsert vouch in database
+    const { data, error } = await supabase
+      .from('vouches')
+      .upsert({
+        guild_id: guildId,
+        from_user_id: fromUserId,
+        to_user_id: targetUser.id,
+        rating: rating,
+        comment: comment,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'guild_id,from_user_id,to_user_id'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating vouch:', error);
+      return interaction.editReply({
+        content: '❌ Failed to save vouch. Please try again.',
+      });
+    }
+
+    const stars = '⭐'.repeat(rating);
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('✅ Vouch Submitted!')
+      .setDescription(`${interaction.user} gave ${targetUser} a **${rating}/5** rating!`)
+      .addFields(
+        { name: 'Rating', value: stars, inline: true },
+        { name: 'From', value: `<@${fromUserId}>`, inline: true },
+        { name: 'To', value: `<@${targetUser.id}>`, inline: true }
+      )
+      .setTimestamp();
+
+    if (comment) {
+      embed.addFields({ name: 'Comment', value: comment });
+    }
+
+    return interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error('Error handling vouch command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while processing the vouch.',
+    });
+  }
+}
+
+/**
+ * Handle reputation command - View someone's vouches
+ */
+async function handleReputationCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  try {
+    const targetUser = interaction.options.getUser('user') || interaction.user;
+    const guildId = interaction.guild.id;
+
+    // Get all vouches for this user
+    const { data: vouches, error } = await supabase
+      .from('vouches')
+      .select('*')
+      .eq('guild_id', guildId)
+      .eq('to_user_id', targetUser.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching vouches:', error);
+      return interaction.editReply({
+        content: '❌ Failed to fetch reputation. Please try again.',
+      });
+    }
+
+    if (!vouches || vouches.length === 0) {
+      return interaction.editReply({
+        content: `${targetUser} has no vouches yet.`,
+      });
+    }
+
+    // Calculate average rating
+    const totalRating = vouches.reduce((sum, v) => sum + v.rating, 0);
+    const avgRating = (totalRating / vouches.length).toFixed(1);
+    const stars = '⭐'.repeat(Math.round(parseFloat(avgRating)));
+
+    // Count ratings
+    const ratingCounts = [0, 0, 0, 0, 0];
+    vouches.forEach(v => ratingCounts[v.rating - 1]++);
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle(`${targetUser.username}'s Reputation`)
+      .setThumbnail(targetUser.displayAvatarURL())
+      .addFields(
+        { name: 'Average Rating', value: `${stars} ${avgRating}/5.0`, inline: true },
+        { name: 'Total Vouches', value: `${vouches.length}`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: true },
+        { name: '⭐⭐⭐⭐⭐', value: `${ratingCounts[4]}`, inline: true },
+        { name: '⭐⭐⭐⭐', value: `${ratingCounts[3]}`, inline: true },
+        { name: '⭐⭐⭐', value: `${ratingCounts[2]}`, inline: true },
+        { name: '⭐⭐', value: `${ratingCounts[1]}`, inline: true },
+        { name: '⭐', value: `${ratingCounts[0]}`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: true }
+      )
+      .setTimestamp();
+
+    // Add recent vouches
+    const recentVouches = vouches.slice(0, 5);
+    if (recentVouches.length > 0) {
+      const vouchList = recentVouches.map(v => {
+        const stars = '⭐'.repeat(v.rating);
+        const comment = v.comment ? `\n> ${v.comment}` : '';
+        return `${stars} - <@${v.from_user_id}>${comment}`;
+      }).join('\n\n');
+      
+      embed.addFields({ name: 'Recent Vouches', value: vouchList });
+    }
+
+    return interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error('Error handling reputation command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while fetching reputation.',
+    });
+  }
+}
+
+/**
+ * Handle toprep command - Show leaderboard of most vouched users
+ */
+async function handleTopRepCommand(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+
+  try {
+    const guildId = interaction.guild.id;
+
+    // Get all vouches for this guild and calculate averages
+    const { data: vouches, error } = await supabase
+      .from('vouches')
+      .select('to_user_id, rating')
+      .eq('guild_id', guildId);
+
+    if (error) {
+      console.error('Error fetching vouches for leaderboard:', error);
+      return interaction.editReply({
+        content: '❌ Failed to fetch leaderboard. Please try again.',
+      });
+    }
+
+    if (!vouches || vouches.length === 0) {
+      return interaction.editReply({
+        content: 'No vouches in this server yet! Be the first to vouch someone with `/vouch`.',
+      });
+    }
+
+    // Group by user and calculate averages
+    const userStats = {};
+    vouches.forEach(v => {
+      if (!userStats[v.to_user_id]) {
+        userStats[v.to_user_id] = { total: 0, count: 0 };
+      }
+      userStats[v.to_user_id].total += v.rating;
+      userStats[v.to_user_id].count++;
+    });
+
+    // Calculate averages and sort
+    const leaderboard = Object.entries(userStats)
+      .map(([userId, stats]) => ({
+        userId,
+        avg: stats.total / stats.count,
+        count: stats.count
+      }))
+      .sort((a, b) => {
+        // Sort by average first, then by count if tied
+        if (Math.abs(b.avg - a.avg) < 0.01) {
+          return b.count - a.count;
+        }
+        return b.avg - a.avg;
+      })
+      .slice(0, 10);
+
+    // Build leaderboard embed
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🏆 Top Reputation Leaderboard')
+      .setDescription('The most trusted members in this server')
+      .setTimestamp();
+
+    const leaderboardText = await Promise.all(
+      leaderboard.map(async (entry, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+        const stars = '⭐'.repeat(Math.round(entry.avg));
+        
+        try {
+          const user = await interaction.client.users.fetch(entry.userId);
+          return `${medal} **${user.username}** - ${stars} ${entry.avg.toFixed(1)}/5.0 (${entry.count} vouches)`;
+        } catch {
+          return `${medal} <@${entry.userId}> - ${stars} ${entry.avg.toFixed(1)}/5.0 (${entry.count} vouches)`;
+        }
+      })
+    );
+
+    embed.addFields({ name: 'Rankings', value: leaderboardText.join('\n') });
+
+    return interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error('Error handling toprep command:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while fetching the leaderboard.',
+    });
+  }
+}
+
+/**
  * Handle vote command - Show voting information and link
  */
 async function handleVoteCommand(interaction) {
@@ -9492,6 +9747,51 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('vote')
       .setDescription('⭐ Vote for the bot on Top.gg and earn rewards!'),
+
+    // ============ VOUCH/REPUTATION COMMANDS ============
+    new SlashCommandBuilder()
+      .setName('vouch')
+      .setDescription('⭐ Give someone a reputation rating')
+      .addUserOption(option =>
+        option
+          .setName('user')
+          .setDescription('The user to vouch for')
+          .setRequired(true)
+      )
+      .addIntegerOption(option =>
+        option
+          .setName('rating')
+          .setDescription('Rating from 1 to 5 stars')
+          .setRequired(true)
+          .addChoices(
+            { name: '⭐ 1 Star', value: 1 },
+            { name: '⭐⭐ 2 Stars', value: 2 },
+            { name: '⭐⭐⭐ 3 Stars', value: 3 },
+            { name: '⭐⭐⭐⭐ 4 Stars', value: 4 },
+            { name: '⭐⭐⭐⭐⭐ 5 Stars', value: 5 }
+          )
+      )
+      .addStringOption(option =>
+        option
+          .setName('comment')
+          .setDescription('Optional comment about this user')
+          .setRequired(false)
+          .setMaxLength(500)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('reputation')
+      .setDescription('📊 View someone\'s reputation and vouches')
+      .addUserOption(option =>
+        option
+          .setName('user')
+          .setDescription('The user to check (leave empty for yourself)')
+          .setRequired(false)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('toprep')
+      .setDescription('🏆 View the top 10 most vouched users'),
 
     // ============ TIKTOK COMMANDS ============
     new SlashCommandBuilder()
