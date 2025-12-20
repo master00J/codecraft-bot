@@ -1629,6 +1629,18 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // Handle application voting buttons
+    if (interaction.customId && (interaction.customId.startsWith('app_vote_for_') || interaction.customId.startsWith('app_vote_against_'))) {
+      await handleApplicationVoteButton(interaction);
+      return;
+    }
+
+    // Handle application approve/reject buttons
+    if (interaction.customId && (interaction.customId.startsWith('app_approve_') || interaction.customId.startsWith('app_reject_'))) {
+      await handleApplicationReviewButton(interaction);
+      return;
+    }
+
     // Handle invite copy button
     if (interaction.customId && interaction.customId.startsWith('copy_invite_')) {
       const userId = interaction.customId.replace('copy_invite_', '');
@@ -1830,6 +1842,12 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isModalSubmit()) {
+    // Application submit modal handler
+    if (interaction.customId === 'application_submit') {
+      await handleApplicationSubmitModal(interaction);
+      return;
+    }
+
     // Profile modal handler (for text/number/image inputs)
     if (interaction.customId.startsWith('profile_modal:') || interaction.customId.startsWith('profile_image_modal:')) {
       if (!global.profileManager) {
@@ -7912,6 +7930,366 @@ async function handleStickyCommand(interaction) {
 }
 
 /**
+ * Handle application command - Staff applications system
+ */
+async function handleApplicationCommand(interaction) {
+  const subcommand = interaction.options.getSubcommand();
+
+  try {
+    if (!applicationsManager) {
+      await interaction.reply({
+        content: '❌ Applications system is not available.',
+        ephemeral: true
+      });
+      return;
+    }
+
+    switch (subcommand) {
+      case 'apply': {
+        // Check if user can apply
+        const canApplyResult = await applicationsManager.canApply(
+          interaction.guild.id,
+          interaction.user.id,
+          interaction.member
+        );
+
+        if (!canApplyResult.canApply) {
+          return interaction.reply({
+            content: `❌ ${canApplyResult.reason}`,
+            ephemeral: true
+          });
+        }
+
+        // Get config
+        const configResult = await applicationsManager.getConfig(interaction.guild.id);
+        if (!configResult.success || !configResult.config) {
+          return interaction.reply({
+            content: '❌ Application system is not configured. An admin needs to run `/application setup` first.',
+            ephemeral: true
+          });
+        }
+
+        // Show modal with questions
+        const modal = applicationsManager.createApplicationModal(configResult.config.questions);
+        await interaction.showModal(modal);
+        break;
+      }
+
+      case 'setup': {
+        await interaction.deferReply({ ephemeral: true });
+
+        // Check admin permissions
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+          return interaction.editReply({
+            content: '❌ You need Administrator permission to setup applications.',
+          });
+        }
+
+        const channel = interaction.options.getChannel('channel');
+
+        // Default questions
+        const defaultQuestions = [
+          'What is your age?',
+          'Why do you want to join our staff team?',
+          'Do you have any previous moderation experience?',
+          'How many hours per week can you dedicate to this role?',
+          'Tell us about yourself and why you would be a good fit.'
+        ];
+
+        const result = await applicationsManager.setupConfig(
+          interaction.guild.id,
+          channel.id,
+          defaultQuestions,
+          {
+            enabled: true,
+            cooldownDays: 7,
+            requireAccountAgeDays: 30,
+            autoThread: true
+          }
+        );
+
+        if (result.success) {
+          const embed = new EmbedBuilder()
+            .setColor('#57F287')
+            .setTitle('✅ Application System Configured')
+            .setDescription('Staff applications are now ready!')
+            .addFields(
+              { name: 'Application Channel', value: `${channel}`, inline: true },
+              { name: 'Cooldown Period', value: '7 days', inline: true },
+              { name: 'Account Age Requirement', value: '30 days', inline: true },
+              { name: 'Auto-Thread', value: 'Enabled', inline: true },
+              { name: 'Questions', value: `${defaultQuestions.length} default questions set`, inline: true },
+              { name: 'Status', value: '🟢 Enabled', inline: true }
+            )
+            .setFooter({ text: 'Users can now apply with /application apply' })
+            .setTimestamp();
+
+          return interaction.editReply({ embeds: [embed] });
+        } else {
+          return interaction.editReply({
+            content: `❌ Failed to setup applications: ${result.error}`,
+          });
+        }
+      }
+
+      case 'list': {
+        await interaction.deferReply({ ephemeral: true });
+
+        // Check admin permissions
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+          return interaction.editReply({
+            content: '❌ You need Manage Server permission to view applications.',
+          });
+        }
+
+        const status = interaction.options.getString('status') || null;
+        const result = await applicationsManager.listApplications(interaction.guild.id, status, 10);
+
+        if (!result.success || result.applications.length === 0) {
+          const statusText = status ? ` with status "${status}"` : '';
+          return interaction.editReply({
+            content: `📋 No applications found${statusText}.`,
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#5865F2')
+          .setTitle('📋 Staff Applications')
+          .setDescription(`Found ${result.applications.length} application(s)`)
+          .setTimestamp();
+
+        result.applications.slice(0, 10).forEach((app, index) => {
+          const statusEmoji = {
+            'pending': '🟡',
+            'approved': '✅',
+            'rejected': '❌'
+          }[app.status] || '⚪';
+
+          const date = new Date(app.created_at).toLocaleDateString();
+          const votes = `👍 ${app.votes_for} | 👎 ${app.votes_against}`;
+
+          embed.addFields({
+            name: `${index + 1}. ${app.username} ${statusEmoji}`,
+            value: `**ID:** \`${app.id.substring(0, 8)}\`\n**Status:** ${app.status}\n**Votes:** ${votes}\n**Date:** ${date}`,
+            inline: true
+          });
+        });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      default:
+        await interaction.reply({
+          content: '❌ Unknown subcommand.',
+          ephemeral: true
+        });
+    }
+  } catch (error) {
+    console.error('Error handling application command:', error);
+    const replyMethod = interaction.deferred ? 'editReply' : 'reply';
+    return interaction[replyMethod]({
+      content: '❌ An error occurred while processing the application command.',
+      ephemeral: true
+    });
+  }
+}
+
+/**
+ * Handle application submit modal
+ */
+async function handleApplicationSubmitModal(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    if (!applicationsManager) {
+      return interaction.editReply({
+        content: '❌ Applications system is not available.',
+      });
+    }
+
+    // Get config
+    const configResult = await applicationsManager.getConfig(interaction.guild.id);
+    if (!configResult.success || !configResult.config) {
+      return interaction.editReply({
+        content: '❌ Application system is not configured.',
+      });
+    }
+
+    const config = configResult.config;
+
+    // Collect answers from modal
+    const responses = [];
+    for (let i = 0; i < Math.min(config.questions.length, 5); i++) {
+      const answer = interaction.fields.getTextInputValue(`question_${i}`);
+      responses.push(answer);
+    }
+
+    // Get user avatar
+    const avatarHash = interaction.user.avatar;
+
+    // Submit application
+    const result = await applicationsManager.submitApplication(
+      interaction.guild.id,
+      interaction.user.id,
+      interaction.user.username,
+      { responses, avatar: avatarHash },
+      config
+    );
+
+    if (result.success) {
+      const embed = new EmbedBuilder()
+        .setColor('#57F287')
+        .setTitle('✅ Application Submitted Successfully')
+        .setDescription('Your staff application has been submitted and will be reviewed by our team.')
+        .addFields(
+          { name: 'What happens next?', value: 'Staff members will review your application and vote on it. You will be notified once a decision has been made.', inline: false },
+          { name: 'Application ID', value: `\`${result.application.id.substring(0, 8)}\``, inline: true },
+          { name: 'Status', value: '🟡 Pending Review', inline: true }
+        )
+        .setTimestamp();
+
+      return interaction.editReply({ embeds: [embed] });
+    } else {
+      return interaction.editReply({
+        content: `❌ Failed to submit application: ${result.error}`,
+      });
+    }
+  } catch (error) {
+    console.error('Error handling application submit modal:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while submitting your application.',
+    });
+  }
+}
+
+/**
+ * Handle application vote button
+ */
+async function handleApplicationVoteButton(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    if (!applicationsManager) {
+      return interaction.editReply({
+        content: '❌ Applications system is not available.',
+      });
+    }
+
+    // Extract application ID and vote type from custom ID
+    const isVoteFor = interaction.customId.startsWith('app_vote_for_');
+    const applicationId = interaction.customId.replace(isVoteFor ? 'app_vote_for_' : 'app_vote_against_', '');
+    const voteType = isVoteFor ? 'for' : 'against';
+
+    // Handle vote
+    const result = await applicationsManager.handleVote(applicationId, interaction.user.id, voteType);
+
+    if (result.success) {
+      // Update the original message
+      const { data: application } = await applicationsManager.supabase
+        .from('applications')
+        .select('*')
+        .eq('id', applicationId)
+        .single();
+
+      if (application) {
+        await applicationsManager.updateApplicationMessage(application, interaction.guild);
+      }
+
+      return interaction.editReply({
+        content: `✅ Your vote has been recorded!\n**Votes:** 👍 ${result.votesFor} | 👎 ${result.votesAgainst}`,
+      });
+    } else {
+      return interaction.editReply({
+        content: `❌ ${result.error}`,
+      });
+    }
+  } catch (error) {
+    console.error('Error handling application vote:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while processing your vote.',
+    });
+  }
+}
+
+/**
+ * Handle application review button (approve/reject)
+ */
+async function handleApplicationReviewButton(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    if (!applicationsManager) {
+      return interaction.editReply({
+        content: '❌ Applications system is not available.',
+      });
+    }
+
+    // Check permissions
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.editReply({
+        content: '❌ You need Manage Server permission to review applications.',
+      });
+    }
+
+    // Extract application ID and action from custom ID
+    const isApprove = interaction.customId.startsWith('app_approve_');
+    const applicationId = interaction.customId.replace(isApprove ? 'app_approve_' : 'app_reject_', '');
+
+    // Perform action
+    let result;
+    if (isApprove) {
+      result = await applicationsManager.approveApplication(applicationId, interaction.user.id);
+    } else {
+      result = await applicationsManager.rejectApplication(applicationId, interaction.user.id);
+    }
+
+    if (result.success) {
+      // Update the message
+      await applicationsManager.updateApplicationMessage(result.application, interaction.guild);
+
+      // Try to DM the applicant
+      try {
+        const applicant = await interaction.client.users.fetch(result.application.user_id);
+        const dmEmbed = new EmbedBuilder()
+          .setColor(isApprove ? '#57F287' : '#ED4245')
+          .setTitle(isApprove ? '✅ Application Approved' : '❌ Application Rejected')
+          .setDescription(`Your staff application in **${interaction.guild.name}** has been ${isApprove ? 'approved' : 'rejected'}.`)
+          .addFields(
+            { name: 'Reviewed By', value: `${interaction.user.username}`, inline: true },
+            { name: 'Date', value: new Date().toLocaleDateString(), inline: true }
+          )
+          .setTimestamp();
+
+        if (isApprove) {
+          dmEmbed.addFields({
+            name: 'Next Steps',
+            value: 'A staff member will contact you shortly with more information about your new role.',
+            inline: false
+          });
+        }
+
+        await applicant.send({ embeds: [dmEmbed] });
+      } catch (err) {
+        console.log('Could not DM applicant:', err.message);
+      }
+
+      return interaction.editReply({
+        content: `✅ Application has been **${isApprove ? 'approved' : 'rejected'}**.\nThe applicant has been notified via DM.`,
+      });
+    } else {
+      return interaction.editReply({
+        content: `❌ ${result.error}`,
+      });
+    }
+  } catch (error) {
+    console.error('Error handling application review:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred while processing the review.',
+    });
+  }
+}
+
+/**
  * Handle vote command - Show voting information and link
  */
 async function handleVoteCommand(interaction) {
@@ -9987,6 +10365,42 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('toprep')
       .setDescription('🏆 View the top 10 most vouched users'),
+
+    // ============ STAFF APPLICATIONS COMMANDS ============
+    new SlashCommandBuilder()
+      .setName('application')
+      .setDescription('📝 Staff application system')
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('apply')
+          .setDescription('Submit a staff application')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('setup')
+          .setDescription('Setup the application system (Admin only)')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('Channel where applications will be posted')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('list')
+          .setDescription('List applications (Admin only)')
+          .addStringOption(option =>
+            option
+              .setName('status')
+              .setDescription('Filter by status')
+              .addChoices(
+                { name: 'Pending', value: 'pending' },
+                { name: 'Approved', value: 'approved' },
+                { name: 'Rejected', value: 'rejected' }
+              )
+          )
+      ),
 
     // ============ STICKY MESSAGES COMMANDS ============
     new SlashCommandBuilder()
