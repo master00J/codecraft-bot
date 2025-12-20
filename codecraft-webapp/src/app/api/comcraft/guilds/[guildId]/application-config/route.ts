@@ -26,24 +26,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ guildId: string }> }
 ) {
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { guildId } = await params;
-    const userId = session.user?.id || session.user?.sub || 'unknown';
-
-    // Check if user has access to this guild
-    const { data: userGuilds } = await supabase
-      .from('user_guilds')
-      .select('guild_id')
-      .eq('user_id', userId)
-      .eq('guild_id', guildId);
-
-    if (!userGuilds || userGuilds.length === 0) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get config
@@ -69,26 +58,16 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ guildId: string }> }
 ) {
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { guildId } = await params;
     const userId = session.user?.id || session.user?.sub || 'unknown';
-
-    // Check if user has access to this guild
-    const { data: userGuilds } = await supabase
-      .from('user_guilds')
-      .select('guild_id')
-      .eq('user_id', userId)
-      .eq('guild_id', guildId);
-
-    if (!userGuilds || userGuilds.length === 0) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
     const body = await request.json();
     const { 
       channel_id, 

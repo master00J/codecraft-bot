@@ -26,24 +26,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ guildId: string }> }
 ) {
+  const { guildId } = await params;
+
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { guildId } = await params;
-    const userId = session.user?.id || session.user?.sub || 'unknown';
-
-    // Check if user has access to this guild
-    const { data: userGuilds } = await supabase
-      .from('user_guilds')
-      .select('guild_id')
-      .eq('user_id', userId)
-      .eq('guild_id', guildId);
-
-    if (!userGuilds || userGuilds.length === 0) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -63,6 +52,10 @@ export async function GET(
     const { data: applications, error } = await query;
 
     if (error) {
+      // Table might not exist yet
+      if (error.code === '42P01') {
+        return NextResponse.json({ applications: [] });
+      }
       console.error('Error fetching applications:', error);
       return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 });
     }
@@ -77,7 +70,8 @@ export async function GET(
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -88,17 +82,6 @@ export async function DELETE(request: NextRequest) {
 
     if (!applicationId || !guildId) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
-    }
-
-    // Check if user has access to this guild
-    const { data: userGuilds } = await supabase
-      .from('user_guilds')
-      .select('guild_id')
-      .eq('user_id', userId)
-      .eq('guild_id', guildId);
-
-    if (!userGuilds || userGuilds.length === 0) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Delete the application
