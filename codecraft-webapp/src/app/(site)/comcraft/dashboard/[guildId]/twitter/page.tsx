@@ -435,11 +435,12 @@ export default function TwitterDashboard() {
       <Card className="p-6 bg-muted">
         <h3 className="font-semibold mb-2">ℹ️ How it works</h3>
         <ul className="space-y-1 text-sm text-muted-foreground">
-          <li>• Add Twitter accounts to monitor for new tweets</li>
+          <li>• Add Twitter/X accounts to monitor for new tweets</li>
           <li>• Choose whether to include retweets and replies</li>
           <li>• New tweets are automatically posted to your Discord channel</li>
-          <li>• Uses multiple methods (RapidAPI + Nitter RSS) for reliability</li>
+          <li>• Uses official Twitter/X API v2 for reliable and fast tweet fetching</li>
           <li>• Checks for new tweets every 2 minutes</li>
+          <li>• Number of tweets fetched per check depends on your subscription tier</li>
         </ul>
       </Card>
     </div>
