@@ -455,6 +455,13 @@ async function setupBotHandlers(client, options = {}) {
     console.log(`✅ Bot ${botTag} is online`);
     console.log(`📊 Serving ${client.guilds.cache.size} server(s)`);
 
+    // Ensure temporary moderation actions also expire after restarts
+    try {
+      modActions.startExpirationWorker(client);
+    } catch (e) {
+      console.error('❌ Failed to start moderation expiration worker:', e);
+    }
+
     // Set bot activity/presence
     // For custom bots, load from database if guildId is provided
     if (isCustomBot && guildId && configManager?.supabase) {
@@ -1104,6 +1111,14 @@ async function handleSlashCommand(interaction, handlers) {
 
     case 'ban':
       await handleBanCommand(interaction, modActions);
+      break;
+
+    case 'timeout':
+      await handleTimeoutCommand(interaction, modActions);
+      break;
+
+    case 'untimeout':
+      await handleUntimeoutCommand(interaction, modActions);
       break;
 
     case 'case':
@@ -1848,13 +1863,74 @@ async function handleBanCommand(interaction, modActions) {
 
   const user = interaction.options.getUser('user');
   const reason = interaction.options.getString('reason');
-  const days = interaction.options.getInteger('days') || 0;
+  const durationMinutes = interaction.options.getInteger('duration');
+  const deleteDays = interaction.options.getInteger('days') || 0;
 
-  const result = await modActions.ban(interaction.guild, user, interaction.user, reason, days);
+  const result = await modActions.banWithOptions(
+    interaction.guild,
+    user,
+    interaction.user,
+    reason,
+    durationMinutes || null,
+    deleteDays
+  );
 
   if (result.success) {
     await interaction.reply({
       content: `✅ ${user.tag} has been banned. (Case #${result.caseId})`,
+      ephemeral: true,
+    });
+  } else {
+    await interaction.reply({
+      content: `❌ Error: ${result.error}`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleTimeoutCommand(interaction, modActions) {
+  if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return interaction.reply({
+      content: '❌ You do not have permission for this command.',
+      ephemeral: true,
+    });
+  }
+
+  const member = interaction.options.getMember('user');
+  const duration = interaction.options.getInteger('duration');
+  const reason = interaction.options.getString('reason');
+
+  const result = await modActions.timeout(interaction.guild, member, interaction.user, duration, reason);
+
+  if (result.success) {
+    await interaction.reply({
+      content: `✅ ${member.user.tag} has been timed out. (Case #${result.caseId})`,
+      ephemeral: true,
+    });
+  } else {
+    await interaction.reply({
+      content: `❌ Error: ${result.error}`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleUntimeoutCommand(interaction, modActions) {
+  if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return interaction.reply({
+      content: '❌ You do not have permission for this command.',
+      ephemeral: true,
+    });
+  }
+
+  const member = interaction.options.getMember('user');
+  const reason = interaction.options.getString('reason');
+
+  const result = await modActions.untimeout(interaction.guild, member, interaction.user, reason);
+
+  if (result.success) {
+    await interaction.reply({
+      content: `✅ ${member.user.tag} timeout removed. (Case #${result.caseId})`,
       ephemeral: true,
     });
   } else {
@@ -4286,7 +4362,19 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
       .setDescription('Ban a user')
       .addUserOption((option) => option.setName('user').setDescription('User to ban').setRequired(true))
       .addStringOption((option) => option.setName('reason').setDescription('Reason').setRequired(false))
-      .addIntegerOption((option) => option.setName('days').setDescription('Days of messages to delete').setRequired(false)),
+      .addIntegerOption((option) => option.setName('duration').setDescription('Ban duration in minutes (optional)').setRequired(false))
+      .addIntegerOption((option) => option.setName('days').setDescription('Days of messages to delete (0-7)').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('timeout')
+      .setDescription('Timeout a user (Discord native)')
+      .addUserOption((option) => option.setName('user').setDescription('User to timeout').setRequired(true))
+      .addIntegerOption((option) => option.setName('duration').setDescription('Duration in minutes').setRequired(true))
+      .addStringOption((option) => option.setName('reason').setDescription('Reason').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('untimeout')
+      .setDescription('Remove timeout from a user')
+      .addUserOption((option) => option.setName('user').setDescription('User to untimeout').setRequired(true))
+      .addStringOption((option) => option.setName('reason').setDescription('Reason').setRequired(false)),
     new SlashCommandBuilder()
       .setName('case')
       .setDescription('View a moderation case')

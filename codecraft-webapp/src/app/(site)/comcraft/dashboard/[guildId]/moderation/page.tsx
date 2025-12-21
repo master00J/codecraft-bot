@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Save, Shield, Brain, Zap, Users, Ban, Hash, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Save, Shield, Brain, Zap, Users, Ban, Hash, Plus, Trash2, FileText, Download, RefreshCw } from 'lucide-react';
 
 interface ModerationConfig {
   automod_enabled: boolean;
@@ -48,6 +48,21 @@ interface ModerationConfig {
   mod_role_id: string | null;
 }
 
+interface ModerationLog {
+  id: string;
+  created_at: string;
+  case_id: number;
+  action: string;
+  reason: string | null;
+  duration: number | null;
+  expires_at: string | null;
+  active: boolean;
+  user_id: string;
+  username: string | null;
+  moderator_id: string;
+  moderator_name: string | null;
+}
+
 export default function ModerationPage() {
   const params = useParams();
   const guildId = params.guildId as string;
@@ -62,9 +77,36 @@ export default function ModerationPage() {
   const [channelRules, setChannelRules] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<string>('');
 
+  const [activeTab, setActiveTab] = useState<string>('filters');
+
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logs, setLogs] = useState<ModerationLog[]>([]);
+  const [logsCount, setLogsCount] = useState(0);
+  const [logsOffset, setLogsOffset] = useState(0);
+  const [logActionFilter, setLogActionFilter] = useState<string>('all');
+  const [logUserIdFilter, setLogUserIdFilter] = useState<string>('');
+  const [logActiveFilter, setLogActiveFilter] = useState<string>('all'); // all | active | inactive
+
   useEffect(() => {
     fetchData();
   }, [guildId]);
+
+  useEffect(() => {
+    // Lazy-load logs when tab is opened
+    if (activeTab === 'modlog' && logs.length === 0 && !logsLoading) {
+      fetchLogs(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'modlog') return;
+    // Refetch when dropdown filters change
+    setLogs([]);
+    setLogsOffset(0);
+    fetchLogs(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logActionFilter, logActiveFilter]);
 
   async function fetchData() {
     setLoading(true);
@@ -101,6 +143,54 @@ export default function ModerationPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function fetchLogs(reset = false) {
+    try {
+      setLogsLoading(true);
+      const nextOffset = reset ? 0 : logsOffset;
+      const limit = 50;
+
+      const qs = new URLSearchParams();
+      qs.set('limit', String(limit));
+      qs.set('offset', String(nextOffset));
+      if (logActionFilter !== 'all') qs.set('action', logActionFilter);
+      if (logUserIdFilter.trim()) qs.set('user_id', logUserIdFilter.trim());
+      if (logActiveFilter === 'active') qs.set('active', 'true');
+      if (logActiveFilter === 'inactive') qs.set('active', 'false');
+
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/logs?${qs.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to fetch logs');
+      }
+
+      setLogsCount(data.count || 0);
+      setLogsOffset(nextOffset + (data.logs?.length || 0));
+      setLogs(reset ? (data.logs || []) : [...logs, ...(data.logs || [])]);
+    } catch (error: any) {
+      console.error('Error loading moderation logs:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load moderation logs',
+        variant: 'destructive'
+      });
+    } finally {
+      setLogsLoading(false);
+    }
+  }
+
+  function downloadLogs(format: 'csv' | 'json') {
+    const qs = new URLSearchParams();
+    qs.set('format', format);
+    qs.set('limit', '500');
+    qs.set('offset', '0');
+    if (logActionFilter !== 'all') qs.set('action', logActionFilter);
+    if (logUserIdFilter.trim()) qs.set('user_id', logUserIdFilter.trim());
+    if (logActiveFilter === 'active') qs.set('active', 'true');
+    if (logActiveFilter === 'inactive') qs.set('active', 'false');
+
+    window.open(`/api/comcraft/guilds/${guildId}/moderation/logs?${qs.toString()}`, '_blank');
   }
 
   async function saveChannelRule(rule: any) {
@@ -278,8 +368,8 @@ export default function ModerationPage() {
         </Card>
 
         {/* Configuration Tabs */}
-        <Tabs defaultValue="filters" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 bg-muted/50 p-2">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 bg-muted/50 p-2">
             <TabsTrigger value="filters">
               <Shield className="mr-2 h-4 w-4" />
               Filters
@@ -303,6 +393,10 @@ export default function ModerationPage() {
             <TabsTrigger value="actions">
               <Ban className="mr-2 h-4 w-4" />
               Actions
+            </TabsTrigger>
+            <TabsTrigger value="modlog">
+              <FileText className="mr-2 h-4 w-4" />
+              Modlog
             </TabsTrigger>
           </TabsList>
 
@@ -1148,6 +1242,176 @@ export default function ModerationPage() {
                     <li>• Assign a moderator role for raid alerts</li>
                     <li>• Test filters in a private channel first</li>
                   </ul>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* MODLOG TAB */}
+          <TabsContent value="modlog" className="space-y-6">
+            <Card className="border-2 shadow-xl p-6">
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">Moderation Log</h2>
+                    <p className="text-muted-foreground">
+                      View all moderation actions (cases) and export them.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setLogs([]);
+                        setLogsOffset(0);
+                        fetchLogs(true);
+                      }}
+                      disabled={logsLoading}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Refresh
+                    </Button>
+                    <Button variant="outline" onClick={() => downloadLogs('csv')}>
+                      <Download className="mr-2 h-4 w-4" />
+                      CSV
+                    </Button>
+                    <Button variant="outline" onClick={() => downloadLogs('json')}>
+                      <Download className="mr-2 h-4 w-4" />
+                      JSON
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Filters */}
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Action</Label>
+                    <Select
+                      value={logActionFilter}
+                      onValueChange={(v) => setLogActionFilter(v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="warn">warn</SelectItem>
+                        <SelectItem value="mute">mute</SelectItem>
+                        <SelectItem value="unmute">unmute</SelectItem>
+                        <SelectItem value="timeout">timeout</SelectItem>
+                        <SelectItem value="untimeout">untimeout</SelectItem>
+                        <SelectItem value="kick">kick</SelectItem>
+                        <SelectItem value="ban">ban</SelectItem>
+                        <SelectItem value="unban">unban</SelectItem>
+                        <SelectItem value="clear_warnings">clear_warnings</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>User ID (optional)</Label>
+                    <Input
+                      value={logUserIdFilter}
+                      onChange={(e) => setLogUserIdFilter(e.target.value)}
+                      placeholder="123456789012345678"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setLogs([]);
+                          setLogsOffset(0);
+                          fetchLogs(true);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">Press Enter to apply</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={logActiveFilter}
+                      onValueChange={(v) => setLogActiveFilter(v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* List */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold bg-muted/40">
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-1">Case</div>
+                    <div className="col-span-2">Action</div>
+                    <div className="col-span-3">User</div>
+                    <div className="col-span-2">Moderator</div>
+                    <div className="col-span-2">Reason</div>
+                  </div>
+
+                  {logsLoading && logs.length === 0 ? (
+                    <div className="p-6 flex items-center justify-center text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Loading logs...
+                    </div>
+                  ) : logs.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground">No logs found.</div>
+                  ) : (
+                    <div className="divide-y">
+                      {logs.map((l) => (
+                        <div key={l.id} className="grid grid-cols-12 gap-2 px-3 py-3 text-sm">
+                          <div className="col-span-2 text-muted-foreground">
+                            {new Date(l.created_at).toLocaleString()}
+                          </div>
+                          <div className="col-span-1 font-mono">#{l.case_id}</div>
+                          <div className="col-span-2">
+                            <Badge variant={l.active ? 'default' : 'secondary'} className={l.active ? 'bg-green-600 text-white' : ''}>
+                              {l.action}
+                            </Badge>
+                            {l.duration ? (
+                              <span className="ml-2 text-xs text-muted-foreground">{l.duration}m</span>
+                            ) : null}
+                          </div>
+                          <div className="col-span-3">
+                            <div className="font-medium">{l.username || l.user_id}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{l.user_id}</div>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="font-medium">{l.moderator_name || l.moderator_id}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{l.moderator_id}</div>
+                          </div>
+                          <div className="col-span-2 text-muted-foreground truncate" title={l.reason || ''}>
+                            {l.reason || '—'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {logs.length} of {logsCount} logs
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchLogs(false)}
+                    disabled={logsLoading || logs.length >= logsCount}
+                  >
+                    {logsLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load more'
+                    )}
+                  </Button>
                 </div>
               </div>
             </Card>

@@ -4,7 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const configManager = require('../config-manager');
 
 class ModerationActions {
@@ -13,21 +13,46 @@ class ModerationActions {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
+
+    this._expirationInterval = null;
   }
 
   /**
    * Get next case ID for guild
    */
   async getNextCaseId(guildId) {
-    const { data } = await this.supabase
+    const { data, error } = await this.supabase
       .from('moderation_logs')
       .select('case_id')
       .eq('guild_id', guildId)
       .order('case_id', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('[ModerationActions] Error getting next case ID:', error);
+    }
 
     return (data?.case_id || 0) + 1;
+  }
+
+  /**
+   * Get active warning count for a user (from user_warnings table)
+   */
+  async getActiveWarningCount(guildId, userId) {
+    const { data, error } = await this.supabase
+      .from('user_warnings')
+      .select('id')
+      .eq('guild_id', guildId)
+      .eq('user_id', userId)
+      .eq('active', true);
+
+    if (error) {
+      console.error('[ModerationActions] Error getting warning count:', error);
+      return 0;
+    }
+
+    return data?.length || 0;
   }
 
   /**
@@ -61,7 +86,8 @@ class ModerationActions {
           guild_id: guild.id,
           user_id: user.id,
           moderator_id: moderator.id,
-          reason: reason || 'Geen reden opgegeven'
+          reason: reason || 'No reason provided',
+          active: true
         });
 
       // Send DM to user
@@ -94,7 +120,7 @@ class ModerationActions {
       // Check for auto-ban threshold
       const config = await configManager.getModerationConfig(guild.id);
       if (config?.auto_ban_enabled && config?.auto_ban_threshold) {
-        const warningCount = await this.getWarningCount(guild.id, user.id);
+        const warningCount = await this.getActiveWarningCount(guild.id, user.id);
         
         if (warningCount >= config.auto_ban_threshold) {
           // Auto-ban user
@@ -105,7 +131,8 @@ class ModerationActions {
               user,
               guild.members.me.user,
               `Auto-ban: ${config.auto_ban_threshold} warnings reached`,
-              config.auto_ban_duration || null
+              config.auto_ban_duration || null,
+              0
             );
             
             return { success: true, caseId, autoBanned: true, warningCount };
@@ -337,7 +364,10 @@ class ModerationActions {
         await user.send({ embeds: [dmEmbed] });
       } catch (e) {}
 
-      // Ban
+      // Ban (optional prune of message history handled via deleteMessageSeconds)
+      // NOTE: we keep this signature for backwards compatibility, but if a caller
+      // passes "days" (delete history) here by mistake it would be treated as duration.
+      // Prefer using banWithOptions() going forward.
       await guild.members.ban(user, { reason });
 
       // Log to database
@@ -428,6 +458,197 @@ class ModerationActions {
   }
 
   /**
+   * Ban a user with duration + delete message days
+   * @param {import('discord.js').Guild} guild
+   * @param {import('discord.js').User} user
+   * @param {import('discord.js').User} moderator
+   * @param {string} reason
+   * @param {number|null} durationMinutes
+   * @param {number} deleteDays 0-7
+   */
+  async banWithOptions(guild, user, moderator, reason, durationMinutes = null, deleteDays = 0) {
+    try {
+      const safeDeleteDays = Math.max(0, Math.min(7, parseInt(deleteDays || 0, 10) || 0));
+      const deleteMessageSeconds = safeDeleteDays * 24 * 60 * 60;
+
+      const caseId = await this.getNextCaseId(guild.id);
+      const expiresAt = durationMinutes ? new Date(Date.now() + durationMinutes * 60000) : null;
+
+      // Send DM before ban
+      try {
+        const dmEmbed = new EmbedBuilder()
+          .setColor('#FF0000')
+          .setTitle('🔨 Je bent verbannen')
+          .setDescription(`Je bent verbannen uit **${guild.name}**`)
+          .addFields(
+            { name: 'Reason', value: reason || 'No reason provided' },
+            { name: 'Duration', value: durationMinutes ? `${durationMinutes} minutes` : 'Permanent' },
+            { name: 'Moderator', value: moderator.tag }
+          )
+          .setTimestamp();
+
+        await user.send({ embeds: [dmEmbed] });
+      } catch (e) {}
+
+      await guild.members.ban(user, {
+        reason,
+        ...(deleteMessageSeconds > 0 ? { deleteMessageSeconds } : {})
+      });
+
+      await this.supabase
+        .from('moderation_logs')
+        .insert({
+          guild_id: guild.id,
+          case_id: caseId,
+          user_id: user.id,
+          username: user.tag,
+          moderator_id: moderator.id,
+          moderator_name: moderator.tag,
+          action: 'ban',
+          reason: reason || 'No reason provided',
+          duration: durationMinutes,
+          expires_at: expiresAt ? expiresAt.toISOString() : null,
+          active: true
+        });
+
+      await this.logAction(guild, {
+        caseId,
+        action: 'ban',
+        user,
+        moderator,
+        reason,
+        duration: durationMinutes,
+        color: '#CC0000'
+      });
+
+      if (durationMinutes) {
+        this.scheduleUnban(guild, user, durationMinutes);
+      }
+
+      return { success: true, caseId };
+    } catch (error) {
+      console.error('Error banning user:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Timeout a user (Discord native "communication disabled")
+   * Duration is required by Discord (max ~28 days).
+   */
+  async timeout(guild, member, moderator, durationMinutes, reason) {
+    try {
+      const duration = parseInt(durationMinutes, 10);
+      if (!duration || duration <= 0) {
+        return { success: false, error: 'Timeout duration is required' };
+      }
+
+      const caseId = await this.getNextCaseId(guild.id);
+      const expiresAt = new Date(Date.now() + duration * 60000);
+
+      await member.timeout(duration * 60000, reason || 'No reason provided');
+
+      await this.supabase
+        .from('moderation_logs')
+        .insert({
+          guild_id: guild.id,
+          case_id: caseId,
+          user_id: member.user.id,
+          username: member.user.tag,
+          moderator_id: moderator.id,
+          moderator_name: moderator.tag,
+          action: 'timeout',
+          reason: reason || 'No reason provided',
+          duration,
+          expires_at: expiresAt.toISOString(),
+          active: true
+        });
+
+      // DM
+      try {
+        const dmEmbed = new EmbedBuilder()
+          .setColor('#FF0000')
+          .setTitle('⏳ Je bent op timeout gezet')
+          .setDescription(`Je hebt een timeout gekregen in **${guild.name}**`)
+          .addFields(
+            { name: 'Reason', value: reason || 'No reason provided' },
+            { name: 'Duration', value: `${duration} minutes` },
+            { name: 'Moderator', value: moderator.tag }
+          )
+          .setTimestamp();
+
+        await member.user.send({ embeds: [dmEmbed] });
+      } catch (e) {}
+
+      await this.logAction(guild, {
+        caseId,
+        action: 'timeout',
+        user: member.user,
+        moderator,
+        reason,
+        duration,
+        color: '#CC0000'
+      });
+
+      // Schedule untimeout (best-effort; worker handles restarts)
+      this.scheduleUntimeout(guild, member.user.id, duration);
+
+      return { success: true, caseId };
+    } catch (error) {
+      console.error('Error timing out user:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Remove timeout from a user
+   */
+  async untimeout(guild, member, moderator, reason) {
+    try {
+      const caseId = await this.getNextCaseId(guild.id);
+
+      await member.timeout(null, reason || 'No reason provided');
+
+      await this.supabase
+        .from('moderation_logs')
+        .insert({
+          guild_id: guild.id,
+          case_id: caseId,
+          user_id: member.user.id,
+          username: member.user.tag,
+          moderator_id: moderator.id,
+          moderator_name: moderator.tag,
+          action: 'untimeout',
+          reason: reason || 'No reason provided',
+          active: true
+        });
+
+      // Deactivate active timeout
+      await this.supabase
+        .from('moderation_logs')
+        .update({ active: false })
+        .eq('guild_id', guild.id)
+        .eq('user_id', member.user.id)
+        .eq('action', 'timeout')
+        .eq('active', true);
+
+      await this.logAction(guild, {
+        caseId,
+        action: 'untimeout',
+        user: member.user,
+        moderator,
+        reason,
+        color: '#00FF00'
+      });
+
+      return { success: true, caseId };
+    } catch (error) {
+      console.error('Error removing timeout:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Log action to mod log channel
    */
   async logAction(guild, data) {
@@ -444,12 +665,15 @@ class ModerationActions {
         unmute: '🔊',
         kick: '👢',
         ban: '🔨',
-        unban: '✅'
+        unban: '✅',
+        timeout: '⏳',
+        untimeout: '✅',
+        clear_warnings: '🧹'
       };
 
       const embed = new EmbedBuilder()
         .setColor(data.color)
-        .setTitle(`${actionEmojis[data.action]} Case #${data.caseId} | ${data.action.toUpperCase()}`)
+        .setTitle(`${actionEmojis[data.action] || '📌'} Case #${data.caseId} | ${data.action.toUpperCase()}`)
         .addFields(
           { name: 'User', value: `${data.user.tag} (${data.user.id})`, inline: true },
           { name: 'Moderator', value: data.moderator.tag, inline: true },
@@ -517,17 +741,133 @@ class ModerationActions {
   }
 
   /**
-   * Get user's warning count
+   * Schedule automatic un-timeout (best-effort, does not survive restart)
    */
-  async getWarningCount(guildId, userId) {
-    const { data } = await this.supabase
-      .from('user_warnings')
-      .select('id')
-      .eq('guild_id', guildId)
-      .eq('user_id', userId)
-      .eq('active', true);
+  scheduleUntimeout(guild, userId, durationMinutes) {
+    setTimeout(async () => {
+      try {
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) return;
 
-    return data?.length || 0;
+        await member.timeout(null, 'Timeout verlopen');
+
+        await this.supabase
+          .from('moderation_logs')
+          .update({ active: false })
+          .eq('guild_id', guild.id)
+          .eq('user_id', userId)
+          .eq('action', 'timeout')
+          .eq('active', true);
+      } catch (error) {
+        console.error('Error auto-untiming out user:', error);
+      }
+    }, durationMinutes * 60000);
+  }
+
+  /**
+   * Start worker that processes expired mutes/bans/timeouts.
+   * This ensures temporary actions also get undone after a bot restart.
+   */
+  startExpirationWorker(client, intervalMs = 60_000, batchSize = 50) {
+    if (this._expirationInterval) {
+      clearInterval(this._expirationInterval);
+    }
+
+    this._expirationInterval = setInterval(async () => {
+      try {
+        await this.processExpiredActions(client, batchSize);
+      } catch (e) {
+        console.error('[ModerationActions] Expiration worker error:', e);
+      }
+    }, intervalMs);
+
+    // run once immediately
+    this.processExpiredActions(client, batchSize).catch((e) => {
+      console.error('[ModerationActions] Initial expiration scan error:', e);
+    });
+  }
+
+  async processExpiredActions(client, batchSize = 50) {
+    const nowIso = new Date().toISOString();
+    const { data: rows, error } = await this.supabase
+      .from('moderation_logs')
+      .select('*')
+      .eq('active', true)
+      .not('expires_at', 'is', null)
+      .lt('expires_at', nowIso)
+      .order('expires_at', { ascending: true })
+      .limit(batchSize);
+
+    if (error) {
+      console.error('[ModerationActions] Error fetching expired actions:', error);
+      return { processed: 0 };
+    }
+
+    if (!rows || rows.length === 0) {
+      return { processed: 0 };
+    }
+
+    let processed = 0;
+
+    for (const row of rows) {
+      const guild =
+        client.guilds.cache.get(row.guild_id) ||
+        (await client.guilds.fetch(row.guild_id).catch(() => null));
+
+      if (!guild) {
+        // Guild not accessible; deactivate to prevent infinite retries
+        await this.supabase
+          .from('moderation_logs')
+          .update({ active: false })
+          .eq('id', row.id)
+          .catch(() => {});
+        continue;
+      }
+
+      const systemModerator = guild.members.me?.user || client.user;
+      const reason = 'Auto: tijdelijke moderatie verlopen';
+
+      try {
+        if (row.action === 'mute') {
+          const member = await guild.members.fetch(row.user_id).catch(() => null);
+          if (member) {
+            await this.unmute(guild, member, systemModerator, reason);
+          } else {
+            await this.supabase.from('moderation_logs').update({ active: false }).eq('id', row.id);
+          }
+          processed++;
+          continue;
+        }
+
+        if (row.action === 'ban') {
+          const user = await client.users.fetch(row.user_id).catch(() => ({
+            id: row.user_id,
+            tag: row.username || row.user_id
+          }));
+          await this.unban(guild, user, systemModerator, reason);
+          processed++;
+          continue;
+        }
+
+        if (row.action === 'timeout') {
+          const member = await guild.members.fetch(row.user_id).catch(() => null);
+          if (member) {
+            await this.untimeout(guild, member, systemModerator, reason);
+          } else {
+            await this.supabase.from('moderation_logs').update({ active: false }).eq('id', row.id);
+          }
+          processed++;
+          continue;
+        }
+
+        // Unknown action type: deactivate
+        await this.supabase.from('moderation_logs').update({ active: false }).eq('id', row.id);
+      } catch (e) {
+        console.error('[ModerationActions] Failed to process expired action:', row.action, row.guild_id, row.user_id, e);
+      }
+    }
+
+    return { processed };
   }
 
   /**
@@ -542,21 +882,6 @@ class ModerationActions {
       .single();
 
     return data;
-  }
-
-  /**
-   * Get warning count for user
-   */
-  async getWarningCount(guildId, userId) {
-    const { data } = await this.supabase
-      .from('moderation_logs')
-      .select('id')
-      .eq('guild_id', guildId)
-      .eq('user_id', userId)
-      .eq('action', 'warn')
-      .eq('active', true);
-
-    return data?.length || 0;
   }
 
   /**
@@ -588,6 +913,14 @@ class ModerationActions {
         .eq('active', true);
 
       if (error) throw error;
+
+      await this.supabase
+        .from('user_warnings')
+        .update({ active: false })
+        .eq('guild_id', guildId)
+        .eq('user_id', userId)
+        .eq('active', true)
+        .catch(() => {});
 
       // Log action
       const caseId = await this.getNextCaseId(guildId);

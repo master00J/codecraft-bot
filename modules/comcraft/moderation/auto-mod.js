@@ -3,6 +3,7 @@
  * Filters spam, links, invites, caps, bad words, and AI-powered content moderation
  */
 
+const { createClient } = require('@supabase/supabase-js');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const configManager = require('../config-manager');
 const aiService = require('../ai');
@@ -12,6 +13,16 @@ class AutoMod {
     this.spamCache = new Map(); // userId -> [timestamps]
     this.duplicateCache = new Map(); // userId -> [recent messages]
     this.joinCache = new Map(); // guildId -> [join timestamps]
+
+    // Optional: used for stats/analytics helpers
+    try {
+      this.supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      );
+    } catch (e) {
+      this.supabase = null;
+    }
   }
 
   /**
@@ -587,6 +598,10 @@ class AutoMod {
    * Get user moderation statistics
    */
   async getUserStats(guildId, userId) {
+    if (!this.supabase) {
+      return { total: 0, warns: 0, mutes: 0, kicks: 0, bans: 0, recent: [] };
+    }
+
     const { data: logs } = await this.supabase
       .from('moderation_logs')
       .select('action, created_at')
