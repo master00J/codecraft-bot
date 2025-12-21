@@ -194,7 +194,13 @@ export async function GET(request: NextRequest) {
     const guildsWithLicenses = await Promise.all(
       (guilds || []).map(async (guild: any) => {
         let activeLicense = null;
-        let effectiveTier = guild.subscription_tier || 'free';
+        // Default tier:
+        // - If a guild has a license_id, the license determines tier (otherwise FREE).
+        // - Else fall back to subscription_tier only when subscription_active is true.
+        let effectiveTier =
+          guild.license_id
+            ? 'free'
+            : (guild.subscription_active ? (guild.subscription_tier || 'free') : 'free');
         let isTrial = false;
         
         // Check for vote tier unlock first (takes priority)
@@ -203,38 +209,36 @@ export async function GET(request: NextRequest) {
           effectiveTier = voteUnlock.tier_name;
           isTrial = true; // Vote unlocks are considered "trial"
           console.log(`[Guilds API] Guild ${guild.guild_id} has active vote unlock: ${voteUnlock.tier_name} (TRIAL)`);
-        } else if (guild.license_id && guild.subscription_active) {
+        } else if (guild.license_id) {
           // Fetch the license details
           const { data: license, error: licenseError } = await supabase
             .from('comcraft_licenses')
             .select('id, tier, status, expires_at')
             .eq('id', guild.license_id)
-            .eq('status', 'active')
             .maybeSingle();
 
           if (!licenseError && license) {
-            // Check if license is expired
-            if (license.expires_at) {
-              const expires = new Date(license.expires_at).getTime();
-              if (Date.now() < expires) {
-                activeLicense = {
-                  id: license.id,
-                  tier: license.tier,
-                  status: license.status,
-                  expires_at: license.expires_at
-                };
-                effectiveTier = license.tier;
-              }
-            } else {
-              // No expiry date, license is active
+            const status = String(license.status || '').toLowerCase();
+            const notExpired = !license.expires_at || Date.now() < new Date(license.expires_at).getTime();
+            const isActive = status === 'active' && notExpired;
+
+            if (isActive) {
               activeLicense = {
                 id: license.id,
                 tier: license.tier,
                 status: license.status,
-                expires_at: null
+                expires_at: license.expires_at || null
               };
               effectiveTier = license.tier;
+            } else {
+              // License exists but is expired/inactive -> treat as FREE in tier badge
+              activeLicense = null;
+              effectiveTier = 'free';
             }
+          } else {
+            // Could not fetch license -> treat as FREE (avoid showing stale premium tag)
+            activeLicense = null;
+            effectiveTier = 'free';
           }
         }
 
