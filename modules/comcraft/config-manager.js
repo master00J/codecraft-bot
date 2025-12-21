@@ -351,203 +351,20 @@ class ConfigManager {
     const config = await this.getGuildConfig(guildId);
     if (!config) return false;
 
-    const license = await this.getGuildLicense(guildId);
+    // If the guild is disabled at platform level, block everything.
+    if (config.is_active === false) return false;
 
-    if (license) {
-      const tierConfig = await this.getTierConfig(license.tier);
-      // If tier config exists and has the feature explicitly defined, use it
-      if (tierConfig && tierConfig.features && tierConfig.features.hasOwnProperty(feature)) {
-        return tierConfig.features[feature] || false;
-      }
-      // Otherwise, use fallback configuration
-      const fallback = {
-        free: {
-          leveling: true,
-          moderation_basic: true,
-          custom_commands: 5,
-          stream_notifications: 1,
-          welcome: false,
-          analytics: false,
-          custom_branding: false,
-          support_tickets: false,
-          auto_roles: true,
-          birthday_manager: false,
-          feedback_queue: false,
-          embed_builder: false,
-          giveaways: false,
-          ai_assistant: false,
-          ai_tokens_monthly: 50000,
-          economy: false,
-          casino: false,
-          scheduled_messages: false,
-        },
-        basic: {
-          leveling: true,
-          moderation_advanced: true,
-          custom_commands: 25,
-          stream_notifications: 5,
-          welcome: true,
-          analytics: true,
-          custom_branding: false,
-          support_tickets: true,
-          auto_roles: true,
-          birthday_manager: true,
-          feedback_queue: false,
-          embed_builder: true,
-          giveaways: false,
-          ai_assistant: false,
-          ai_tokens_monthly: 250000,
-          economy: false,
-          casino: false,
-          scheduled_messages: true,
-          music_player: true,
-          pvp_duels: false,
-          stock_market: false,
-          user_statistics: false,
-          game_news: false,
-          auto_reactions: false,
-          cam_only_voice: false,
-          streaming_twitch: true,
-          streaming_youtube: true,
-          rank_xp_multipliers: false,
-          polls: false,
-        },
-        premium: {
-          leveling: true,
-          moderation_advanced: true,
-          custom_commands: -1,
-          stream_notifications: -1,
-          welcome: true,
-          analytics: true,
-          custom_branding: true,
-          xp_boost: 1.5,
-          support_tickets: true,
-          auto_roles: true,
-          birthday_manager: true,
-          feedback_queue: true,
-          embed_builder: true,
-          giveaways: true,
-          ai_assistant: true,
-          ai_tokens_monthly: 1000000,
-          economy: true,
-          casino: true,
-          scheduled_messages: true,
-          music_player: true,
-          pvp_duels: true,
-          stock_market: true,
-          user_statistics: true,
-          game_news: true,
-          auto_reactions: true,
-          cam_only_voice: true,
-          streaming_twitch: true,
-          streaming_youtube: true,
-          rank_xp_multipliers: true,
-          polls: true,
-        },
-        enterprise: {
-          everything: true,
-          custom_commands: -1,
-          stream_notifications: -1,
-          multi_guild: 5,
-          api_access: true,
-          support_tickets: true,
-          auto_roles: true,
-          birthday_manager: true,
-          feedback_queue: true,
-          embed_builder: true,
-          giveaways: true,
-          ai_assistant: true,
-          ai_tokens_monthly: -1,
-          economy: true,
-          casino: true,
-          scheduled_messages: true,
-          music_player: true,
-          pvp_duels: true,
-          stock_market: true,
-          user_statistics: true,
-          game_news: true,
-          auto_reactions: true,
-          cam_only_voice: true,
-          streaming_twitch: true,
-          streaming_youtube: true,
-          rank_xp_multipliers: true,
-          polls: true,
-        }
-      };
+    const tier = await this.getEffectiveTier(guildId);
 
-      return (fallback[license.tier] && fallback[license.tier][feature]) || false;
-    }
-
-    // Check if trial is active
-    if (config.is_trial && config.trial_ends_at) {
-      const trialEnd = new Date(config.trial_ends_at).getTime();
-      const now = Date.now();
-      
-      if (now < trialEnd) {
-        // Trial is still active - treat as enterprise tier
-        const tier = 'enterprise';
-        const tierConfig = await this.getTierConfig(tier);
-        if (tierConfig && tierConfig.features && tierConfig.features.hasOwnProperty(feature)) {
-          return tierConfig.features[feature] || false;
-        }
-        
-        // Fallback to enterprise feature set during trial
-        const enterpriseFeatures = {
-          everything: true,
-          leveling: true,
-          scheduled_messages: true,
-          moderation_advanced: true,
-          custom_commands: -1,
-          stream_notifications: -1,
-          welcome: true,
-          analytics: true,
-          custom_branding: true,
-          xp_boost: 2.0,
-          support_tickets: true,
-          auto_roles: true,
-          birthday_manager: true,
-          feedback_queue: true,
-          embed_builder: true,
-          giveaways: true,
-          ai_assistant: true,
-          ai_tokens_monthly: -1,
-          multi_guild: 5,
-          music_player: true,
-          api_access: true,
-          economy: true,
-          casino: true,
-        };
-        return enterpriseFeatures[feature] || false;
-      } else {
-        // Trial expired - downgrade to free tier
-        await this.supabase
-          .from('guild_configs')
-          .update({
-            subscription_tier: 'free',
-            is_trial: false
-          })
-          .eq('guild_id', guildId);
-        
-        // Invalidate cache
-        this.invalidateGuild(guildId);
-      }
-    }
-
-    // Check subscription status - but allow if tier is enterprise/premium even if subscription_active is false
-    // (for manual tier assignments)
-    const tier = config.subscription_tier || 'free';
-    
-    // If subscription is explicitly disabled AND tier is not enterprise/premium, block access
-    if ((config.subscription_active === false || config.is_active === false) && 
-        !['enterprise', 'premium'].includes(tier)) {
-      return false;
-    }
-
+    // If subscription_tiers row exists, it is authoritative.
     const tierConfig = await this.getTierConfig(tier);
-    if (tierConfig && tierConfig.features && tierConfig.features.hasOwnProperty(feature)) {
-      return tierConfig.features[feature] || false;
+    if (tierConfig && tierConfig.features) {
+      // Allow an explicit "everything" override if configured in DB.
+      if (tierConfig.features.everything === true) return true;
+      return Boolean(tierConfig.features[feature]);
     }
 
+    // Fallback only if tier config is missing in DB (backwards compatibility).
     const fallback = {
       free: {
         leveling: true,
@@ -613,7 +430,7 @@ class ConfigManager {
         polls: true,
       },
       enterprise: {
-        everything: true,
+        // NOTE: do NOT force everything=true here; admin tier config should control this.
         leveling: true,
         moderation_advanced: true,
         custom_commands: -1,
@@ -635,12 +452,102 @@ class ConfigManager {
       }
     };
 
-    // Enterprise tier has "everything: true" which should grant all features
-    if (tier === 'enterprise' && fallback.enterprise.everything) {
-      return true;
+    return (fallback[tier] && fallback[tier][feature]) || false;
+  }
+
+  /**
+   * Get effective tier for a guild (vote unlock > license > trial > subscription flags)
+   */
+  async getEffectiveTier(guildId) {
+    const config = await this.getGuildConfig(guildId);
+    if (!config) return 'free';
+    if (config.is_active === false) return 'free';
+
+    // Vote tier unlocks (trial-like) take precedence
+    const voteTier = await this.getVoteTierUnlock(guildId);
+    if (voteTier) return voteTier;
+
+    const license = await this.getGuildLicense(guildId);
+    if (license?.tier) return String(license.tier);
+
+    // DB trial flag
+    if (config.is_trial && config.trial_ends_at) {
+      const trialEnd = new Date(config.trial_ends_at).getTime();
+      if (Date.now() < trialEnd) {
+        return 'enterprise';
+      }
+
+      // Trial expired - downgrade to free tier
+      try {
+        await this.supabase
+          .from('guild_configs')
+          .update({
+            subscription_tier: 'free',
+            subscription_active: false,
+            is_trial: false
+          })
+          .eq('guild_id', guildId);
+        this.invalidateGuild(guildId);
+      } catch (e) {
+        // best-effort
+      }
+      return 'free';
     }
 
-    return (fallback[tier] && fallback[tier][feature]) || false;
+    // Respect subscription_active/is_active. If inactive/disabled => free.
+    if (config.subscription_active === false) return 'free';
+
+    return String(config.subscription_tier || 'free');
+  }
+
+  /**
+   * Get active vote tier unlock for a guild (if any)
+   */
+  async getVoteTierUnlock(guildId) {
+    const cacheKey = `vote_unlock:${guildId}`;
+
+    if (this.cache.has(cacheKey)) {
+      const { tier, timestamp } = this.cache.get(cacheKey);
+      if (Date.now() - timestamp < 60 * 1000) {
+        return tier;
+      }
+    }
+
+    try {
+      const { data, error } = await this.supabase
+        .from('vote_tier_unlocks')
+        .select('tier_name, expires_at, is_active')
+        .eq('guild_id', guildId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        this.cache.set(cacheKey, { tier: null, timestamp: Date.now() });
+        return null;
+      }
+
+      if (!data) {
+        this.cache.set(cacheKey, { tier: null, timestamp: Date.now() });
+        return null;
+      }
+
+      if (data.expires_at) {
+        const expires = new Date(data.expires_at).getTime();
+        if (Date.now() >= expires) {
+          this.cache.set(cacheKey, { tier: null, timestamp: Date.now() });
+          return null;
+        }
+      }
+
+      const tier = data.tier_name ? String(data.tier_name) : null;
+      this.cache.set(cacheKey, { tier, timestamp: Date.now() });
+      return tier;
+    } catch (e) {
+      this.cache.set(cacheKey, { tier: null, timestamp: Date.now() });
+      return null;
+    }
   }
 
   /**
@@ -650,38 +557,13 @@ class ConfigManager {
     const config = await this.getGuildConfig(guildId);
     if (!config) return null;
 
-    const license = await this.getGuildLicense(guildId);
-
-    if (license) {
-      const tierConfig = await this.getTierConfig(license.tier);
-      if (tierConfig && tierConfig.limits) {
-        return tierConfig.limits;
-      }
-      const fallback = {
-        free: { custom_commands: 5, stream_notifications: 1, twitter_monitors: 0, twitter_tweets_per_check: 5, twitter_check_interval: 120, xp_boost: 1.0, ai_tokens_monthly: 50000 },
-        basic: { custom_commands: 25, stream_notifications: 5, twitter_monitors: 2, twitter_tweets_per_check: 10, twitter_check_interval: 60, xp_boost: 1.2, ai_tokens_monthly: 250000 },
-        premium: { custom_commands: -1, stream_notifications: -1, twitter_monitors: 5, twitter_tweets_per_check: 25, twitter_check_interval: 30, xp_boost: 1.5, ai_tokens_monthly: 1000000 },
-        enterprise: { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, twitter_check_interval: 10, xp_boost: 2.0, ai_tokens_monthly: -1 }
-      };
-      return fallback[license.tier] || fallback.free;
-    }
-
-    // Check if trial is active
-    if (config.is_trial && config.trial_ends_at) {
-      const trialEnd = new Date(config.trial_ends_at).getTime();
-      const now = Date.now();
-      
-      if (now < trialEnd) {
-        // Trial is still active - use enterprise limits
-        return { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, twitter_check_interval: 10, xp_boost: 2.0, ai_tokens_monthly: -1, multi_guild: 5 };
-      }
-    }
-
-    if (config.subscription_active === false || config.is_active === false) {
+    if (config.is_active === false) {
       return { custom_commands: 0, stream_notifications: 0, xp_boost: 1.0 };
     }
 
-    const tier = config.subscription_tier || 'free';
+    const tier = await this.getEffectiveTier(guildId);
+
+    // If subscription_tiers row exists, it is authoritative.
     const tierConfig = await this.getTierConfig(tier);
     if (tierConfig && tierConfig.limits) {
       return tierConfig.limits;
@@ -694,7 +576,7 @@ class ConfigManager {
       enterprise: { custom_commands: -1, stream_notifications: -1, twitter_monitors: -1, twitter_tweets_per_check: 50, twitter_check_interval: 10, xp_boost: 2.0, ai_tokens_monthly: -1 }
     };
 
-    return fallback[tier];
+    return fallback[tier] || fallback.free;
   }
 
   /**

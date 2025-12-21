@@ -38,6 +38,9 @@ class FeatureGate {
    * Get guild's current tier
    */
   async getTier(guildId) {
+    if (typeof this.configManager.getEffectiveTier === 'function') {
+      return await this.configManager.getEffectiveTier(guildId);
+    }
     const config = await this.configManager.getGuildConfig(guildId);
     return config?.subscription_tier || 'free';
   }
