@@ -163,15 +163,39 @@ function createMessageCreateHandler({
 
             // Send webhook message WITH button directly
             console.log('[MessageCreate] Sending webhook message with button...');
-            const webhookMessage = await webhook.send({
-              content: message.content || undefined,
-              username: message.author.username,
-              avatarURL: message.author.displayAvatarURL(),
-              embeds: embeds,
-              files: attachments,
-              components: [row]
+            console.log('[MessageCreate] Webhook details:', {
+              id: webhook.id,
+              name: webhook.name,
+              channel: webhook.channelId
             });
-            console.log('[MessageCreate] Webhook message sent successfully, ID:', webhookMessage.id);
+            console.log('[MessageCreate] Message payload:', {
+              hasContent: !!message.content,
+              username: message.author.username,
+              embedsCount: embeds.length,
+              attachmentsCount: attachments.length,
+              hasComponents: true
+            });
+            
+            try {
+              const webhookMessage = await webhook.send({
+                content: message.content || undefined,
+                username: message.author.username,
+                avatarURL: message.author.displayAvatarURL(),
+                embeds: embeds,
+                files: attachments,
+                components: [row]
+              });
+              console.log('[MessageCreate] ✅ Webhook message sent successfully, ID:', webhookMessage.id);
+            } catch (sendError) {
+              console.error('[MessageCreate] ❌ Error sending webhook message:', sendError);
+              console.error('[MessageCreate] Error details:', {
+                message: sendError.message,
+                code: sendError.code,
+                status: sendError.status,
+                statusCode: sendError.statusCode
+              });
+              throw sendError; // Re-throw to be caught by outer catch
+            }
 
             // Store the mapping: buttonId -> webhookMessage.id for the handler
             // We'll pass the webhook message ID through the button handler
