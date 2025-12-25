@@ -1990,13 +1990,13 @@ async function handleMediaReplyButton(interaction, configManager) {
     
     const modal = new ModalBuilder()
       .setCustomId(`media_reply_modal_${originalMessage.id}`)
-      .setTitle('Reply to Media Post');
+      .setTitle('💬 Reply to Media Post');
 
     const replyInput = new TextInputBuilder()
       .setCustomId('reply_text')
-      .setLabel('Your reply')
+      .setLabel('Type your reply')
       .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Type your reply here...')
+      .setPlaceholder('Type your reply here... Your reply will be sent to the configured reply channel.')
       .setRequired(true)
       .setMaxLength(2000);
 
