@@ -1583,6 +1583,26 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
+  // Handle media reply buttons BEFORE license check to prevent timeout
+  if (interaction.isButton() && interaction.customId && interaction.customId.startsWith('media_reply_')) {
+    console.log('[index.js] Media reply button detected, customId:', interaction.customId);
+    try {
+      const configManager = require('./modules/comcraft/config-manager');
+      const { handleMediaReplyButton } = require('./modules/comcraft/bot/setup-bot-handlers');
+      await handleMediaReplyButton(interaction, configManager);
+    } catch (error) {
+      console.error('[index.js] Error handling media reply button:', error);
+      console.error('[index.js] Error stack:', error.stack);
+      if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
+        await interaction.reply({
+          content: '❌ Er is een fout opgetreden bij het openen van de reply modal.',
+          ephemeral: true
+        }).catch(() => {});
+      }
+    }
+    return;
+  }
+
   // Handle casino interactions BEFORE license check to prevent timeout
   // For coinflip buttons that need defer, defer IMMEDIATELY
   if (interaction.isButton()) {
@@ -1849,6 +1869,127 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isModalSubmit()) {
+    // Handle media reply modal BEFORE license check
+    if (interaction.customId && interaction.customId.startsWith('media_reply_modal_')) {
+      console.log('[index.js] Media reply modal detected, customId:', interaction.customId);
+      try {
+        const configManager = require('./modules/comcraft/config-manager');
+        // We need to get handleMediaReplyModal from setup-bot-handlers
+        // For now, let's require it directly - we'll need to export it
+        const setupBotHandlers = require('./modules/comcraft/bot/setup-bot-handlers');
+        // Since handleMediaReplyModal is not exported, we need to access it differently
+        // Let's create a wrapper or export it
+        // For now, let's check if we can access it via a different method
+        // Actually, let's just handle it here temporarily
+        const messageId = interaction.customId.replace('media_reply_modal_', '');
+        const replyText = interaction.fields.getTextInputValue('reply_text');
+        
+        if (!replyText || !replyText.trim()) {
+          return interaction.reply({
+            content: '❌ Reply cannot be empty.',
+            ephemeral: true
+          });
+        }
+
+        const originalMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+        if (!originalMessage) {
+          return interaction.reply({
+            content: '❌ Original message not found.',
+            ephemeral: true
+          });
+        }
+
+        const channelRules = await configManager.getChannelModerationRules(interaction.guild.id, interaction.channel.id);
+        if (!channelRules?.reply_channel_id) {
+          return interaction.reply({
+            content: '❌ Reply channel not configured for this channel.',
+            ephemeral: true
+          });
+        }
+
+        const replyChannel = interaction.guild.channels.cache.get(channelRules.reply_channel_id);
+        if (!replyChannel) {
+          return interaction.reply({
+            content: '❌ Reply channel not found. Please contact an administrator.',
+            ephemeral: true
+          });
+        }
+
+        if (!replyChannel.permissionsFor(interaction.guild.members.me)?.has(['SendMessages', 'ViewChannel'])) {
+          return interaction.reply({
+            content: '❌ I do not have permission to send messages in the reply channel.',
+            ephemeral: true
+          });
+        }
+
+        const { EmbedBuilder } = require('discord.js');
+        const embed = new EmbedBuilder()
+          .setColor('#5865F2')
+          .setAuthor({
+            name: `${interaction.user.tag} replied`,
+            iconURL: interaction.user.displayAvatarURL()
+          })
+          .setDescription(replyText)
+          .addFields(
+            {
+              name: '📎 Original Post',
+              value: `[Jump to message](${originalMessage.url})`,
+              inline: true
+            },
+            {
+              name: '📤 From Channel',
+              value: `${interaction.channel} (${interaction.channel.name})`,
+              inline: true
+            }
+          )
+          .setTimestamp();
+
+        if (originalMessage.content) {
+          const truncatedContent = originalMessage.content.length > 500
+            ? originalMessage.content.substring(0, 500) + '...'
+            : originalMessage.content;
+          embed.addFields({
+            name: '💬 Original Content',
+            value: truncatedContent,
+            inline: false
+          });
+        }
+
+        if (originalMessage.attachments.size > 0) {
+          const firstAttachment = originalMessage.attachments.first();
+          if (firstAttachment.contentType?.startsWith('image/')) {
+            embed.setImage(firstAttachment.url);
+          }
+        } else if (originalMessage.embeds.length > 0) {
+          const firstEmbed = originalMessage.embeds[0];
+          if (firstEmbed.image) {
+            embed.setImage(firstEmbed.image.url);
+          } else if (firstEmbed.thumbnail) {
+            embed.setThumbnail(firstEmbed.thumbnail.url);
+          }
+        }
+
+        await replyChannel.send({
+          content: `💬 Reply from ${interaction.user}`,
+          embeds: [embed]
+        });
+
+        await interaction.reply({
+          content: `✅ Your reply has been sent to ${replyChannel}!`,
+          ephemeral: true
+        });
+      } catch (error) {
+        console.error('[index.js] Error handling media reply modal:', error);
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: '❌ An error occurred while sending your reply.',
+            ephemeral: true
+          }).catch(() => {});
+        }
+      }
+      return;
+    }
+
     // Application submit modal handler
     if (interaction.customId === 'application_submit') {
       await handleApplicationSubmitModal(interaction);

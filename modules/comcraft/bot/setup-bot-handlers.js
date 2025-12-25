@@ -842,7 +842,21 @@ function setupEventHandlers(client, handlers) {
       // Handle media reply buttons (route replies to another channel)
       if (interaction.customId && interaction.customId.startsWith('media_reply_')) {
         console.log('[Interaction] Media reply button detected, customId:', interaction.customId);
-        await handleMediaReplyButton(interaction, configManager);
+        try {
+          await handleMediaReplyButton(interaction, configManager);
+        } catch (handlerError) {
+          console.error('[Interaction] Error in handleMediaReplyButton:', handlerError);
+          console.error('[Interaction] Handler error stack:', handlerError.stack);
+          // Try to reply if not already handled
+          if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
+            await interaction.reply({
+              content: '❌ Er is een fout opgetreden bij het openen van de reply modal.',
+              ephemeral: true
+            }).catch(err => {
+              console.error('[Interaction] Failed to send error reply:', err);
+            });
+          }
+        }
         return;
       }
 
@@ -1980,47 +1994,40 @@ async function handleUntimeoutCommand(interaction, modActions) {
  * Handle media reply button - opens modal to reply, then sends to reply channel
  */
 async function handleMediaReplyButton(interaction, configManager) {
+  // Check if interaction is already handled
+  if (interaction.replied || interaction.deferred) {
+    console.warn('[MediaReply] Interaction already replied/deferred');
+    return;
+  }
+
   try {
     console.log('[MediaReply] Button clicked, customId:', interaction.customId);
-    
-    // Parse button ID: media_reply_<originalMessageId>_<channelId>
-    const buttonIdParts = interaction.customId.replace('media_reply_', '').split('_');
-    const originalMessageId = buttonIdParts[0];
+    console.log('[MediaReply] Interaction details:', {
+      id: interaction.id,
+      type: interaction.type,
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+      userId: interaction.user?.id,
+      messageId: interaction.message?.id
+    });
     
     // Use the message where the button was clicked (webhook message) as the original
     const originalMessage = interaction.message;
     
     if (!originalMessage) {
       console.error('[MediaReply] Original message not found');
-      return interaction.reply({
+      return await interaction.reply({
         content: '❌ Message not found.',
         ephemeral: true
-      }).catch(err => console.error('[MediaReply] Error replying:', err));
+      }).catch(err => {
+        console.error('[MediaReply] Error replying:', err);
+        console.error('[MediaReply] Reply error code:', err.code);
+        console.error('[MediaReply] Reply error message:', err.message);
+      });
     }
 
-    console.log('[MediaReply] Fetching channel rules for guild:', interaction.guild.id, 'channel:', interaction.channel.id);
-    const channelRules = await configManager.getChannelModerationRules(interaction.guild.id, interaction.channel.id);
-    console.log('[MediaReply] Channel rules:', channelRules);
-    
-    if (!channelRules?.reply_channel_id) {
-      console.error('[MediaReply] Reply channel not configured');
-      return interaction.reply({
-        content: '❌ Reply channel not configured for this channel.',
-        ephemeral: true
-      }).catch(err => console.error('[MediaReply] Error replying:', err));
-    }
-
-    const replyChannel = interaction.guild.channels.cache.get(channelRules.reply_channel_id);
-    if (!replyChannel) {
-      console.error('[MediaReply] Reply channel not found:', channelRules.reply_channel_id);
-      return interaction.reply({
-        content: '❌ Reply channel not found. Please contact an administrator.',
-        ephemeral: true
-      }).catch(err => console.error('[MediaReply] Error replying:', err));
-    }
-
+    // Create modal first (before async operations to respond within 3 seconds)
     console.log('[MediaReply] Creating modal for message:', originalMessage.id);
-    // Show modal to enter reply
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
     
     const modal = new ModalBuilder()
@@ -2038,13 +2045,23 @@ async function handleMediaReplyButton(interaction, configManager) {
     const firstActionRow = new ActionRowBuilder().addComponents(replyInput);
     modal.addComponents(firstActionRow);
 
+    // Show modal immediately to respond within 3 seconds
     console.log('[MediaReply] Attempting to show modal...');
+    console.log('[MediaReply] Modal customId:', modal.data.custom_id);
+    console.log('[MediaReply] Interaction state before showModal:', {
+      replied: interaction.replied,
+      deferred: interaction.deferred,
+      isRepliable: interaction.isRepliable(),
+      isModal: interaction.isModalSubmit()
+    });
+    
     try {
       await interaction.showModal(modal);
       console.log('[MediaReply] ✅ Modal shown successfully');
     } catch (modalError) {
       console.error('[MediaReply] ❌ Error showing modal:', modalError);
       console.error('[MediaReply] Modal error details:', {
+        name: modalError.name,
         message: modalError.message,
         code: modalError.code,
         stack: modalError.stack
@@ -2052,30 +2069,55 @@ async function handleMediaReplyButton(interaction, configManager) {
       
       // Try to reply with error message
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: `❌ Kon modal niet openen: ${modalError.message}`,
-          ephemeral: true
-        }).catch(err => console.error('[MediaReply] Error sending error message:', err));
+        try {
+          await interaction.reply({
+            content: `❌ Kon modal niet openen: ${modalError.message || 'Onbekende fout'}`,
+            ephemeral: true
+          });
+        } catch (replyError) {
+          console.error('[MediaReply] Error sending error message:', replyError);
+          console.error('[MediaReply] Reply error code:', replyError.code);
+          console.error('[MediaReply] Reply error message:', replyError.message);
+        }
       }
       throw modalError;
     }
+
+    // Validate channel rules after showing modal (validation happens in modal submit handler)
+    // This allows the modal to open even if there's a delay in fetching rules
+    
   } catch (error) {
-    console.error('[MediaReply] Error handling media reply button:', error);
+    console.error('[MediaReply] ❌ Error handling media reply button:', error);
+    console.error('[MediaReply] Error name:', error.name);
+    console.error('[MediaReply] Error message:', error.message);
+    console.error('[MediaReply] Error code:', error.code);
     console.error('[MediaReply] Error stack:', error.stack);
-    try {
-      if (!interaction.replied && !interaction.deferred) {
+    
+    // Only try to reply if modal wasn't shown and interaction is still valid
+    if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
+      try {
         await interaction.reply({
-          content: `❌ An error occurred: ${error.message}`,
+          content: `❌ Er is een fout opgetreden: ${error.message || 'Onbekende fout'}`,
           ephemeral: true
+        }).catch(replyErr => {
+          console.error('[MediaReply] Failed to send error reply:', replyErr);
         });
-      } else if (interaction.deferred) {
-        await interaction.followUp({
-          content: `❌ An error occurred: ${error.message}`,
-          ephemeral: true
-        });
+      } catch (replyError) {
+        console.error('[MediaReply] Error sending error message:', replyError);
+        // If we can't reply, the interaction has likely expired
+        if (replyError.code === 10062 || replyError.code === 40060 || 
+            replyError.message?.includes('Unknown interaction') ||
+            replyError.message?.includes('interaction has already been acknowledged')) {
+          console.error('[MediaReply] Interaction expired or already acknowledged');
+        }
       }
-    } catch (replyError) {
-      console.error('[MediaReply] Error sending error message:', replyError);
+    } else {
+      console.warn('[MediaReply] Cannot reply - interaction already handled or not repliable');
+      console.warn('[MediaReply] Interaction state:', {
+        replied: interaction.replied,
+        deferred: interaction.deferred,
+        isRepliable: interaction.isRepliable()
+      });
     }
   }
 }
@@ -5593,5 +5635,5 @@ async function handleUnequipCommand(interaction, inventoryManager) {
   await interaction.editReply({ embeds: [embed] });
 }
 
-module.exports = { setupBotHandlers };
+module.exports = { setupBotHandlers, handleMediaReplyButton };
 
