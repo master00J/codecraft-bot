@@ -135,11 +135,11 @@ function createMessageCreateHandler({
             }
           }
 
-          // Prepare attachments
-          const attachments = Array.from(message.attachments.values()).map(att => ({
-            attachment: att.url,
-            name: att.name
-          }));
+          // Prepare attachments using AttachmentBuilder
+          const { AttachmentBuilder } = require('discord.js');
+          const attachments = Array.from(message.attachments.values()).map(att => {
+            return new AttachmentBuilder(att.url, { name: att.name });
+          });
 
           // Prepare embeds (copy original embeds if any)
           const embeds = message.embeds.length > 0 
