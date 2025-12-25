@@ -708,10 +708,16 @@ function setupEventHandlers(client, handlers) {
     }
 
     const allowedCommands = ['help'];
-    if (!(await ensureInteractionLicense(interaction, { allowedCommands }))) {
+    const licenseResult = await ensureInteractionLicense(interaction, { allowedCommands });
+    console.log('[Interaction] License check result:', licenseResult, 'for interaction type:', interaction.type);
+    
+    if (!licenseResult) {
       console.log('[Interaction] License check failed for interaction:', interaction.customId);
       return;
     }
+
+    console.log('[Interaction] After license check, checking interaction type...');
+    console.log('[Interaction] isButton:', interaction.isButton(), 'isModalSubmit:', interaction.isModalSubmit(), 'isChatInputCommand:', interaction.isChatInputCommand());
 
     // Handle button interactions
     if (interaction.isButton()) {
