@@ -1959,11 +1959,12 @@ async function handleUntimeoutCommand(interaction, modActions) {
 async function handleMediaReplyButton(interaction, configManager) {
   try {
     const messageId = interaction.customId.replace('media_reply_', '');
-    const originalMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+    // Use the message where the button was clicked (webhook message) as the original
+    const originalMessage = interaction.message;
     
     if (!originalMessage) {
       return interaction.reply({
-        content: '❌ Original message not found.',
+        content: '❌ Message not found.',
         ephemeral: true
       });
     }
@@ -1988,7 +1989,7 @@ async function handleMediaReplyButton(interaction, configManager) {
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
     
     const modal = new ModalBuilder()
-      .setCustomId(`media_reply_modal_${messageId}`)
+      .setCustomId(`media_reply_modal_${originalMessage.id}`)
       .setTitle('Reply to Media Post');
 
     const replyInput = new TextInputBuilder()
@@ -2029,6 +2030,7 @@ async function handleMediaReplyModal(interaction, configManager) {
       });
     }
 
+    // Fetch the webhook message (which contains the media)
     const originalMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
     if (!originalMessage) {
       return interaction.reply({

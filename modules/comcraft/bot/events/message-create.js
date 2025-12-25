@@ -99,39 +99,79 @@ function createMessageCreateHandler({
     try {
       const channelRules = await configManager.getChannelModerationRules(message.guild.id, message.channel.id);
       if (channelRules?.reply_channel_id && (message.attachments.size > 0 || message.embeds.length > 0)) {
-        // Check if bot can manage messages (to add button via follow-up)
+        // Check if bot can manage messages and webhooks
         const botMember = message.guild.members.me;
-        if (botMember && message.channel.permissionsFor(botMember)?.has(['ManageMessages', 'SendMessages'])) {
+        const permissions = message.channel.permissionsFor(botMember);
+        
+        if (botMember && permissions?.has(['ManageMessages', 'ManageWebhooks', 'SendMessages'])) {
           const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-          const replyButton = new ButtonBuilder()
-            .setCustomId(`media_reply_${message.id}`)
-            .setLabel('Reply')
-            .setEmoji('💬')
-            .setStyle(ButtonStyle.Primary);
-
-          const row = new ActionRowBuilder().addComponents(replyButton);
           
-          // Try to add button via follow-up message (bot can't edit user messages)
-          // Use a minimal embed that auto-deletes to keep channel clean
-          const { EmbedBuilder } = require('discord.js');
-          const buttonEmbed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setDescription(`💬 [Reply to this post](${message.url})`)
-            .setFooter({ text: 'This message will auto-delete in 30 seconds' });
+          // Create or get webhook for this channel
+          let webhook = (await message.channel.fetchWebhooks()).find(w => w.owner?.id === botMember.id);
+          
+          if (!webhook) {
+            try {
+              webhook = await message.channel.createWebhook({
+                name: 'Comcraft Reply',
+                avatar: botMember.user.displayAvatarURL(),
+                reason: 'Auto-reply button for media posts'
+              });
+            } catch (error) {
+              console.error('[MessageCreate] Error creating webhook:', error.message);
+              // Fallback to reaction if webhook creation fails
+              message.react('💬').catch(() => {});
+              return;
+            }
+          }
 
-          const followUp = await message.channel.send({
-            embeds: [buttonEmbed],
-            components: [row]
-          }).catch(() => null);
+          // Prepare attachments
+          const attachments = Array.from(message.attachments.values()).map(att => ({
+            attachment: att.url,
+            name: att.name
+          }));
 
-          // Auto-delete follow-up after 30 seconds to keep channel clean
-          if (followUp) {
-            setTimeout(() => {
-              followUp.delete().catch(() => {});
-            }, 30000);
+          // Prepare embeds (copy original embeds if any)
+          const embeds = message.embeds.length > 0 
+            ? message.embeds.map(e => e.toJSON())
+            : [];
+
+          // Repost message via webhook with button
+          try {
+            // First send without button to get the message ID
+            const webhookMessage = await webhook.send({
+              content: message.content || undefined,
+              username: message.author.username,
+              avatarURL: message.author.displayAvatarURL(),
+              embeds: embeds,
+              files: attachments
+            });
+
+            // Now add reply button using the webhook message ID
+            const replyButton = new ButtonBuilder()
+              .setCustomId(`media_reply_${webhookMessage.id}`)
+              .setLabel('Reply')
+              .setEmoji('💬')
+              .setStyle(ButtonStyle.Primary);
+
+            const row = new ActionRowBuilder().addComponents(replyButton);
+
+            // Edit the webhook message to add the button
+            await webhookMessage.edit({
+              components: [row]
+            });
+
+            // Delete original message after successful repost
+            await message.delete().catch(() => {
+              // If deletion fails, that's okay - the repost still happened
+              console.log('[MessageCreate] Could not delete original message after repost');
+            });
+          } catch (error) {
+            console.error('[MessageCreate] Error reposting message via webhook:', error.message);
+            // Fallback to reaction if webhook send fails
+            message.react('💬').catch(() => {});
           }
         } else {
-          // Fallback: add reaction if we can't send messages
+          // Fallback: add reaction if we don't have required permissions
           message.react('💬').catch(() => {});
         }
       }
