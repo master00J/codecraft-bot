@@ -665,6 +665,7 @@ export default function ModerationPage() {
                             text_only: false,
                             links_only: false,
                             no_links: false,
+                            reply_channel_id: null,
                             filter_spam: null,
                             filter_links: null,
                             filter_invites: null,
@@ -813,6 +814,35 @@ export default function ModerationPage() {
                                     }}
                                   />
                                 </div>
+                              </div>
+                            </div>
+
+                            {/* Reply Channel Feature */}
+                            <div>
+                              <Label className="text-base font-semibold mb-2 block">Reply Channel</Label>
+                              <div className="space-y-2">
+                                <Select
+                                  value={rule.reply_channel_id || 'none'}
+                                  onValueChange={async (value) => {
+                                    const updated = { ...rule, reply_channel_id: value === 'none' ? null : value };
+                                    await saveChannelRule(updated);
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select reply channel (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">No reply channel (disabled)</SelectItem>
+                                    {channels.map((ch: any) => (
+                                      <SelectItem key={ch.id} value={ch.id}>
+                                        #{ch.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                  When enabled, media posts in this channel will get a reply button. Replies will be sent to the selected channel instead of creating threads.
+                                </p>
                               </div>
                             </div>
 

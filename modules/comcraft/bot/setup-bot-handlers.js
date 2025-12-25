@@ -817,6 +817,12 @@ function setupEventHandlers(client, handlers) {
         return;
       }
 
+      // Handle media reply buttons (route replies to another channel)
+      if (interaction.customId && interaction.customId.startsWith('media_reply_')) {
+        await handleMediaReplyButton(interaction, configManager);
+        return;
+      }
+
       return await autoRolesManager.handleButtonInteraction(interaction);
     }
 
@@ -852,6 +858,12 @@ function setupEventHandlers(client, handlers) {
         }
 
         await handleCasinoBetModal(interaction, casinoManager, economyManager);
+        return;
+      }
+
+      // Media reply modal handler
+      if (interaction.customId.startsWith('media_reply_modal_')) {
+        await handleMediaReplyModal(interaction, configManager);
         return;
       }
     }
@@ -1938,6 +1950,184 @@ async function handleUntimeoutCommand(interaction, modActions) {
       content: `❌ Error: ${result.error}`,
       ephemeral: true,
     });
+  }
+}
+
+/**
+ * Handle media reply button - opens modal to reply, then sends to reply channel
+ */
+async function handleMediaReplyButton(interaction, configManager) {
+  try {
+    const messageId = interaction.customId.replace('media_reply_', '');
+    const originalMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+    
+    if (!originalMessage) {
+      return interaction.reply({
+        content: '❌ Original message not found.',
+        ephemeral: true
+      });
+    }
+
+    const channelRules = await configManager.getChannelModerationRules(interaction.guild.id, interaction.channel.id);
+    if (!channelRules?.reply_channel_id) {
+      return interaction.reply({
+        content: '❌ Reply channel not configured for this channel.',
+        ephemeral: true
+      });
+    }
+
+    const replyChannel = interaction.guild.channels.cache.get(channelRules.reply_channel_id);
+    if (!replyChannel) {
+      return interaction.reply({
+        content: '❌ Reply channel not found. Please contact an administrator.',
+        ephemeral: true
+      });
+    }
+
+    // Show modal to enter reply
+    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+    
+    const modal = new ModalBuilder()
+      .setCustomId(`media_reply_modal_${messageId}`)
+      .setTitle('Reply to Media Post');
+
+    const replyInput = new TextInputBuilder()
+      .setCustomId('reply_text')
+      .setLabel('Your reply')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Type your reply here...')
+      .setRequired(true)
+      .setMaxLength(2000);
+
+    const firstActionRow = new ActionRowBuilder().addComponents(replyInput);
+    modal.addComponents(firstActionRow);
+
+    await interaction.showModal(modal);
+  } catch (error) {
+    console.error('Error handling media reply button:', error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: '❌ An error occurred while opening the reply form.',
+        ephemeral: true
+      }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Handle media reply modal submission - sends reply to configured reply channel
+ */
+async function handleMediaReplyModal(interaction, configManager) {
+  try {
+    const messageId = interaction.customId.replace('media_reply_modal_', '');
+    const replyText = interaction.fields.getTextInputValue('reply_text');
+
+    if (!replyText || !replyText.trim()) {
+      return interaction.reply({
+        content: '❌ Reply cannot be empty.',
+        ephemeral: true
+      });
+    }
+
+    const originalMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+    if (!originalMessage) {
+      return interaction.reply({
+        content: '❌ Original message not found.',
+        ephemeral: true
+      });
+    }
+
+    const channelRules = await configManager.getChannelModerationRules(interaction.guild.id, interaction.channel.id);
+    if (!channelRules?.reply_channel_id) {
+      return interaction.reply({
+        content: '❌ Reply channel not configured for this channel.',
+        ephemeral: true
+      });
+    }
+
+    const replyChannel = interaction.guild.channels.cache.get(channelRules.reply_channel_id);
+    if (!replyChannel) {
+      return interaction.reply({
+        content: '❌ Reply channel not found. Please contact an administrator.',
+        ephemeral: true
+      });
+    }
+
+    // Check if bot can send messages in reply channel
+    if (!replyChannel.permissionsFor(interaction.guild.members.me)?.has(['SendMessages', 'ViewChannel'])) {
+      return interaction.reply({
+        content: '❌ I do not have permission to send messages in the reply channel.',
+        ephemeral: true
+      });
+    }
+
+    // Create embed with original message info and reply
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setAuthor({
+        name: `${interaction.user.tag} replied`,
+        iconURL: interaction.user.displayAvatarURL()
+      })
+      .setDescription(replyText)
+      .addFields(
+        {
+          name: '📎 Original Post',
+          value: `[Jump to message](${originalMessage.url})`,
+          inline: true
+        },
+        {
+          name: '📤 From Channel',
+          value: `${interaction.channel} (${interaction.channel.name})`,
+          inline: true
+        }
+      )
+      .setTimestamp();
+
+    // Include original message content if available (truncated)
+    if (originalMessage.content) {
+      const truncatedContent = originalMessage.content.length > 500
+        ? originalMessage.content.substring(0, 500) + '...'
+        : originalMessage.content;
+      embed.addFields({
+        name: '💬 Original Content',
+        value: truncatedContent,
+        inline: false
+      });
+    }
+
+    // Include first attachment/embed image if available
+    if (originalMessage.attachments.size > 0) {
+      const firstAttachment = originalMessage.attachments.first();
+      if (firstAttachment.contentType?.startsWith('image/')) {
+        embed.setImage(firstAttachment.url);
+      }
+    } else if (originalMessage.embeds.length > 0) {
+      const firstEmbed = originalMessage.embeds[0];
+      if (firstEmbed.image) {
+        embed.setImage(firstEmbed.image.url);
+      } else if (firstEmbed.thumbnail) {
+        embed.setThumbnail(firstEmbed.thumbnail.url);
+      }
+    }
+
+    await replyChannel.send({
+      content: `💬 Reply from ${interaction.user}`,
+      embeds: [embed]
+    });
+
+    await interaction.reply({
+      content: `✅ Your reply has been sent to ${replyChannel}!`,
+      ephemeral: true
+    });
+  } catch (error) {
+    console.error('Error handling media reply modal:', error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: '❌ An error occurred while sending your reply.',
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
 }
 

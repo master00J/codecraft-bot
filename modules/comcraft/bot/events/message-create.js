@@ -95,6 +95,51 @@ function createMessageCreateHandler({
       return; // Don't give XP for moderated messages
     }
 
+    // Check for reply channel feature (add reply button to media posts)
+    try {
+      const channelRules = await configManager.getChannelModerationRules(message.guild.id, message.channel.id);
+      if (channelRules?.reply_channel_id && (message.attachments.size > 0 || message.embeds.length > 0)) {
+        // Check if bot can manage messages (to add button via follow-up)
+        const botMember = message.guild.members.me;
+        if (botMember && message.channel.permissionsFor(botMember)?.has(['ManageMessages', 'SendMessages'])) {
+          const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+          const replyButton = new ButtonBuilder()
+            .setCustomId(`media_reply_${message.id}`)
+            .setLabel('Reply')
+            .setEmoji('💬')
+            .setStyle(ButtonStyle.Primary);
+
+          const row = new ActionRowBuilder().addComponents(replyButton);
+          
+          // Try to add button via follow-up message (bot can't edit user messages)
+          // Use a minimal embed that auto-deletes to keep channel clean
+          const { EmbedBuilder } = require('discord.js');
+          const buttonEmbed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setDescription(`💬 [Reply to this post](${message.url})`)
+            .setFooter({ text: 'This message will auto-delete in 30 seconds' });
+
+          const followUp = await message.channel.send({
+            embeds: [buttonEmbed],
+            components: [row]
+          }).catch(() => null);
+
+          // Auto-delete follow-up after 30 seconds to keep channel clean
+          if (followUp) {
+            setTimeout(() => {
+              followUp.delete().catch(() => {});
+            }, 30000);
+          }
+        } else {
+          // Fallback: add reaction if we can't send messages
+          message.react('💬').catch(() => {});
+        }
+      }
+    } catch (error) {
+      // Silent fail - don't break message processing
+      console.error('[MessageCreate] Error adding reply button:', error.message);
+    }
+
     // Check for auto-reactions (before custom commands, so reactions can be added to command messages too)
     if (getAutoReactionsManager !== null && getAutoReactionsManager !== undefined) {
       try {
