@@ -697,8 +697,19 @@ function setupEventHandlers(client, handlers) {
       return;
     }
 
+    // Log all interactions for debugging
+    if (interaction.isButton() || interaction.isModalSubmit()) {
+      console.log('[Interaction] Received interaction:', {
+        type: interaction.isButton() ? 'button' : interaction.isModalSubmit() ? 'modal' : 'unknown',
+        customId: interaction.customId,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId
+      });
+    }
+
     const allowedCommands = ['help'];
     if (!(await ensureInteractionLicense(interaction, { allowedCommands }))) {
+      console.log('[Interaction] License check failed for interaction:', interaction.customId);
       return;
     }
 
