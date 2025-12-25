@@ -140,6 +140,7 @@ function createMessageCreateHandler({
             // Generate a unique ID for this button that we can track
             // We'll store message.id -> webhookMessage.id mapping, or use a hash
             const buttonId = `media_reply_${message.id}_${message.channel.id}`;
+            console.log('[MessageCreate] Creating reply button with ID:', buttonId);
             
             const replyButton = new ButtonBuilder()
               .setCustomId(buttonId)
@@ -150,6 +151,7 @@ function createMessageCreateHandler({
             const row = new ActionRowBuilder().addComponents(replyButton);
 
             // Send webhook message WITH button directly
+            console.log('[MessageCreate] Sending webhook message with button...');
             const webhookMessage = await webhook.send({
               content: message.content || undefined,
               username: message.author.username,
@@ -158,6 +160,7 @@ function createMessageCreateHandler({
               files: attachments,
               components: [row]
             });
+            console.log('[MessageCreate] Webhook message sent successfully, ID:', webhookMessage.id);
 
             // Store the mapping: buttonId -> webhookMessage.id for the handler
             // We'll pass the webhook message ID through the button handler

@@ -704,6 +704,8 @@ function setupEventHandlers(client, handlers) {
 
     // Handle button interactions
     if (interaction.isButton()) {
+      console.log('[Interaction] Button clicked, customId:', interaction.customId);
+      
       if (isTicketButton(interaction.customId)) {
         await handleTicketButton(interaction);
         return;
@@ -819,6 +821,7 @@ function setupEventHandlers(client, handlers) {
 
       // Handle media reply buttons (route replies to another channel)
       if (interaction.customId && interaction.customId.startsWith('media_reply_')) {
+        console.log('[Interaction] Media reply button detected, customId:', interaction.customId);
         await handleMediaReplyButton(interaction, configManager);
         return;
       }
