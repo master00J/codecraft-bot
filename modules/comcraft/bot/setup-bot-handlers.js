@@ -2018,8 +2018,27 @@ async function handleMediaReplyButton(interaction, configManager) {
     const firstActionRow = new ActionRowBuilder().addComponents(replyInput);
     modal.addComponents(firstActionRow);
 
-    await interaction.showModal(modal);
-    console.log('[MediaReply] Modal shown successfully');
+    console.log('[MediaReply] Attempting to show modal...');
+    try {
+      await interaction.showModal(modal);
+      console.log('[MediaReply] ✅ Modal shown successfully');
+    } catch (modalError) {
+      console.error('[MediaReply] ❌ Error showing modal:', modalError);
+      console.error('[MediaReply] Modal error details:', {
+        message: modalError.message,
+        code: modalError.code,
+        stack: modalError.stack
+      });
+      
+      // Try to reply with error message
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: `❌ Kon modal niet openen: ${modalError.message}`,
+          ephemeral: true
+        }).catch(err => console.error('[MediaReply] Error sending error message:', err));
+      }
+      throw modalError;
+    }
   } catch (error) {
     console.error('[MediaReply] Error handling media reply button:', error);
     console.error('[MediaReply] Error stack:', error.stack);
