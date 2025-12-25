@@ -1958,7 +1958,10 @@ async function handleUntimeoutCommand(interaction, modActions) {
  */
 async function handleMediaReplyButton(interaction, configManager) {
   try {
-    const messageId = interaction.customId.replace('media_reply_', '');
+    // Parse button ID: media_reply_<originalMessageId>_<channelId>
+    const buttonIdParts = interaction.customId.replace('media_reply_', '').split('_');
+    const originalMessageId = buttonIdParts[0];
+    
     // Use the message where the button was clicked (webhook message) as the original
     const originalMessage = interaction.message;
     

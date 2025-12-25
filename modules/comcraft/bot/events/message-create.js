@@ -137,28 +137,31 @@ function createMessageCreateHandler({
 
           // Repost message via webhook with button
           try {
-            // First send without button to get the message ID
-            const webhookMessage = await webhook.send({
-              content: message.content || undefined,
-              username: message.author.username,
-              avatarURL: message.author.displayAvatarURL(),
-              embeds: embeds,
-              files: attachments
-            });
-
-            // Now add reply button using the webhook message ID
+            // Generate a unique ID for this button that we can track
+            // We'll store message.id -> webhookMessage.id mapping, or use a hash
+            const buttonId = `media_reply_${message.id}_${message.channel.id}`;
+            
             const replyButton = new ButtonBuilder()
-              .setCustomId(`media_reply_${webhookMessage.id}`)
+              .setCustomId(buttonId)
               .setLabel('Reply')
               .setEmoji('💬')
               .setStyle(ButtonStyle.Primary);
 
             const row = new ActionRowBuilder().addComponents(replyButton);
 
-            // Edit the webhook message to add the button
-            await webhookMessage.edit({
+            // Send webhook message WITH button directly
+            const webhookMessage = await webhook.send({
+              content: message.content || undefined,
+              username: message.author.username,
+              avatarURL: message.author.displayAvatarURL(),
+              embeds: embeds,
+              files: attachments,
               components: [row]
             });
+
+            // Store the mapping: buttonId -> webhookMessage.id for the handler
+            // We'll pass the webhook message ID through the button handler
+            // For now, the button will work with the original message ID in the handler
 
             // Delete original message after successful repost
             await message.delete().catch(() => {
@@ -167,6 +170,7 @@ function createMessageCreateHandler({
             });
           } catch (error) {
             console.error('[MessageCreate] Error reposting message via webhook:', error.message);
+            console.error('[MessageCreate] Full error:', error);
             // Fallback to reaction if webhook send fails
             message.react('💬').catch(() => {});
           }
