@@ -97,13 +97,24 @@ function createMessageCreateHandler({
 
     // Check for reply channel feature (add reply button to media posts)
     try {
+      console.log('[MessageCreate] Checking for reply channel feature...');
       const channelRules = await configManager.getChannelModerationRules(message.guild.id, message.channel.id);
+      console.log('[MessageCreate] Channel rules:', channelRules);
+      console.log('[MessageCreate] Has attachments:', message.attachments.size > 0, 'Has embeds:', message.embeds.length > 0);
+      
       if (channelRules?.reply_channel_id && (message.attachments.size > 0 || message.embeds.length > 0)) {
+        console.log('[MessageCreate] Reply channel feature enabled, checking permissions...');
         // Check if bot can manage messages and webhooks
         const botMember = message.guild.members.me;
         const permissions = message.channel.permissionsFor(botMember);
+        console.log('[MessageCreate] Bot permissions:', {
+          ManageMessages: permissions?.has('ManageMessages'),
+          ManageWebhooks: permissions?.has('ManageWebhooks'),
+          SendMessages: permissions?.has('SendMessages')
+        });
         
         if (botMember && permissions?.has(['ManageMessages', 'ManageWebhooks', 'SendMessages'])) {
+          console.log('[MessageCreate] All permissions OK, proceeding with webhook...');
           const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
           
           // Create or get webhook for this channel
