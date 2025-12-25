@@ -176,8 +176,10 @@ function createMessageCreateHandler({
               hasComponents: true
             });
             
+            let webhookMessage;
             try {
-              const webhookMessage = await webhook.send({
+              console.log('[MessageCreate] Calling webhook.send()...');
+              webhookMessage = await webhook.send({
                 content: message.content || undefined,
                 username: message.author.username,
                 avatarURL: message.author.displayAvatarURL(),
@@ -192,9 +194,15 @@ function createMessageCreateHandler({
                 message: sendError.message,
                 code: sendError.code,
                 status: sendError.status,
-                statusCode: sendError.statusCode
+                statusCode: sendError.statusCode,
+                name: sendError.name,
+                stack: sendError.stack?.split('\n').slice(0, 5).join('\n')
               });
-              throw sendError; // Re-throw to be caught by outer catch
+              
+              // Don't throw - try fallback instead
+              console.log('[MessageCreate] Attempting fallback: adding reaction to original message');
+              message.react('💬').catch(() => {});
+              return; // Exit early, don't delete original message
             }
 
             // Store the mapping: buttonId -> webhookMessage.id for the handler
