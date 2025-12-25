@@ -1958,6 +1958,8 @@ async function handleUntimeoutCommand(interaction, modActions) {
  */
 async function handleMediaReplyButton(interaction, configManager) {
   try {
+    console.log('[MediaReply] Button clicked, customId:', interaction.customId);
+    
     // Parse button ID: media_reply_<originalMessageId>_<channelId>
     const buttonIdParts = interaction.customId.replace('media_reply_', '').split('_');
     const originalMessageId = buttonIdParts[0];
@@ -1966,28 +1968,35 @@ async function handleMediaReplyButton(interaction, configManager) {
     const originalMessage = interaction.message;
     
     if (!originalMessage) {
+      console.error('[MediaReply] Original message not found');
       return interaction.reply({
         content: '❌ Message not found.',
         ephemeral: true
-      });
+      }).catch(err => console.error('[MediaReply] Error replying:', err));
     }
 
+    console.log('[MediaReply] Fetching channel rules for guild:', interaction.guild.id, 'channel:', interaction.channel.id);
     const channelRules = await configManager.getChannelModerationRules(interaction.guild.id, interaction.channel.id);
+    console.log('[MediaReply] Channel rules:', channelRules);
+    
     if (!channelRules?.reply_channel_id) {
+      console.error('[MediaReply] Reply channel not configured');
       return interaction.reply({
         content: '❌ Reply channel not configured for this channel.',
         ephemeral: true
-      });
+      }).catch(err => console.error('[MediaReply] Error replying:', err));
     }
 
     const replyChannel = interaction.guild.channels.cache.get(channelRules.reply_channel_id);
     if (!replyChannel) {
+      console.error('[MediaReply] Reply channel not found:', channelRules.reply_channel_id);
       return interaction.reply({
         content: '❌ Reply channel not found. Please contact an administrator.',
         ephemeral: true
-      });
+      }).catch(err => console.error('[MediaReply] Error replying:', err));
     }
 
+    console.log('[MediaReply] Creating modal for message:', originalMessage.id);
     // Show modal to enter reply
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
     
@@ -2007,13 +2016,24 @@ async function handleMediaReplyButton(interaction, configManager) {
     modal.addComponents(firstActionRow);
 
     await interaction.showModal(modal);
+    console.log('[MediaReply] Modal shown successfully');
   } catch (error) {
-    console.error('Error handling media reply button:', error);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: '❌ An error occurred while opening the reply form.',
-        ephemeral: true
-      }).catch(() => {});
+    console.error('[MediaReply] Error handling media reply button:', error);
+    console.error('[MediaReply] Error stack:', error.stack);
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: `❌ An error occurred: ${error.message}`,
+          ephemeral: true
+        });
+      } else if (interaction.deferred) {
+        await interaction.followUp({
+          content: `❌ An error occurred: ${error.message}`,
+          ephemeral: true
+        });
+      }
+    } catch (replyError) {
+      console.error('[MediaReply] Error sending error message:', replyError);
     }
   }
 }
