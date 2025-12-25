@@ -693,18 +693,21 @@ function setupEventHandlers(client, handlers) {
 
   // Interaction Create handler
   client.on('interactionCreate', async (interaction) => {
-    if (isCustomBot && guildId && interaction.guildId !== guildId) {
-      return;
-    }
+    // Log ALL interactions for debugging
+    console.log('[Interaction] Received interaction:', {
+      type: interaction.type,
+      isButton: interaction.isButton(),
+      isModalSubmit: interaction.isModalSubmit(),
+      isChatInputCommand: interaction.isChatInputCommand(),
+      customId: interaction.customId || 'N/A',
+      guildId: interaction.guildId || 'N/A',
+      channelId: interaction.channelId || 'N/A',
+      user: interaction.user?.tag || 'N/A'
+    });
 
-    // Log all interactions for debugging
-    if (interaction.isButton() || interaction.isModalSubmit()) {
-      console.log('[Interaction] Received interaction:', {
-        type: interaction.isButton() ? 'button' : interaction.isModalSubmit() ? 'modal' : 'unknown',
-        customId: interaction.customId,
-        guildId: interaction.guildId,
-        channelId: interaction.channelId
-      });
+    if (isCustomBot && guildId && interaction.guildId !== guildId) {
+      console.log('[Interaction] Skipping: custom bot filter');
+      return;
     }
 
     const allowedCommands = ['help'];
