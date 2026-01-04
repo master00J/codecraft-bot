@@ -860,6 +860,23 @@ function setupEventHandlers(client, handlers) {
         return;
       }
 
+      // Handle media delete buttons (delete webhook message)
+      if (interaction.customId && interaction.customId.startsWith('media_delete_')) {
+        console.log('[Interaction] Media delete button detected, customId:', interaction.customId);
+        try {
+          await handleMediaDeleteButton(interaction);
+        } catch (handlerError) {
+          console.error('[Interaction] Error in handleMediaDeleteButton:', handlerError);
+          if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
+            await interaction.reply({
+              content: '❌ Er is een fout opgetreden bij het verwijderen van het bericht.',
+              ephemeral: true
+            }).catch(() => {});
+          }
+        }
+        return;
+      }
+
       return await autoRolesManager.handleButtonInteraction(interaction);
     }
 
@@ -2030,8 +2047,19 @@ async function handleMediaReplyButton(interaction, configManager) {
     console.log('[MediaReply] Creating modal for message:', originalMessage.id);
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
     
+    // Parse button ID to get original message ID and author ID
+    const buttonIdParts = interaction.customId.replace('media_reply_', '').split('_');
+    let modalId;
+    if (buttonIdParts.length >= 3) {
+      // Format: originalMessageId_channelId_originalAuthorId
+      modalId = `${buttonIdParts[0]}_${buttonIdParts[1]}_${buttonIdParts[2]}`;
+    } else {
+      // Fallback to original message ID
+      modalId = originalMessage.id;
+    }
+    
     const modal = new ModalBuilder()
-      .setCustomId(`media_reply_modal_${originalMessage.id}`)
+      .setCustomId(`media_reply_modal_${modalId}`)
       .setTitle('💬 Reply to Media Post');
 
     const replyInput = new TextInputBuilder()
@@ -2123,11 +2151,89 @@ async function handleMediaReplyButton(interaction, configManager) {
 }
 
 /**
+ * Handle media delete button - deletes webhook message if user is original poster
+ */
+async function handleMediaDeleteButton(interaction) {
+  try {
+    // Parse button ID: media_delete_<webhookMessageId>_<originalMessageId>_<originalAuthorId>
+    const buttonIdParts = interaction.customId.replace('media_delete_', '').split('_');
+    
+    if (buttonIdParts.length < 3) {
+      return interaction.reply({
+        content: '❌ Invalid delete button format.',
+        ephemeral: true
+      });
+    }
+    
+    const webhookMessageId = buttonIdParts[0];
+    const originalAuthorId = buttonIdParts[2];
+    
+    // Check if user is the original poster
+    if (interaction.user.id !== originalAuthorId) {
+      return interaction.reply({
+        content: '❌ Je kunt alleen je eigen berichten verwijderen.',
+        ephemeral: true
+      });
+    }
+    
+    // Fetch the webhook message
+    const webhookMessage = await interaction.channel.messages.fetch(webhookMessageId).catch(() => null);
+    if (!webhookMessage) {
+      return interaction.reply({
+        content: '❌ Bericht niet gevonden.',
+        ephemeral: true
+      });
+    }
+    
+    // Check if bot can delete the message
+    if (!webhookMessage.deletable) {
+      return interaction.reply({
+        content: '❌ Ik heb geen toestemming om dit bericht te verwijderen.',
+        ephemeral: true
+      });
+    }
+    
+    // Delete the message
+    await webhookMessage.delete();
+    
+    await interaction.reply({
+      content: '✅ Bericht verwijderd.',
+      ephemeral: true
+    });
+  } catch (error) {
+    console.error('Error handling media delete button:', error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: '❌ Er is een fout opgetreden bij het verwijderen van het bericht.',
+        ephemeral: true
+      }).catch(() => {});
+    }
+  }
+}
+
+/**
  * Handle media reply modal submission - sends reply to configured reply channel
  */
 async function handleMediaReplyModal(interaction, configManager) {
   try {
-    const messageId = interaction.customId.replace('media_reply_modal_', '');
+    // Parse button ID: media_reply_<originalMessageId>_<channelId>_<originalAuthorId>
+    const modalId = interaction.customId.replace('media_reply_modal_', '');
+    const parts = modalId.split('_');
+    
+    // The modal ID should be the same format as button ID
+    // For backward compatibility, check if it's just a message ID
+    let originalMessageId, originalAuthorId;
+    
+    if (parts.length >= 3) {
+      // New format: originalMessageId_channelId_originalAuthorId
+      originalMessageId = parts[0];
+      originalAuthorId = parts[2];
+    } else {
+      // Old format: just messageId
+      originalMessageId = modalId;
+      originalAuthorId = null;
+    }
+    
     const replyText = interaction.fields.getTextInputValue('reply_text');
 
     if (!replyText || !replyText.trim()) {
@@ -2138,12 +2244,19 @@ async function handleMediaReplyModal(interaction, configManager) {
     }
 
     // Fetch the webhook message (which contains the media)
-    const originalMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+    const originalMessage = await interaction.channel.messages.fetch(originalMessageId).catch(() => null);
     if (!originalMessage) {
       return interaction.reply({
         content: '❌ Original message not found.',
         ephemeral: true
       });
+    }
+    
+    // Get original author ID from message if not in button ID
+    if (!originalAuthorId) {
+      // Try to get from webhook message (stored in embed or we need to parse from username)
+      // For now, we'll try to fetch the original message from the database or use a fallback
+      originalAuthorId = originalMessage.author?.id;
     }
 
     const channelRules = await configManager.getChannelModerationRules(interaction.guild.id, interaction.channel.id);
@@ -2220,10 +2333,62 @@ async function handleMediaReplyModal(interaction, configManager) {
       }
     }
 
-    await replyChannel.send({
-      content: `💬 Reply from ${interaction.user}`,
+    // Ping both the replier and the original poster
+    let mentionContent = `💬 Reply from ${interaction.user}`;
+    if (originalAuthorId && originalAuthorId !== interaction.user.id) {
+      try {
+        const originalAuthor = await interaction.client.users.fetch(originalAuthorId).catch(() => null);
+        if (originalAuthor) {
+          mentionContent = `💬 ${interaction.user} replied to ${originalAuthor}`;
+        }
+      } catch (error) {
+        console.error('[MediaReply] Error fetching original author:', error);
+      }
+    }
+    
+    const replyMessage = await replyChannel.send({
+      content: mentionContent,
       embeds: [embed]
     });
+
+    // Send notification to original poster if they're different from replier
+    if (originalAuthorId && originalAuthorId !== interaction.user.id) {
+      try {
+        const originalAuthor = await interaction.client.users.fetch(originalAuthorId).catch(() => null);
+        if (originalAuthor) {
+          const { EmbedBuilder } = require('discord.js');
+          const notificationEmbed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setTitle('💬 New Reply to Your Post')
+            .setDescription(`**${interaction.user.tag}** replied to your post in ${interaction.channel}`)
+            .addFields(
+              {
+                name: '💬 Reply',
+                value: replyText.length > 500 ? replyText.substring(0, 500) + '...' : replyText,
+                inline: false
+              },
+              {
+                name: '🔗 Jump to Reply',
+                value: `[Click here](${replyMessage.url})`,
+                inline: true
+              },
+              {
+                name: '📎 Original Post',
+                value: `[Click here](${originalMessage.url})`,
+                inline: true
+              }
+            )
+            .setTimestamp();
+          
+          await originalAuthor.send({ embeds: [notificationEmbed] }).catch(() => {
+            // User has DMs disabled or blocked bot - that's okay
+            console.log('[MediaReply] Could not send DM to original author');
+          });
+        }
+      } catch (error) {
+        console.error('[MediaReply] Error sending notification to original author:', error);
+      }
+    }
 
     await interaction.reply({
       content: `✅ Your reply has been sent to ${replyChannel}!`,

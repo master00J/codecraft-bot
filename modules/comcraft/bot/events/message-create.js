@@ -102,7 +102,24 @@ function createMessageCreateHandler({
       console.log('[MessageCreate] Channel rules:', channelRules);
       console.log('[MessageCreate] Has attachments:', message.attachments.size > 0, 'Has embeds:', message.embeds.length > 0);
       
-      if (channelRules?.reply_channel_id && (message.attachments.size > 0 || message.embeds.length > 0)) {
+      // Check for attachments, embeds, or forwarded messages (messageReference with attachments/embeds)
+      const hasAttachments = message.attachments.size > 0;
+      const hasEmbeds = message.embeds.length > 0;
+      const hasForwardedContent = message.reference && (message.reference.messageId || message.reference.guildId);
+      
+      // Check if this is a forwarded message with attachments/embeds
+      let forwardedMessage = null;
+      if (hasForwardedContent && message.reference.messageId) {
+        try {
+          forwardedMessage = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+        } catch (error) {
+          // Ignore errors fetching forwarded message
+        }
+      }
+      
+      const hasForwardedAttachments = forwardedMessage && (forwardedMessage.attachments.size > 0 || forwardedMessage.embeds.length > 0);
+      
+      if (channelRules?.reply_channel_id && (hasAttachments || hasEmbeds || hasForwardedAttachments)) {
         console.log('[MessageCreate] Reply channel feature enabled, checking permissions...');
         // Check if bot can manage messages and webhooks
         const botMember = message.guild.members.me;
@@ -136,21 +153,47 @@ function createMessageCreateHandler({
           }
 
           // Prepare attachments using AttachmentBuilder
+          // Include forwarded attachments if this is a forwarded message
           const { AttachmentBuilder } = require('discord.js');
-          const attachments = Array.from(message.attachments.values()).map(att => {
-            return new AttachmentBuilder(att.url, { name: att.name });
-          });
-
-          // Prepare embeds (copy original embeds if any)
-          const embeds = message.embeds.length > 0 
-            ? message.embeds.map(e => e.toJSON())
-            : [];
+          let attachments = [];
+          let embeds = [];
+          
+          if (hasForwardedAttachments && forwardedMessage) {
+            // Use forwarded message attachments/embeds
+            attachments = Array.from(forwardedMessage.attachments.values()).map(att => {
+              return new AttachmentBuilder(att.url, { name: att.name });
+            });
+            embeds = forwardedMessage.embeds.length > 0 
+              ? forwardedMessage.embeds.map(e => e.toJSON())
+              : [];
+            
+            // Add original message content as a note if present
+            if (message.content) {
+              const forwardEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setDescription(`**Forwarded by ${message.author.username}:**\n${message.content}`)
+                .setTimestamp();
+              embeds.unshift(forwardEmbed.toJSON());
+            }
+          } else {
+            // Use current message attachments/embeds
+            attachments = Array.from(message.attachments.values()).map(att => {
+              return new AttachmentBuilder(att.url, { name: att.name });
+            });
+            embeds = message.embeds.length > 0 
+              ? message.embeds.map(e => e.toJSON())
+              : [];
+          }
 
           // Repost message via webhook with button
           try {
-            // Generate a unique ID for this button that we can track
-            // We'll store message.id -> webhookMessage.id mapping, or use a hash
-            const buttonId = `media_reply_${message.id}_${message.channel.id}`;
+            // Determine the original poster (for forwarded messages, use forwarded message author)
+            const originalAuthor = hasForwardedAttachments && forwardedMessage ? forwardedMessage.author : message.author;
+            const originalMessageId = hasForwardedAttachments && forwardedMessage ? forwardedMessage.id : message.id;
+            
+            // Generate a unique ID for this button that includes original poster ID
+            // Format: media_reply_<originalMessageId>_<channelId>_<originalAuthorId>
+            const buttonId = `media_reply_${originalMessageId}_${message.channel.id}_${originalAuthor.id}`;
             console.log('[MessageCreate] Creating reply button with ID:', buttonId);
             
             const replyButton = new ButtonBuilder()
@@ -179,15 +222,38 @@ function createMessageCreateHandler({
             let webhookMessage;
             try {
               console.log('[MessageCreate] Calling webhook.send()...');
+              // Use forwarded message author if this is a forwarded message
+              const displayAuthor = hasForwardedAttachments && forwardedMessage ? forwardedMessage.author : message.author;
+              const displayContent = hasForwardedAttachments && forwardedMessage ? forwardedMessage.content : message.content;
+              
               webhookMessage = await webhook.send({
-                content: message.content || undefined,
-                username: message.author.username,
-                avatarURL: message.author.displayAvatarURL(),
+                content: displayContent || undefined,
+                username: displayAuthor.username,
+                avatarURL: displayAuthor.displayAvatarURL(),
                 embeds: embeds,
                 files: attachments,
                 components: [row]
               });
               console.log('[MessageCreate] ✅ Webhook message sent successfully, ID:', webhookMessage.id);
+              
+              // Now add delete button to the webhook message (edit it to include delete button)
+              const { ButtonBuilder: DeleteButtonBuilder, ButtonStyle: DeleteButtonStyle } = require('discord.js');
+              const deleteButton = new DeleteButtonBuilder()
+                .setCustomId(`media_delete_${webhookMessage.id}_${originalMessageId}_${originalAuthor.id}`)
+                .setLabel('Delete')
+                .setEmoji('🗑️')
+                .setStyle(DeleteButtonStyle.Danger);
+              
+              const updatedRow = new ActionRowBuilder().addComponents(replyButton, deleteButton);
+              
+              // Edit the webhook message to add delete button
+              try {
+                await webhookMessage.edit({ components: [updatedRow] });
+                console.log('[MessageCreate] ✅ Delete button added to webhook message');
+              } catch (editError) {
+                console.error('[MessageCreate] Could not add delete button:', editError.message);
+                // Continue anyway - reply button still works
+              }
             } catch (sendError) {
               console.error('[MessageCreate] ❌ Error sending webhook message:', sendError);
               console.error('[MessageCreate] Error details:', {
@@ -209,11 +275,14 @@ function createMessageCreateHandler({
             // We'll pass the webhook message ID through the button handler
             // For now, the button will work with the original message ID in the handler
 
-            // Delete original message after successful repost
-            await message.delete().catch(() => {
-              // If deletion fails, that's okay - the repost still happened
-              console.log('[MessageCreate] Could not delete original message after repost');
-            });
+            // Delete original message after successful repost (only if not a forwarded message)
+            // For forwarded messages, keep the original message as it provides context
+            if (!hasForwardedAttachments) {
+              await message.delete().catch(() => {
+                // If deletion fails, that's okay - the repost still happened
+                console.log('[MessageCreate] Could not delete original message after repost');
+              });
+            }
           } catch (error) {
             console.error('[MessageCreate] Error reposting message via webhook:', error.message);
             console.error('[MessageCreate] Full error:', error);

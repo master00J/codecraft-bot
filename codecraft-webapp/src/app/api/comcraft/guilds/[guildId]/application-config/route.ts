@@ -84,27 +84,60 @@ export async function POST(
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Upsert config
-    const { data: config, error } = await supabase
+    // Check if config already exists
+    const { data: existingConfig } = await supabase
       .from('application_configs')
-      .upsert({
-        guild_id: guildId,
-        channel_id,
-        questions,
-        enabled: enabled ?? true,
-        min_age: min_age ?? 0,
-        cooldown_days: cooldown_days ?? 7,
-        require_account_age_days: require_account_age_days ?? 0,
-        auto_thread: auto_thread ?? false,
-        ping_role_id: ping_role_id ?? null,
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+      .select('guild_id')
+      .eq('guild_id', guildId)
+      .maybeSingle();
+
+    const updateData = {
+      channel_id,
+      questions,
+      enabled: enabled ?? true,
+      min_age: min_age ?? 0,
+      cooldown_days: cooldown_days ?? 7,
+      require_account_age_days: require_account_age_days ?? 0,
+      auto_thread: auto_thread ?? false,
+      ping_role_id: ping_role_id ?? null,
+      updated_at: new Date().toISOString()
+    };
+
+    let config;
+    let error;
+
+    if (existingConfig) {
+      // Update existing config
+      const result = await supabase
+        .from('application_configs')
+        .update(updateData)
+        .eq('guild_id', guildId)
+        .select()
+        .single();
+      
+      config = result.data;
+      error = result.error;
+    } else {
+      // Create new config
+      const result = await supabase
+        .from('application_configs')
+        .insert({
+          guild_id: guildId,
+          ...updateData
+        })
+        .select()
+        .single();
+      
+      config = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error('Error saving application config:', error);
-      return NextResponse.json({ error: 'Failed to save config' }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'Failed to save config',
+        details: error.message 
+      }, { status: 500 });
     }
 
     // Log activity
