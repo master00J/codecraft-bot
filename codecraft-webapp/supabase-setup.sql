@@ -354,6 +354,7 @@ CREATE TABLE IF NOT EXISTS public.application_configs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   guild_id TEXT NOT NULL UNIQUE,
   channel_id TEXT NOT NULL,
+  review_channel_id TEXT,
   questions JSONB NOT NULL DEFAULT '[]'::jsonb,
   enabled BOOLEAN DEFAULT true,
   min_age INTEGER DEFAULT 0,

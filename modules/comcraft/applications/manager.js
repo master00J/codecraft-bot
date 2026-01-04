@@ -173,8 +173,9 @@ class ApplicationsManager {
 
       if (error) throw error;
 
-      // Send to channel
-      const channel = await this.client.channels.fetch(config.channel_id);
+      // Determine which channel to send to (review channel if set, otherwise application channel)
+      const targetChannelId = config.review_channel_id || config.channel_id;
+      const channel = await this.client.channels.fetch(targetChannelId);
       if (!channel) {
         return { success: false, error: 'Application channel not found' };
       }
@@ -389,7 +390,9 @@ class ApplicationsManager {
         return { success: false, error: 'Config not found' };
       }
 
-      const channel = await this.client.channels.fetch(configResult.config.channel_id);
+      // Use review channel if set, otherwise use application channel
+      const targetChannelId = configResult.config.review_channel_id || configResult.config.channel_id;
+      const channel = await this.client.channels.fetch(targetChannelId);
       if (!channel) return { success: false, error: 'Channel not found' };
 
       const message = await channel.messages.fetch(application.message_id);

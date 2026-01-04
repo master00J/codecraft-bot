@@ -74,6 +74,7 @@ export async function POST(
     const body = await request.json();
     const { 
       channel_id, 
+      review_channel_id,
       questions, 
       enabled, 
       min_age, 
@@ -96,6 +97,7 @@ export async function POST(
 
     const updateData = {
       channel_id,
+      review_channel_id: review_channel_id ?? null,
       questions,
       enabled: enabled ?? true,
       min_age: min_age ?? 0,

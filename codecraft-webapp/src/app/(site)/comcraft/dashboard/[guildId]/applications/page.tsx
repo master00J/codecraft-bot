@@ -71,6 +71,7 @@ interface ApplicationConfig {
   id: string;
   guild_id: string;
   channel_id: string;
+  review_channel_id: string | null;
   questions: string[];
   enabled: boolean;
   min_age: number;
@@ -101,6 +102,7 @@ export default function ApplicationsDashboard() {
 
   // Config form state
   const [channelId, setChannelId] = useState('');
+  const [reviewChannelId, setReviewChannelId] = useState('');
   const [questions, setQuestions] = useState<string[]>(['What is your age?', 'Why do you want to join our staff team?', 'Do you have any previous moderation experience?', 'How many hours per week can you dedicate to this role?', 'Tell us about yourself and why you would be a good fit.']);
   const [enabled, setEnabled] = useState(true);
   const [cooldownDays, setCooldownDays] = useState(7);
@@ -135,6 +137,7 @@ export default function ApplicationsDashboard() {
       if (configData.config) {
         setConfig(configData.config);
         setChannelId(configData.config.channel_id);
+        setReviewChannelId(configData.config.review_channel_id || '');
         setQuestions(configData.config.questions);
         setEnabled(configData.config.enabled);
         setCooldownDays(configData.config.cooldown_days);
@@ -209,6 +212,7 @@ export default function ApplicationsDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel_id: channelId,
+          review_channel_id: reviewChannelId || null,
           questions,
           enabled,
           cooldown_days: cooldownDays,
@@ -538,7 +542,30 @@ export default function ApplicationsDashboard() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Applications will be posted in this channel
+                    The application form will be posted in this channel
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="reviewChannelId">Review Channel (Optional)</Label>
+                  <Select
+                    value={reviewChannelId}
+                    onValueChange={setReviewChannelId}
+                  >
+                    <SelectTrigger id="reviewChannelId">
+                      <SelectValue placeholder="Select a channel (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None (use application channel)</SelectItem>
+                      {channels.map((channel) => (
+                        <SelectItem key={channel.id} value={channel.id}>
+                          #{channel.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Applications with vote buttons will be posted in this channel. If not set, they will be posted in the application channel.
                   </p>
                 </div>
 
