@@ -97,6 +97,7 @@ export default function ApplicationsDashboard() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [applicationToDelete, setApplicationToDelete] = useState<Application | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [channels, setChannels] = useState<any[]>([]);
 
   // Config form state
   const [channelId, setChannelId] = useState('');
@@ -120,9 +121,16 @@ export default function ApplicationsDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch config
-      const configResponse = await fetch(`/api/comcraft/guilds/${guildId}/application-config`);
+      // Fetch config, applications, and channels in parallel
+      const [configResponse, appsResponse, channelsResponse] = await Promise.all([
+        fetch(`/api/comcraft/guilds/${guildId}/application-config`),
+        fetch(`/api/comcraft/guilds/${guildId}/applications`),
+        fetch(`/api/comcraft/guilds/${guildId}/discord/channels`)
+      ]);
+
       const configData = await configResponse.json();
+      const appsData = await appsResponse.json();
+      const channelsData = await channelsResponse.json();
       
       if (configData.config) {
         setConfig(configData.config);
@@ -135,12 +143,12 @@ export default function ApplicationsDashboard() {
         setPingRoleId(configData.config.ping_role_id || '');
       }
 
-      // Fetch applications
-      const appsResponse = await fetch(`/api/comcraft/guilds/${guildId}/applications`);
-      const appsData = await appsResponse.json();
-      
       if (appsData.applications) {
         setApplications(appsData.applications);
+      }
+
+      if (channelsData.channels?.text) {
+        setChannels(channelsData.channels.text);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -507,13 +515,28 @@ export default function ApplicationsDashboard() {
               {/* Basic Settings */}
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="channelId">Application Channel ID *</Label>
-                  <Input
-                    id="channelId"
-                    placeholder="Enter Discord channel ID"
+                  <Label htmlFor="channelId">Application Channel *</Label>
+                  <Select
                     value={channelId}
-                    onChange={(e) => setChannelId(e.target.value)}
-                  />
+                    onValueChange={setChannelId}
+                  >
+                    <SelectTrigger id="channelId">
+                      <SelectValue placeholder="Select a channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channels.length === 0 ? (
+                        <SelectItem value="placeholder" disabled>
+                          No channels available
+                        </SelectItem>
+                      ) : (
+                        channels.map((channel) => (
+                          <SelectItem key={channel.id} value={channel.id}>
+                            #{channel.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-muted-foreground mt-1">
                     Applications will be posted in this channel
                   </p>

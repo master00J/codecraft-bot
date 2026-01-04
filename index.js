@@ -1656,6 +1656,12 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // Handle application apply button
+    if (interaction.customId === 'application_apply_button') {
+      await handleApplicationApplyButton(interaction);
+      return;
+    }
+
     // Handle application voting buttons
     if (interaction.customId && (interaction.customId.startsWith('app_vote_for_') || interaction.customId.startsWith('app_vote_against_'))) {
       await handleApplicationVoteButton(interaction);
@@ -8446,6 +8452,55 @@ async function handleApplicationCommand(interaction) {
       content: '❌ An error occurred while processing the application command.',
       ephemeral: true
     });
+  }
+}
+
+/**
+ * Handle application apply button - opens the application modal
+ */
+async function handleApplicationApplyButton(interaction) {
+  try {
+    if (!applicationsManager) {
+      return interaction.reply({
+        content: '❌ Applications system is not available.',
+        ephemeral: true
+      });
+    }
+
+    // Check if user can apply
+    const canApplyResult = await applicationsManager.canApply(
+      interaction.guild.id,
+      interaction.user.id,
+      interaction.member
+    );
+
+    if (!canApplyResult.canApply) {
+      return interaction.reply({
+        content: `❌ ${canApplyResult.reason}`,
+        ephemeral: true
+      });
+    }
+
+    // Get config
+    const configResult = await applicationsManager.getConfig(interaction.guild.id);
+    if (!configResult.success || !configResult.config) {
+      return interaction.reply({
+        content: '❌ Application system is not configured.',
+        ephemeral: true
+      });
+    }
+
+    // Show modal with questions
+    const modal = applicationsManager.createApplicationModal(configResult.config.questions);
+    await interaction.showModal(modal);
+  } catch (error) {
+    console.error('Error handling application apply button:', error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: '❌ An error occurred while opening the application form.',
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
 }
 

@@ -5,6 +5,9 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 
 const supabase = supabaseAdmin;
 
+const COMCRAFT_BOT_API = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
+
 /**
  * Log activity to database
  */
@@ -147,6 +150,82 @@ export async function POST(
       'application_config_updated',
       'Updated staff application configuration'
     );
+
+    // Send application message to Discord channel with Apply button
+    try {
+      if (channel_id && enabled && COMCRAFT_BOT_API && INTERNAL_SECRET) {
+        const embed = {
+          title: '📝 Staff Applications',
+          description: 'Interesse om moderator te worden? Solliciteer hier!',
+          color: '#5865F2',
+          fields: [
+            {
+              name: '📋 Hoe werkt het?',
+              value: 'Klik op de knop hieronder om te solliciteren. Je krijgt een formulier met vragen die je moet invullen.',
+              inline: false
+            },
+            {
+              name: '⏱️ Cooldown',
+              value: `${cooldown_days} dag(en) tussen sollicitaties`,
+              inline: true
+            },
+            {
+              name: '❓ Vragen',
+              value: `${questions.length} vraag(en)`,
+              inline: true
+            }
+          ],
+          footer: {
+            text: 'Je sollicitatie wordt beoordeeld door het staff team'
+          },
+          timestamp: new Date().toISOString()
+        };
+
+        // Create Apply button in Discord format
+        const components = [
+          {
+            type: 1, // ActionRow
+            components: [
+              {
+                type: 2, // Button
+                style: 1, // Primary
+                label: 'Solliciteer Nu',
+                emoji: {
+                  name: '📝'
+                },
+                custom_id: 'application_apply_button'
+              }
+            ]
+          }
+        ];
+
+        // Use the embeds/post endpoint to send the message with button
+        const botResponse = await fetch(`${COMCRAFT_BOT_API}/api/embeds/post`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Secret': INTERNAL_SECRET
+          },
+          body: JSON.stringify({
+            guildId,
+            channelId: channel_id,
+            isCapsule: false,
+            embed: embed,
+            components: components
+          })
+        }).catch((err) => {
+          console.error('Error sending application message to Discord:', err);
+          return null;
+        });
+
+        if (!botResponse || !botResponse.ok) {
+          console.warn('Failed to send application message to Discord channel');
+        }
+      }
+    } catch (error) {
+      // Don't fail the request if Discord message fails
+      console.error('Error sending Discord message:', error);
+    }
 
     return NextResponse.json({ config });
   } catch (error) {
