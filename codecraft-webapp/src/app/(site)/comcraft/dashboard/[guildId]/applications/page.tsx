@@ -549,14 +549,14 @@ export default function ApplicationsDashboard() {
                 <div>
                   <Label htmlFor="reviewChannelId">Review Channel (Optional)</Label>
                   <Select
-                    value={reviewChannelId}
-                    onValueChange={setReviewChannelId}
+                    value={reviewChannelId || 'none'}
+                    onValueChange={(value) => setReviewChannelId(value === 'none' ? '' : value)}
                   >
                     <SelectTrigger id="reviewChannelId">
                       <SelectValue placeholder="Select a channel (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None (use application channel)</SelectItem>
+                      <SelectItem value="none">None (use application channel)</SelectItem>
                       {channels.map((channel) => (
                         <SelectItem key={channel.id} value={channel.id}>
                           #{channel.name}
