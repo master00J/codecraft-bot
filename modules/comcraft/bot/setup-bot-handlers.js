@@ -850,7 +850,7 @@ function setupEventHandlers(client, handlers) {
           // Try to reply if not already handled
           if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
             await interaction.reply({
-              content: '❌ Er is een fout opgetreden bij het openen van de reply modal.',
+              content: '❌ An error occurred while opening the reply modal.',
               ephemeral: true
             }).catch(err => {
               console.error('[Interaction] Failed to send error reply:', err);
@@ -869,7 +869,7 @@ function setupEventHandlers(client, handlers) {
           console.error('[Interaction] Error in handleMediaDeleteButton:', handlerError);
           if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
             await interaction.reply({
-              content: '❌ Er is een fout opgetreden bij het verwijderen van het bericht.',
+              content: '❌ An error occurred while deleting the message.',
               ephemeral: true
             }).catch(() => {});
           }
@@ -2099,7 +2099,7 @@ async function handleMediaReplyButton(interaction, configManager) {
       if (!interaction.replied && !interaction.deferred) {
         try {
           await interaction.reply({
-            content: `❌ Kon modal niet openen: ${modalError.message || 'Onbekende fout'}`,
+            content: `❌ Could not open modal: ${modalError.message || 'Unknown error'}`,
             ephemeral: true
           });
         } catch (replyError) {
@@ -2125,7 +2125,7 @@ async function handleMediaReplyButton(interaction, configManager) {
     if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
       try {
         await interaction.reply({
-          content: `❌ Er is een fout opgetreden: ${error.message || 'Onbekende fout'}`,
+          content: `❌ An error occurred: ${error.message || 'Unknown error'}`,
           ephemeral: true
         }).catch(replyErr => {
           console.error('[MediaReply] Failed to send error reply:', replyErr);
@@ -2171,7 +2171,7 @@ async function handleMediaDeleteButton(interaction) {
     // Check if user is the original poster
     if (interaction.user.id !== originalAuthorId) {
       return interaction.reply({
-        content: '❌ Je kunt alleen je eigen berichten verwijderen.',
+        content: '❌ You can only delete your own messages.',
         ephemeral: true
       });
     }
@@ -2180,7 +2180,7 @@ async function handleMediaDeleteButton(interaction) {
     const webhookMessage = await interaction.channel.messages.fetch(webhookMessageId).catch(() => null);
     if (!webhookMessage) {
       return interaction.reply({
-        content: '❌ Bericht niet gevonden.',
+        content: '❌ Message not found.',
         ephemeral: true
       });
     }
@@ -2188,7 +2188,7 @@ async function handleMediaDeleteButton(interaction) {
     // Check if bot can delete the message
     if (!webhookMessage.deletable) {
       return interaction.reply({
-        content: '❌ Ik heb geen toestemming om dit bericht te verwijderen.',
+        content: '❌ I do not have permission to delete this message.',
         ephemeral: true
       });
     }
@@ -2197,7 +2197,7 @@ async function handleMediaDeleteButton(interaction) {
     await webhookMessage.delete();
     
     await interaction.reply({
-      content: '✅ Bericht verwijderd.',
+      content: '✅ Message deleted.',
       ephemeral: true
     });
   } catch (error) {

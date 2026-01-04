@@ -156,27 +156,27 @@ export async function POST(
       if (channel_id && enabled && COMCRAFT_BOT_API && INTERNAL_SECRET) {
         const embed = {
           title: '📝 Staff Applications',
-          description: 'Interesse om moderator te worden? Solliciteer hier!',
+          description: 'Interested in becoming a moderator? Apply here!',
           color: '#5865F2',
           fields: [
             {
-              name: '📋 Hoe werkt het?',
-              value: 'Klik op de knop hieronder om te solliciteren. Je krijgt een formulier met vragen die je moet invullen.',
+              name: '📋 How does it work?',
+              value: 'Click the button below to apply. You will receive a form with questions that you need to fill out.',
               inline: false
             },
             {
               name: '⏱️ Cooldown',
-              value: `${cooldown_days} dag(en) tussen sollicitaties`,
+              value: `${cooldown_days} day(s) between applications`,
               inline: true
             },
             {
-              name: '❓ Vragen',
-              value: `${questions.length} vraag(en)`,
+              name: '❓ Questions',
+              value: `${questions.length} question(s)`,
               inline: true
             }
           ],
           footer: {
-            text: 'Je sollicitatie wordt beoordeeld door het staff team'
+            text: 'Your application will be reviewed by the staff team'
           },
           timestamp: new Date().toISOString()
         };
@@ -189,7 +189,7 @@ export async function POST(
               {
                 type: 2, // Button
                 style: 1, // Primary
-                label: 'Solliciteer Nu',
+                label: 'Apply Now',
                 emoji: {
                   name: '📝'
                 },
