@@ -75,14 +75,14 @@ export default function TimeClockOverviewPage() {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/timeclock/overview`);
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Kon de tijdregistratie niet laden');
+        throw new Error(error.error || 'Failed to load time clock data');
       }
       const data = await response.json();
       setEmployees(data.employees || []);
     } catch (error: any) {
       toast({
-        title: 'Fout',
-        description: error.message || 'Kon de tijdregistratie niet laden',
+        title: 'Error',
+        description: error.message || 'Failed to load time clock data',
         variant: 'destructive',
       });
     } finally {
@@ -98,14 +98,14 @@ export default function TimeClockOverviewPage() {
       );
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Kon de diensten niet laden');
+        throw new Error(error.error || 'Failed to load shifts');
       }
       const data = await response.json();
       setEntries(data.entries || []);
     } catch (error: any) {
       toast({
-        title: 'Fout',
-        description: error.message || 'Kon de diensten niet laden',
+        title: 'Error',
+        description: error.message || 'Failed to load shifts',
         variant: 'destructive',
       });
     } finally {
@@ -131,7 +131,7 @@ export default function TimeClockOverviewPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-gray-300">
         <Loader2 className="h-5 w-5 animate-spin mr-2" />
-        Tijdregistratie laden...
+        Loading time clock...
       </div>
     );
   }
@@ -139,9 +139,9 @@ export default function TimeClockOverviewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Tijdregistratie</h1>
+        <h1 className="text-2xl font-bold text-white">Time Clock</h1>
         <p className="text-gray-400 mt-1">
-          Overzicht van in- en uitklokmomenten per werknemer (laatste 30 dagen).
+          Overview of clock-ins and clock-outs per employee (last 30 days).
         </p>
       </div>
 
@@ -150,7 +150,7 @@ export default function TimeClockOverviewPage() {
           <div className="flex items-center gap-3">
             <Users className="h-5 w-5 text-blue-400" />
             <div>
-              <p className="text-sm text-gray-400">Werknemers</p>
+              <p className="text-sm text-gray-400">Employees</p>
               <p className="text-lg font-semibold text-white">{totals.employeeCount}</p>
             </div>
           </div>
@@ -159,7 +159,7 @@ export default function TimeClockOverviewPage() {
           <div className="flex items-center gap-3">
             <Clock className="h-5 w-5 text-green-400" />
             <div>
-              <p className="text-sm text-gray-400">Actief ingeclockt</p>
+              <p className="text-sm text-gray-400">Currently clocked in</p>
               <p className="text-lg font-semibold text-white">{totals.activeCount}</p>
             </div>
           </div>
@@ -168,7 +168,7 @@ export default function TimeClockOverviewPage() {
           <div className="flex items-center gap-3">
             <Clock className="h-5 w-5 text-purple-400" />
             <div>
-              <p className="text-sm text-gray-400">Totaal uren</p>
+              <p className="text-sm text-gray-400">Total hours</p>
               <p className="text-lg font-semibold text-white">{formatMinutes(totals.totalMinutes)}</p>
             </div>
           </div>
@@ -176,19 +176,19 @@ export default function TimeClockOverviewPage() {
       </div>
 
       <Card className="bg-[#1a1f2e] border-gray-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Werknemers</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">Employees</h2>
         {employees.length === 0 ? (
-          <div className="text-gray-400">Nog geen tijdregistraties gevonden.</div>
+          <div className="text-gray-400">No time clock entries found yet.</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Werknemer</TableHead>
+                <TableHead>Employee</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Uren</TableHead>
-                <TableHead>Diensten</TableHead>
-                <TableHead>Laatst ingeclockt</TableHead>
-                <TableHead>Laatst uitgeclockt</TableHead>
+                <TableHead>Hours</TableHead>
+                <TableHead>Shifts</TableHead>
+                <TableHead>Last clock-in</TableHead>
+                <TableHead>Last clock-out</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -219,11 +219,11 @@ export default function TimeClockOverviewPage() {
                   <TableCell>
                     {employee.active ? (
                       <Badge className="bg-green-500/20 text-green-300 border border-green-500/30">
-                        Ingeclockt
+                        Clocked in
                       </Badge>
                     ) : (
                       <Badge className="bg-gray-500/20 text-gray-300 border border-gray-500/30">
-                        Uitgeclockt
+                        Clocked out
                       </Badge>
                     )}
                   </TableCell>
@@ -241,7 +241,7 @@ export default function TimeClockOverviewPage() {
                         )
                       }
                     >
-                      {selectedUserId === employee.user_id ? 'Verbergen' : 'Details'}
+                      {selectedUserId === employee.user_id ? 'Hide' : 'Details'}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -253,21 +253,21 @@ export default function TimeClockOverviewPage() {
 
       {selectedUserId && (
         <Card className="bg-[#1a1f2e] border-gray-800 p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">Recente diensten</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">Recent shifts</h2>
           {loadingEntries ? (
             <div className="flex items-center text-gray-300">
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Diensten laden...
+              Loading shifts...
             </div>
           ) : entries.length === 0 ? (
-            <div className="text-gray-400">Geen diensten gevonden.</div>
+            <div className="text-gray-400">No shifts found.</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ingeclockt</TableHead>
-                  <TableHead>Uitgeclockt</TableHead>
-                  <TableHead>Duur</TableHead>
+                  <TableHead>Clock-in</TableHead>
+                  <TableHead>Clock-out</TableHead>
+                  <TableHead>Duration</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -280,11 +280,11 @@ export default function TimeClockOverviewPage() {
                     <TableCell>
                       {entry.status === 'active' ? (
                         <Badge className="bg-green-500/20 text-green-300 border border-green-500/30">
-                          Actief
+                          Active
                         </Badge>
                       ) : (
                         <Badge className="bg-gray-500/20 text-gray-300 border border-gray-500/30">
-                          Afgerond
+                          Completed
                         </Badge>
                       )}
                     </TableCell>

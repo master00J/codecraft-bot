@@ -2344,7 +2344,7 @@ client.on('interactionCreate', async (interaction) => {
       case 'clock': {
         if (!interaction.guild) {
           return interaction.reply({
-            content: '❌ Dit commando werkt alleen in een server.',
+            content: '❌ This command only works inside a server.',
             ephemeral: true
           });
         }
@@ -2356,7 +2356,7 @@ client.on('interactionCreate', async (interaction) => {
           await handleClockOutCommand(interaction);
         } else {
           await interaction.reply({
-            content: '❌ Onbekend subcommando.',
+            content: '❌ Unknown subcommand.',
             ephemeral: true
           });
         }
@@ -3085,7 +3085,7 @@ async function sendTimeClockWebhook(type, data) {
   const token = process.env.DISCORD_BOT_TOKEN;
 
   if (!token) {
-    return { success: false, error: 'DISCORD_BOT_TOKEN ontbreekt' };
+    return { success: false, error: 'DISCORD_BOT_TOKEN is missing' };
   }
 
   try {
@@ -3126,12 +3126,12 @@ async function handleClockInCommand(interaction) {
 
   if (!result.success) {
     return interaction.editReply({
-      content: `❌ Inklokken mislukt: ${result.error || 'Onbekende fout'}`
+      content: `❌ Clock-in failed: ${result.error || 'Unknown error'}`
     });
   }
 
   return interaction.editReply({
-    content: '✅ Je bent ingeclockt. Succes met je dienst!'
+    content: '✅ You are clocked in. Have a great shift!'
   });
 }
 
@@ -3146,12 +3146,12 @@ async function handleClockOutCommand(interaction) {
 
   if (!result.success) {
     return interaction.editReply({
-      content: `❌ Uitklokken mislukt: ${result.error || 'Onbekende fout'}`
+      content: `❌ Clock-out failed: ${result.error || 'Unknown error'}`
     });
   }
 
   return interaction.editReply({
-    content: '✅ Je bent uitgeclockt. Tot de volgende keer!'
+    content: '✅ You are clocked out. See you next time!'
   });
 }
 
@@ -4151,8 +4151,8 @@ async function handleHelpCommand(interaction) {
         value: '`/customcommand add` - Add a command\n`/customcommand list` - View all commands'
       },
       {
-        name: '⏱️ Tijdregistratie',
-        value: '`/clock in` - Klok in\n`/clock out` - Klok uit'
+        name: '⏱️ Time Clock',
+        value: '`/clock in` - Clock in\n`/clock out` - Clock out'
       },
       {
         name: '🎂 Birthdays',
@@ -10070,16 +10070,16 @@ async function registerCommands(clientInstance) {
 
     new SlashCommandBuilder()
       .setName('clock')
-      .setDescription('⏱️ Tijdregistratie (inklok/uitklok)')
+      .setDescription('⏱️ Time clock (clock in/out)')
       .addSubcommand((subcommand) =>
         subcommand
           .setName('in')
-          .setDescription('Klok in om je dienst te starten')
+          .setDescription('Clock in to start your shift')
       )
       .addSubcommand((subcommand) =>
         subcommand
           .setName('out')
-          .setDescription('Klok uit om je dienst te beeindigen')
+          .setDescription('Clock out to end your shift')
       ),
 
     new SlashCommandBuilder()
