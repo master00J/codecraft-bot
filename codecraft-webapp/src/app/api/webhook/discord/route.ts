@@ -72,6 +72,60 @@ export async function POST(request: NextRequest) {
           display_name: data.display_name,
         } as any)
         break
+      case 'timeclock.clock_in': {
+        const { guild_id, user_id, clock_in_at } = data || {}
+
+        if (!guild_id || !user_id) {
+          return NextResponse.json({ error: 'Missing guild_id or user_id' }, { status: 400 })
+        }
+
+        const { data: activeEntry } = await supabaseAdmin
+          .from('employee_time_entries')
+          .select('id')
+          .eq('guild_id', guild_id)
+          .eq('user_id', user_id)
+          .eq('status', 'active')
+          .maybeSingle()
+
+        if (!activeEntry) {
+          await supabaseAdmin.from('employee_time_entries').insert({
+            guild_id,
+            user_id,
+            clock_in_at: clock_in_at || new Date().toISOString(),
+            status: 'active',
+            source: 'bot',
+          } as any)
+        }
+        break
+      }
+
+      case 'timeclock.clock_out': {
+        const { guild_id, user_id, clock_out_at } = data || {}
+
+        if (!guild_id || !user_id) {
+          return NextResponse.json({ error: 'Missing guild_id or user_id' }, { status: 400 })
+        }
+
+        const { data: activeEntry } = await supabaseAdmin
+          .from('employee_time_entries')
+          .select('id')
+          .eq('guild_id', guild_id)
+          .eq('user_id', user_id)
+          .eq('status', 'active')
+          .maybeSingle()
+
+        if (activeEntry?.id) {
+          await supabaseAdmin
+            .from('employee_time_entries')
+            .update({
+              clock_out_at: clock_out_at || new Date().toISOString(),
+              status: 'completed',
+              updated_at: new Date().toISOString(),
+            } as any)
+            .eq('id', activeEntry.id)
+        }
+        break
+      }
 
       default:
         console.warn(`Unknown webhook type: ${type}`)

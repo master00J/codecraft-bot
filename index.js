@@ -2340,6 +2340,29 @@ client.on('interactionCreate', async (interaction) => {
         break;
       }
 
+      // ============ TIME CLOCK COMMANDS ============
+      case 'clock': {
+        if (!interaction.guild) {
+          return interaction.reply({
+            content: '❌ Dit commando werkt alleen in een server.',
+            ephemeral: true
+          });
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        if (subcommand === 'in') {
+          await handleClockInCommand(interaction);
+        } else if (subcommand === 'out') {
+          await handleClockOutCommand(interaction);
+        } else {
+          await interaction.reply({
+            content: '❌ Onbekend subcommando.',
+            ephemeral: true
+          });
+        }
+        break;
+      }
+
       // ============ MODERATION COMMANDS ============
       case 'warn':
         await handleWarnCommand(interaction);
@@ -3056,6 +3079,81 @@ client.on('interactionCreate', async (interaction) => {
 // ================================================================
 // COMMAND HANDLERS
 // ================================================================
+
+async function sendTimeClockWebhook(type, data) {
+  const webappUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
+  const token = process.env.DISCORD_BOT_TOKEN;
+
+  if (!token) {
+    return { success: false, error: 'DISCORD_BOT_TOKEN ontbreekt' };
+  }
+
+  try {
+    const response = await fetch(`${webappUrl}/api/webhook/discord`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ type, data })
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      return { success: false, error: text || `Webhook fout (${response.status})` };
+    }
+
+    const result = await response.json().catch(() => ({}));
+    if (result?.success === false) {
+      return { success: false, error: result.error || 'Webhook fout' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[TimeClock] Webhook error:', error);
+    return { success: false, error: error.message || 'Webhook fout' };
+  }
+}
+
+async function handleClockInCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const result = await sendTimeClockWebhook('timeclock.clock_in', {
+    guild_id: interaction.guild.id,
+    user_id: interaction.user.id,
+    clock_in_at: new Date().toISOString()
+  });
+
+  if (!result.success) {
+    return interaction.editReply({
+      content: `❌ Inklokken mislukt: ${result.error || 'Onbekende fout'}`
+    });
+  }
+
+  return interaction.editReply({
+    content: '✅ Je bent ingeclockt. Succes met je dienst!'
+  });
+}
+
+async function handleClockOutCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const result = await sendTimeClockWebhook('timeclock.clock_out', {
+    guild_id: interaction.guild.id,
+    user_id: interaction.user.id,
+    clock_out_at: new Date().toISOString()
+  });
+
+  if (!result.success) {
+    return interaction.editReply({
+      content: `❌ Uitklokken mislukt: ${result.error || 'Onbekende fout'}`
+    });
+  }
+
+  return interaction.editReply({
+    content: '✅ Je bent uitgeclockt. Tot de volgende keer!'
+  });
+}
 
 async function handleStatsCommand(interaction) {
   await interaction.deferReply();
@@ -4051,6 +4149,10 @@ async function handleHelpCommand(interaction) {
       {
         name: '⚙️ Custom Commands',
         value: '`/customcommand add` - Add a command\n`/customcommand list` - View all commands'
+      },
+      {
+        name: '⏱️ Tijdregistratie',
+        value: '`/clock in` - Klok in\n`/clock out` - Klok uit'
       },
       {
         name: '🎂 Birthdays',
@@ -9965,6 +10067,20 @@ async function registerCommands(clientInstance) {
         return [];
       }
     })(),
+
+    new SlashCommandBuilder()
+      .setName('clock')
+      .setDescription('⏱️ Tijdregistratie (inklok/uitklok)')
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('in')
+          .setDescription('Klok in om je dienst te starten')
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('out')
+          .setDescription('Klok uit om je dienst te beeindigen')
+      ),
 
     new SlashCommandBuilder()
       .setName('myreferrals')
