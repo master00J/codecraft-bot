@@ -3083,6 +3083,7 @@ client.on('interactionCreate', async (interaction) => {
 async function sendTimeClockWebhook(type, data) {
   const webappUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
   const token = process.env.DISCORD_BOT_TOKEN;
+  const internalSecret = process.env.INTERNAL_API_SECRET;
 
   if (!token) {
     return { success: false, error: 'DISCORD_BOT_TOKEN is missing' };
@@ -3093,7 +3094,8 @@ async function sendTimeClockWebhook(type, data) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
+        ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {})
       },
       body: JSON.stringify({ type, data })
     });

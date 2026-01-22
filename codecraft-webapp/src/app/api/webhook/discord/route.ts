@@ -7,9 +7,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { type, data } = body
 
-    // Verify webhook secret
+    // Verify webhook secret (support bot token or internal secret)
     const authHeader = request.headers.get('authorization')
-    if (authHeader !== `Bearer ${process.env.DISCORD_BOT_TOKEN}`) {
+    const internalSecret = request.headers.get('x-internal-secret')
+    const botToken = process.env.DISCORD_BOT_TOKEN
+    const expectedAuth = botToken ? `Bearer ${botToken}` : null
+    const internalKey = process.env.INTERNAL_API_SECRET
+
+    const isAuthorized =
+      (expectedAuth && authHeader === expectedAuth) ||
+      (internalKey && internalSecret === internalKey)
+
+    if (!isAuthorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
