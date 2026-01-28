@@ -43,9 +43,13 @@ interface ModerationConfig {
   auto_ban_enabled: boolean;
   auto_ban_threshold: number;
   auto_ban_duration: number | null;
+  auto_warn_enabled: boolean;
+  warning_decay_days_manual: number;
+  warning_decay_days_auto: number;
   muted_role_id: string | null;
   mod_log_channel_id: string | null;
   mod_role_id: string | null;
+  appeals_channel_id: string | null;
 }
 
 interface ModerationLog {
@@ -61,6 +65,31 @@ interface ModerationLog {
   username: string | null;
   moderator_id: string;
   moderator_name: string | null;
+  deleted_at?: string | null;
+  deleted_reason?: string | null;
+}
+
+interface ModerationAppeal {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  case_id: number | null;
+  user_id: string;
+  username: string | null;
+  reason: string;
+  status: string;
+  source: string;
+  decided_by: string | null;
+  decision_reason: string | null;
+  decided_at: string | null;
+}
+
+interface ModerationAnalytics {
+  totalCases: number;
+  actions: Record<string, number>;
+  moderators: { id: string; name: string; total: number }[];
+  daily: { date: string; total: number }[];
+  truncated: boolean;
 }
 
 export default function ModerationPage() {
@@ -86,6 +115,19 @@ export default function ModerationPage() {
   const [logActionFilter, setLogActionFilter] = useState<string>('all');
   const [logUserIdFilter, setLogUserIdFilter] = useState<string>('');
   const [logActiveFilter, setLogActiveFilter] = useState<string>('all'); // all | active | inactive
+  const [editingCaseId, setEditingCaseId] = useState<number | null>(null);
+  const [editReason, setEditReason] = useState<string>('');
+  const [editDuration, setEditDuration] = useState<string>('');
+  const [editActive, setEditActive] = useState<boolean>(true);
+
+  const [appealsLoading, setAppealsLoading] = useState(false);
+  const [appeals, setAppeals] = useState<ModerationAppeal[]>([]);
+  const [appealsCount, setAppealsCount] = useState(0);
+  const [appealsOffset, setAppealsOffset] = useState(0);
+  const [appealsStatusFilter, setAppealsStatusFilter] = useState<string>('all');
+
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analytics, setAnalytics] = useState<ModerationAnalytics | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -95,6 +137,12 @@ export default function ModerationPage() {
     // Lazy-load logs when tab is opened
     if (activeTab === 'modlog' && logs.length === 0 && !logsLoading) {
       fetchLogs(true);
+    }
+    if (activeTab === 'appeals' && appeals.length === 0 && !appealsLoading) {
+      fetchAppeals(true);
+    }
+    if (activeTab === 'analytics' && !analytics && !analyticsLoading) {
+      fetchAnalytics();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -107,6 +155,14 @@ export default function ModerationPage() {
     fetchLogs(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logActionFilter, logActiveFilter]);
+
+  useEffect(() => {
+    if (activeTab !== 'appeals') return;
+    setAppeals([]);
+    setAppealsOffset(0);
+    fetchAppeals(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appealsStatusFilter]);
 
   async function fetchData() {
     setLoading(true);
@@ -177,6 +233,164 @@ export default function ModerationPage() {
       });
     } finally {
       setLogsLoading(false);
+    }
+  }
+
+  async function fetchAppeals(reset = false) {
+    try {
+      setAppealsLoading(true);
+      const nextOffset = reset ? 0 : appealsOffset;
+      const limit = 50;
+
+      const qs = new URLSearchParams();
+      qs.set('limit', String(limit));
+      qs.set('offset', String(nextOffset));
+      if (appealsStatusFilter !== 'all') qs.set('status', appealsStatusFilter);
+
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/appeals?${qs.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to fetch appeals');
+      }
+
+      setAppealsCount(data.count || 0);
+      setAppealsOffset(nextOffset + (data.appeals?.length || 0));
+      setAppeals(reset ? (data.appeals || []) : [...appeals, ...(data.appeals || [])]);
+    } catch (error: any) {
+      console.error('Error loading appeals:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load appeals',
+        variant: 'destructive'
+      });
+    } finally {
+      setAppealsLoading(false);
+    }
+  }
+
+  async function updateAppealStatus(appealId: string, status: string, decisionReason?: string) {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/appeals`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appeal_id: appealId,
+          status,
+          decision_reason: decisionReason || null
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to update appeal');
+      }
+      setAppeals((prev) => prev.map((a) => (a.id === appealId ? data.appeal : a)));
+      toast({
+        title: 'Success',
+        description: 'Appeal updated'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update appeal',
+        variant: 'destructive'
+      });
+    }
+  }
+
+  async function fetchAnalytics() {
+    try {
+      setAnalyticsLoading(true);
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/analytics`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to fetch analytics');
+      }
+      setAnalytics(data);
+    } catch (error: any) {
+      console.error('Error loading analytics:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load analytics',
+        variant: 'destructive'
+      });
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }
+
+  function startEditCase(log: ModerationLog) {
+    setEditingCaseId(log.case_id);
+    setEditReason(log.reason || '');
+    setEditDuration(log.duration ? String(log.duration) : '');
+    setEditActive(Boolean(log.active));
+  }
+
+  function cancelEditCase() {
+    setEditingCaseId(null);
+    setEditReason('');
+    setEditDuration('');
+    setEditActive(true);
+  }
+
+  async function saveCaseEdit(caseId: number) {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/logs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          case_id: caseId,
+          reason: editReason,
+          duration: editDuration ? parseInt(editDuration, 10) : null,
+          active: editActive
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to update case');
+      }
+
+      setLogs((prev) => prev.map((l) => (l.case_id === caseId ? data.case : l)));
+      toast({
+        title: 'Success',
+        description: 'Case updated'
+      });
+      cancelEditCase();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update case',
+        variant: 'destructive'
+      });
+    }
+  }
+
+  async function deleteCase(caseId: number) {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/moderation/logs`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          case_id: caseId,
+          reason: 'Deleted via dashboard'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to delete case');
+      }
+
+      setLogs((prev) => prev.filter((l) => l.case_id !== caseId));
+      setLogsCount((prev) => Math.max(0, prev - 1));
+      toast({
+        title: 'Success',
+        description: 'Case deleted'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete case',
+        variant: 'destructive'
+      });
     }
   }
 
@@ -369,7 +583,7 @@ export default function ModerationPage() {
 
         {/* Configuration Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 bg-muted/50 p-2">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-9 bg-muted/50 p-2">
             <TabsTrigger value="filters">
               <Shield className="mr-2 h-4 w-4" />
               Filters
@@ -397,6 +611,14 @@ export default function ModerationPage() {
             <TabsTrigger value="modlog">
               <FileText className="mr-2 h-4 w-4" />
               Modlog
+            </TabsTrigger>
+            <TabsTrigger value="appeals">
+              <Users className="mr-2 h-4 w-4" />
+              Appeals
+            </TabsTrigger>
+            <TabsTrigger value="analytics">
+              <Zap className="mr-2 h-4 w-4" />
+              Analytics
             </TabsTrigger>
           </TabsList>
 
@@ -1055,6 +1277,48 @@ export default function ModerationPage() {
                 </div>
 
                 {/* Auto-Ban */}
+                <div className="space-y-4 p-4 border-2 rounded-lg bg-blue-500/5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-lg">Warning Decay & Auto-Warn</div>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically expire warnings and optionally create auto-warnings from auto-mod
+                      </p>
+                    </div>
+                    <Switch
+                      checked={config.auto_warn_enabled}
+                      onCheckedChange={(checked) => setConfig({ ...config, auto_warn_enabled: checked })}
+                    />
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
+                    <div className="space-y-2">
+                      <Label>Manual Warning Decay (days)</Label>
+                      <Input
+                        type="number"
+                        value={config.warning_decay_days_manual}
+                        onChange={(e) => setConfig({ ...config, warning_decay_days_manual: parseInt(e.target.value) || 60 })}
+                        min={1}
+                        max={365}
+                      />
+                      <p className="text-xs text-muted-foreground">How long manual warnings stay active</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Auto-Warning Decay (days)</Label>
+                      <Input
+                        type="number"
+                        value={config.warning_decay_days_auto}
+                        onChange={(e) => setConfig({ ...config, warning_decay_days_auto: parseInt(e.target.value) || 60 })}
+                        min={1}
+                        max={365}
+                      />
+                      <p className="text-xs text-muted-foreground">How long auto-warnings stay active</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto-Ban */}
                 <div className="space-y-4 p-4 border-2 rounded-lg bg-red-500/5">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1241,6 +1505,29 @@ export default function ModerationPage() {
                   </div>
 
                   <div className="space-y-2">
+                    <Label className="text-base font-semibold">Appeals Channel</Label>
+                    <Select
+                      value={config.appeals_channel_id || 'none'}
+                      onValueChange={(value) => setConfig({ ...config, appeals_channel_id: value === 'none' ? null : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select appeals channel" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Use mod log channel</SelectItem>
+                        {channels.map((channel: any) => (
+                          <SelectItem key={channel.id} value={channel.id}>
+                            #{channel.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Channel where new appeals are posted
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label className="text-base font-semibold">Moderator Role</Label>
                     <Select
                       value={config.mod_role_id || 'none'}
@@ -1326,6 +1613,7 @@ export default function ModerationPage() {
                       <SelectContent>
                         <SelectItem value="all">All</SelectItem>
                         <SelectItem value="warn">warn</SelectItem>
+                        <SelectItem value="auto_warn">auto_warn</SelectItem>
                         <SelectItem value="mute">mute</SelectItem>
                         <SelectItem value="unmute">unmute</SelectItem>
                         <SelectItem value="timeout">timeout</SelectItem>
@@ -1375,13 +1663,14 @@ export default function ModerationPage() {
 
                 {/* List */}
                 <div className="border rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold bg-muted/40">
+                  <div className="grid grid-cols-14 gap-2 px-3 py-2 text-xs font-semibold bg-muted/40">
                     <div className="col-span-2">Date</div>
                     <div className="col-span-1">Case</div>
                     <div className="col-span-2">Action</div>
                     <div className="col-span-3">User</div>
                     <div className="col-span-2">Moderator</div>
                     <div className="col-span-2">Reason</div>
+                    <div className="col-span-2">Manage</div>
                   </div>
 
                   {logsLoading && logs.length === 0 ? (
@@ -1394,7 +1683,7 @@ export default function ModerationPage() {
                   ) : (
                     <div className="divide-y">
                       {logs.map((l) => (
-                        <div key={l.id} className="grid grid-cols-12 gap-2 px-3 py-3 text-sm">
+                        <div key={l.id} className="grid grid-cols-14 gap-2 px-3 py-3 text-sm">
                           <div className="col-span-2 text-muted-foreground">
                             {new Date(l.created_at).toLocaleString()}
                           </div>
@@ -1415,8 +1704,54 @@ export default function ModerationPage() {
                             <div className="font-medium">{l.moderator_name || l.moderator_id}</div>
                             <div className="text-xs text-muted-foreground font-mono">{l.moderator_id}</div>
                           </div>
-                          <div className="col-span-2 text-muted-foreground truncate" title={l.reason || ''}>
-                            {l.reason || '—'}
+                          <div className="col-span-2 text-muted-foreground">
+                            {editingCaseId === l.case_id ? (
+                              <Input
+                                value={editReason}
+                                onChange={(e) => setEditReason(e.target.value)}
+                                placeholder="Update reason"
+                              />
+                            ) : (
+                              <div className="truncate" title={l.reason || ''}>
+                                {l.reason || '—'}
+                              </div>
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            {editingCaseId === l.case_id ? (
+                              <div className="space-y-2">
+                                <Input
+                                  type="number"
+                                  value={editDuration}
+                                  onChange={(e) => setEditDuration(e.target.value)}
+                                  placeholder="Duration (min)"
+                                />
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-muted-foreground">Active</span>
+                                  <Switch
+                                    checked={editActive}
+                                    onCheckedChange={(checked) => setEditActive(checked)}
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button size="sm" onClick={() => saveCaseEdit(l.case_id)}>
+                                    Save
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={cancelEditCase}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                <Button size="sm" variant="outline" onClick={() => startEditCase(l)}>
+                                  Edit
+                                </Button>
+                                <Button size="sm" variant="destructive" onClick={() => deleteCase(l.case_id)}>
+                                  Delete
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1443,6 +1778,249 @@ export default function ModerationPage() {
                     )}
                   </Button>
                 </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* APPEALS TAB */}
+          <TabsContent value="appeals" className="space-y-6">
+            <Card className="border-2 shadow-xl p-6">
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">Appeals</h2>
+                    <p className="text-muted-foreground">
+                      Review and manage moderation appeals submitted by members.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setAppeals([]);
+                        setAppealsOffset(0);
+                        fetchAppeals(true);
+                      }}
+                      disabled={appealsLoading}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={appealsStatusFilter} onValueChange={(v) => setAppealsStatusFilter(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="denied">Denied</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="text-xs text-muted-foreground flex items-end">
+                    Appeals submitted in Discord appear here automatically.
+                  </div>
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold bg-muted/40">
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-1">Case</div>
+                    <div className="col-span-3">User</div>
+                    <div className="col-span-4">Reason</div>
+                    <div className="col-span-1">Status</div>
+                    <div className="col-span-1">Actions</div>
+                  </div>
+
+                  {appealsLoading && appeals.length === 0 ? (
+                    <div className="p-6 flex items-center justify-center text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Loading appeals...
+                    </div>
+                  ) : appeals.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground">No appeals found.</div>
+                  ) : (
+                    <div className="divide-y">
+                      {appeals.map((a) => (
+                        <div key={a.id} className="grid grid-cols-12 gap-2 px-3 py-3 text-sm">
+                          <div className="col-span-2 text-muted-foreground">
+                            {new Date(a.created_at).toLocaleString()}
+                          </div>
+                          <div className="col-span-1 font-mono">{a.case_id ? `#${a.case_id}` : '—'}</div>
+                          <div className="col-span-3">
+                            <div className="font-medium">{a.username || a.user_id}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{a.user_id}</div>
+                          </div>
+                          <div className="col-span-4 text-muted-foreground truncate" title={a.reason}>
+                            {a.reason}
+                          </div>
+                          <div className="col-span-1">
+                            <Badge variant="secondary">{a.status}</Badge>
+                          </div>
+                          <div className="col-span-1">
+                            {a.status === 'pending' ? (
+                              <div className="flex flex-col gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    const note = window.prompt('Optional decision note for approval:') || '';
+                                    updateAppealStatus(a.id, 'approved', note);
+                                  }}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const note = window.prompt('Optional decision note for denial:') || '';
+                                    updateAppealStatus(a.id, 'denied', note);
+                                  }}
+                                >
+                                  Deny
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">—</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {appeals.length} of {appealsCount} appeals
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchAppeals(false)}
+                    disabled={appealsLoading || appeals.length >= appealsCount}
+                  >
+                    {appealsLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load more'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* ANALYTICS TAB */}
+          <TabsContent value="analytics" className="space-y-6">
+            <Card className="border-2 shadow-xl p-6">
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">Moderation Analytics</h2>
+                    <p className="text-muted-foreground">
+                      Trends and insights from your moderation activity.
+                    </p>
+                  </div>
+                  <Button variant="outline" onClick={() => fetchAnalytics()} disabled={analyticsLoading}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Refresh
+                  </Button>
+                </div>
+
+                {analyticsLoading && !analytics ? (
+                  <div className="p-6 flex items-center justify-center text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Loading analytics...
+                  </div>
+                ) : !analytics ? (
+                  <div className="p-6 text-center text-muted-foreground">No analytics available yet.</div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <Card className="p-4 border-2">
+                        <div className="text-sm text-muted-foreground">Total Cases</div>
+                        <div className="text-2xl font-bold">{analytics.totalCases}</div>
+                        {analytics.truncated ? (
+                          <div className="text-xs text-muted-foreground mt-1">Results truncated to latest 5,000 cases</div>
+                        ) : null}
+                      </Card>
+                      <Card className="p-4 border-2">
+                        <div className="text-sm text-muted-foreground">Top Action</div>
+                        <div className="text-2xl font-bold">
+                          {Object.entries(analytics.actions || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'}
+                        </div>
+                      </Card>
+                      <Card className="p-4 border-2">
+                        <div className="text-sm text-muted-foreground">Top Moderator</div>
+                        <div className="text-2xl font-bold">
+                          {analytics.moderators?.[0]?.name || '—'}
+                        </div>
+                      </Card>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <h3 className="font-semibold">Actions Breakdown</h3>
+                        <div className="space-y-2">
+                          {Object.entries(analytics.actions || {}).length === 0 ? (
+                            <div className="text-sm text-muted-foreground">No actions recorded yet.</div>
+                          ) : (
+                            Object.entries(analytics.actions || {})
+                              .sort((a, b) => b[1] - a[1])
+                              .map(([action, count]) => (
+                                <div key={action} className="flex items-center justify-between text-sm">
+                                  <span className="capitalize">{action.replace('_', ' ')}</span>
+                                  <span className="font-semibold">{count}</span>
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h3 className="font-semibold">Top Moderators</h3>
+                        <div className="space-y-2">
+                          {analytics.moderators?.length ? (
+                            analytics.moderators.slice(0, 6).map((mod) => (
+                              <div key={mod.id} className="flex items-center justify-between text-sm">
+                                <span className="truncate">{mod.name}</span>
+                                <span className="font-semibold">{mod.total}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-sm text-muted-foreground">No data yet.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h3 className="font-semibold">Daily Activity</h3>
+                      <div className="space-y-2">
+                        {analytics.daily?.length ? (
+                          analytics.daily.slice(-14).map((day) => (
+                            <div key={day.date} className="flex items-center justify-between text-sm">
+                              <span>{day.date}</span>
+                              <span className="font-semibold">{day.total}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-sm text-muted-foreground">No daily activity yet.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           </TabsContent>

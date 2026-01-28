@@ -39,13 +39,21 @@ class ModerationActions {
   /**
    * Get active warning count for a user (from user_warnings table)
    */
-  async getActiveWarningCount(guildId, userId) {
-    const { data, error } = await this.supabase
+  async getActiveWarningCount(guildId, userId, warningType = null) {
+    const nowIso = new Date().toISOString();
+    let query = this.supabase
       .from('user_warnings')
       .select('id')
       .eq('guild_id', guildId)
       .eq('user_id', userId)
-      .eq('active', true);
+      .eq('active', true)
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+
+    if (warningType) {
+      query = query.eq('warning_type', warningType);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[ModerationActions] Error getting warning count:', error);
@@ -58,9 +66,19 @@ class ModerationActions {
   /**
    * Warn a user
    */
-  async warn(guild, user, moderator, reason) {
+  async warn(guild, user, moderator, reason, warningType = 'manual') {
     try {
       const caseId = await this.getNextCaseId(guild.id);
+      const config = await configManager.getModerationConfig(guild.id);
+      const decayDays =
+        warningType === 'auto'
+          ? config?.warning_decay_days_auto
+          : config?.warning_decay_days_manual;
+      const expiresAt =
+        typeof decayDays === 'number' && decayDays > 0
+          ? new Date(Date.now() + decayDays * 24 * 60 * 60 * 1000)
+          : null;
+      const actionType = warningType === 'auto' ? 'auto_warn' : 'warn';
 
       // Log to database
       const { error } = await this.supabase
@@ -72,8 +90,9 @@ class ModerationActions {
           username: user.tag,
           moderator_id: moderator.id,
           moderator_name: moderator.tag,
-          action: 'warn',
+          action: actionType,
           reason: reason || 'No reason provided',
+          expires_at: expiresAt ? expiresAt.toISOString() : null,
           active: true
         });
 
@@ -87,6 +106,8 @@ class ModerationActions {
           user_id: user.id,
           moderator_id: moderator.id,
           reason: reason || 'No reason provided',
+          warning_type: warningType,
+          expires_at: expiresAt ? expiresAt.toISOString() : null,
           active: true
         });
 
@@ -94,8 +115,8 @@ class ModerationActions {
       try {
         const dmEmbed = new EmbedBuilder()
           .setColor('#FFA500')
-          .setTitle('⚠️ Je hebt een waarschuwing ontvangen')
-          .setDescription(`Je hebt een waarschuwing ontvangen in **${guild.name}**`)
+          .setTitle('⚠️ You received a warning')
+          .setDescription(`You received a warning in **${guild.name}**`)
           .addFields(
             { name: 'Reason', value: reason || 'No reason provided' },
             { name: 'Moderator', value: moderator.tag }
@@ -118,7 +139,6 @@ class ModerationActions {
       });
 
       // Check for auto-ban threshold
-      const config = await configManager.getModerationConfig(guild.id);
       if (config?.auto_ban_enabled && config?.auto_ban_threshold) {
         const warningCount = await this.getActiveWarningCount(guild.id, user.id);
         
@@ -145,6 +165,14 @@ class ModerationActions {
       console.error('Error warning user:', error);
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Auto-warn helper (auto-moderation)
+   */
+  async autoWarn(guild, user, reason) {
+    const systemModerator = guild.members.me?.user || guild.client.user;
+    return this.warn(guild, user, systemModerator, reason, 'auto');
   }
 
   /**
@@ -776,6 +804,7 @@ class ModerationActions {
     this._expirationInterval = setInterval(async () => {
       try {
         await this.processExpiredActions(client, batchSize);
+        await this.processExpiredWarnings(batchSize);
       } catch (e) {
         console.error('[ModerationActions] Expiration worker error:', e);
       }
@@ -784,6 +813,9 @@ class ModerationActions {
     // run once immediately
     this.processExpiredActions(client, batchSize).catch((e) => {
       console.error('[ModerationActions] Initial expiration scan error:', e);
+    });
+    this.processExpiredWarnings(batchSize).catch((e) => {
+      console.error('[ModerationActions] Initial warning decay scan error:', e);
     });
   }
 
@@ -871,6 +903,48 @@ class ModerationActions {
   }
 
   /**
+   * Process expired warnings (warning decay)
+   */
+  async processExpiredWarnings(batchSize = 200) {
+    const nowIso = new Date().toISOString();
+    const { data: rows, error } = await this.supabase
+      .from('user_warnings')
+      .select('id, guild_id, user_id, expires_at')
+      .eq('active', true)
+      .not('expires_at', 'is', null)
+      .lt('expires_at', nowIso)
+      .order('expires_at', { ascending: true })
+      .limit(batchSize);
+
+    if (error) {
+      console.error('[ModerationActions] Error fetching expired warnings:', error);
+      return { processed: 0 };
+    }
+
+    if (!rows || rows.length === 0) {
+      return { processed: 0 };
+    }
+
+    const ids = rows.map((row) => row.id);
+    await this.supabase
+      .from('user_warnings')
+      .update({ active: false })
+      .in('id', ids)
+      .catch(() => {});
+
+    // Also deactivate related warning cases if they have expired_at set
+    await this.supabase
+      .from('moderation_logs')
+      .update({ active: false })
+      .in('action', ['warn', 'auto_warn'])
+      .lt('expires_at', nowIso)
+      .eq('active', true)
+      .catch(() => {});
+
+    return { processed: rows.length };
+  }
+
+  /**
    * Get moderation case
    */
   async getCase(guildId, caseId) {
@@ -879,6 +953,7 @@ class ModerationActions {
       .select('*')
       .eq('guild_id', guildId)
       .eq('case_id', caseId)
+      .is('deleted_at', null)
       .single();
 
     return data;
@@ -893,6 +968,7 @@ class ModerationActions {
       .select('*')
       .eq('guild_id', guildId)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -943,6 +1019,63 @@ class ModerationActions {
       console.error('Error clearing warnings:', error);
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Create a moderation appeal (Discord or dashboard)
+   */
+  async createAppeal(guild, user, caseId, reason, source = 'discord') {
+    const { data, error } = await this.supabase
+      .from('moderation_appeals')
+      .insert({
+        guild_id: guild.id,
+        case_id: caseId,
+        user_id: user.id,
+        username: user.tag,
+        reason,
+        status: 'pending',
+        source
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[ModerationActions] Error creating appeal:', error);
+      return { success: false, error: error.message };
+    }
+
+    try {
+      const config = await configManager.getModerationConfig(guild.id);
+      const channelId = config?.appeals_channel_id || config?.mod_log_channel_id;
+      if (channelId) {
+        const channel = guild.channels.cache.get(channelId);
+        if (channel) {
+          const embed = new EmbedBuilder()
+            .setColor('#F59E0B')
+            .setTitle('⚖️ New Moderation Appeal')
+            .addFields(
+              { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
+              { name: 'Case ID', value: caseId ? `#${caseId}` : 'Not provided', inline: true },
+              { name: 'Reason', value: reason }
+            )
+            .setTimestamp();
+
+          const message = await channel.send({ embeds: [embed] });
+          await this.supabase
+            .from('moderation_appeals')
+            .update({
+              channel_id: channel.id,
+              message_id: message.id
+            })
+            .eq('id', data.id)
+            .catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.error('[ModerationActions] Error notifying appeal channel:', e);
+    }
+
+    return { success: true, appeal: data };
   }
 }
 

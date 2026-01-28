@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const configManager = require('../config-manager');
 const aiService = require('../ai');
+const modActions = require('./actions');
 
 class AutoMod {
   constructor() {
@@ -321,6 +322,12 @@ class AutoMod {
 
       // Log to mod channel
       await this.logViolation(message, violations);
+
+      // Optional: create an auto-warning entry
+      if (config?.auto_warn_enabled) {
+        const reason = `Auto-moderation: ${this.getViolationText(violations)}`;
+        await modActions.autoWarn(message.guild, message.author, reason);
+      }
 
       // Apply auto-slowmode if spam detected
       if (violations.includes('spam') && config?.auto_slowmode_enabled) {

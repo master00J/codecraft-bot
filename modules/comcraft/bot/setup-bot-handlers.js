@@ -920,6 +920,12 @@ function setupEventHandlers(client, handlers) {
         await handleMediaReplyModal(interaction, configManager);
         return;
       }
+
+      // Moderation appeal modal handler
+      if (interaction.customId === 'appeal_submit_modal') {
+        await handleAppealSubmitModal(interaction, modActions);
+        return;
+      }
     }
 
     // Handle select menus
@@ -1189,6 +1195,9 @@ async function handleSlashCommand(interaction, handlers) {
 
     case 'case':
       await handleCaseCommand(interaction, modActions);
+      break;
+    case 'appeal':
+      await handleAppealCommand(interaction);
       break;
 
     case 'close':
@@ -2526,7 +2535,7 @@ async function handleCaseCommand(interaction, modActions) {
     .setTitle(`📋 Case #${caseId}`)
     .addFields(
       { name: 'User', value: `<@${caseData.user_id}>`, inline: true },
-      { name: 'Type', value: caseData.type, inline: true },
+      { name: 'Type', value: caseData.action || caseData.type || 'unknown', inline: true },
       { name: 'Reason', value: caseData.reason || 'No reason provided', inline: false },
       { name: 'Moderator', value: `<@${caseData.moderator_id}>`, inline: true },
       { name: 'Date', value: new Date(caseData.created_at).toLocaleString(), inline: true }
@@ -2534,6 +2543,109 @@ async function handleCaseCommand(interaction, modActions) {
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handleAppealCommand(interaction) {
+  if (!interaction.guild) {
+    return interaction.reply({
+      content: '❌ Appeals can only be submitted inside a server.',
+      ephemeral: true
+    });
+  }
+
+  const caseId = interaction.options.getInteger('case');
+
+  const caseInput = new TextInputBuilder()
+    .setCustomId('appeal_case_id')
+    .setLabel('Case ID (optional)')
+    .setPlaceholder('e.g. 123')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  if (caseId) {
+    caseInput.setValue(String(caseId));
+  }
+
+  const reasonInput = new TextInputBuilder()
+    .setCustomId('appeal_reason')
+    .setLabel('Why should this case be reviewed?')
+    .setPlaceholder('Explain what happened and why you are appealing.')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true);
+
+  const modal = new ModalBuilder()
+    .setCustomId('appeal_submit_modal')
+    .setTitle('Submit an Appeal')
+    .addComponents(
+      new ActionRowBuilder().addComponents(caseInput),
+      new ActionRowBuilder().addComponents(reasonInput)
+    );
+
+  try {
+    await interaction.showModal(modal);
+  } catch (error) {
+    console.error('Error showing appeal modal:', error);
+    if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
+      await interaction.reply({
+        content: '❌ Unable to open the appeal form right now.',
+        ephemeral: true
+      }).catch(() => {});
+    }
+  }
+}
+
+async function handleAppealSubmitModal(interaction, modActions) {
+  if (!interaction.guild) {
+    return interaction.reply({
+      content: '❌ Appeals can only be submitted inside a server.',
+      ephemeral: true
+    });
+  }
+
+  const caseIdRaw = interaction.fields.getTextInputValue('appeal_case_id')?.trim();
+  const reason = interaction.fields.getTextInputValue('appeal_reason')?.trim();
+
+  let caseId = null;
+  if (caseIdRaw) {
+    const parsed = parseInt(caseIdRaw, 10);
+    if (!Number.isFinite(parsed)) {
+      return interaction.reply({
+        content: '❌ Case ID must be a number.',
+        ephemeral: true
+      });
+    }
+    caseId = parsed;
+  }
+
+  if (caseId) {
+    const existingCase = await modActions.getCase(interaction.guild.id, caseId);
+    if (!existingCase) {
+      return interaction.reply({
+        content: `❌ Case #${caseId} was not found.`,
+        ephemeral: true
+      });
+    }
+  }
+
+  const result = await modActions.createAppeal(
+    interaction.guild,
+    interaction.user,
+    caseId,
+    reason || 'No reason provided',
+    'discord'
+  );
+
+  if (!result.success) {
+    return interaction.reply({
+      content: `❌ Failed to submit appeal: ${result.error || 'Unknown error'}`,
+      ephemeral: true
+    });
+  }
+
+  return interaction.reply({
+    content: '✅ Your appeal has been submitted. A moderator will review it soon.',
+    ephemeral: true
+  });
 }
 
 async function handleCustomCommandCommand(interaction, customCommands) {
@@ -4843,6 +4955,10 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
       .setName('case')
       .setDescription('View a moderation case')
       .addIntegerOption((option) => option.setName('case').setDescription('Case ID').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('appeal')
+      .setDescription('Submit a moderation appeal')
+      .addIntegerOption((option) => option.setName('case').setDescription('Case ID (optional)').setRequired(false)),
     new SlashCommandBuilder()
       .setName('close')
       .setDescription('[Mod] Lock a channel so no one can send messages')

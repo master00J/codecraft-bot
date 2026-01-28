@@ -112,9 +112,13 @@ export async function GET(
         auto_ban_enabled: false,
         auto_ban_threshold: 3,
         auto_ban_duration: null,
+        auto_warn_enabled: false,
+        warning_decay_days_manual: 60,
+        warning_decay_days_auto: 60,
         muted_role_id: null,
         mod_log_channel_id: null,
-        mod_role_id: null
+        mod_role_id: null,
+        appeals_channel_id: null
       }
     });
   } catch (error: any) {

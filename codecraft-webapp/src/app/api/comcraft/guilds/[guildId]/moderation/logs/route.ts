@@ -85,10 +85,12 @@ export async function GET(
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const userId = url.searchParams.get('user_id');
+    const caseId = url.searchParams.get('case_id');
     const active = url.searchParams.get('active'); // "true" | "false" | null
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     const format = url.searchParams.get('format'); // "csv" | "json" | null
+    const includeDeleted = url.searchParams.get('include_deleted') === 'true';
 
     const limit = Math.min(500, Math.max(1, toInt(url.searchParams.get('limit'), 50)));
     const offset = Math.max(0, toInt(url.searchParams.get('offset'), 0));
@@ -102,10 +104,12 @@ export async function GET(
 
     if (action) query = query.eq('action', action);
     if (userId) query = query.eq('user_id', userId);
+    if (caseId) query = query.eq('case_id', caseId);
     if (active === 'true') query = query.eq('active', true);
     if (active === 'false') query = query.eq('active', false);
     if (from) query = query.gte('created_at', from);
     if (to) query = query.lte('created_at', to);
+    if (!includeDeleted) query = query.is('deleted_at', null);
 
     const { data: logs, error, count } = await query;
     if (error) {
@@ -135,7 +139,9 @@ export async function GET(
         'moderator_name',
         'reason',
         'duration',
-        'expires_at'
+        'expires_at',
+        'deleted_at',
+        'deleted_reason'
       ].join(',');
 
       const lines = (logs || []).map((l: any) =>
@@ -150,7 +156,9 @@ export async function GET(
           csvEscape(l.moderator_name),
           csvEscape(l.reason),
           csvEscape(l.duration),
-          csvEscape(l.expires_at)
+          csvEscape(l.expires_at),
+          csvEscape(l.deleted_at),
+          csvEscape(l.deleted_reason)
         ].join(',')
       );
 
@@ -173,6 +181,128 @@ export async function GET(
     });
   } catch (error: any) {
     console.error('Moderation logs GET error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ guildId: string }> }
+) {
+  const { guildId } = await params;
+
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // @ts-ignore
+    const discordId = session.user.discordId || session.user.id || session.user.sub;
+    if (!discordId) {
+      return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
+    }
+
+    const access = await getGuildAccess(guildId, discordId);
+    if (!access.allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { case_id, reason, duration, expires_at, active } = body || {};
+
+    if (!case_id) {
+      return NextResponse.json({ error: 'case_id is required' }, { status: 400 });
+    }
+
+    const update: any = { updated_at: new Date().toISOString() };
+    if (typeof reason === 'string') update.reason = reason;
+    if (typeof duration === 'number' || duration === null) update.duration = duration;
+    if (typeof expires_at === 'string' || expires_at === null) update.expires_at = expires_at;
+    if (typeof active === 'boolean') update.active = active;
+
+    const { data, error } = await supabaseAdmin
+      .from('moderation_logs')
+      .update(update)
+      .eq('guild_id', guildId)
+      .eq('case_id', case_id)
+      .is('deleted_at', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error updating moderation case:', error);
+      return NextResponse.json({ error: 'Failed to update case' }, { status: 500 });
+    }
+
+    if (!data) {
+      return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, case: data });
+  } catch (error: any) {
+    console.error('Moderation logs PATCH error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ guildId: string }> }
+) {
+  const { guildId } = await params;
+
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // @ts-ignore
+    const discordId = session.user.discordId || session.user.id || session.user.sub;
+    if (!discordId) {
+      return NextResponse.json({ error: 'No Discord ID in session' }, { status: 400 });
+    }
+
+    const access = await getGuildAccess(guildId, discordId);
+    if (!access.allowed) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const { case_id, reason } = body || {};
+
+    if (!case_id) {
+      return NextResponse.json({ error: 'case_id is required' }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('moderation_logs')
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: discordId,
+        deleted_reason: reason || 'Deleted by moderator',
+        active: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('guild_id', guildId)
+      .eq('case_id', case_id)
+      .is('deleted_at', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error deleting moderation case:', error);
+      return NextResponse.json({ error: 'Failed to delete case' }, { status: 500 });
+    }
+
+    if (!data) {
+      return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, case: data });
+  } catch (error: any) {
+    console.error('Moderation logs DELETE error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
