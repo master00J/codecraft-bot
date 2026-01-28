@@ -15,6 +15,7 @@ ALTER TABLE moderation_configs
 -- =============================================
 ALTER TABLE moderation_logs
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS moderator_name TEXT,
   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
   ADD COLUMN IF NOT EXISTS deleted_by TEXT,
   ADD COLUMN IF NOT EXISTS deleted_reason TEXT;

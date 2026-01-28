@@ -76,7 +76,7 @@ export async function GET(
 
     let query = supabaseAdmin
       .from('moderation_logs')
-      .select('action, moderator_id, moderator_name, created_at', { count: 'exact' })
+      .select('action, moderator_id, created_at', { count: 'exact' })
       .eq('guild_id', guildId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -103,7 +103,7 @@ export async function GET(
         if (!moderators[row.moderator_id]) {
           moderators[row.moderator_id] = {
             id: row.moderator_id,
-            name: row.moderator_name || row.moderator_id,
+            name: row.moderator_id,
             total: 0
           };
         }
