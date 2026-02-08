@@ -49,7 +49,9 @@ import {
   Star,
   ClipboardList,
   Twitter,
-  ShieldCheck
+  ShieldCheck,
+  CreditCard,
+  ShoppingBag
 } from 'lucide-react';
 
 // Use Sparkles as icon for Maid Jobs
@@ -331,6 +333,8 @@ export default function GuildDashboardLayout({
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
     { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },
+    { name: 'Payments', href: `/comcraft/dashboard/${guildId}/payments`, icon: CreditCard },
+    { name: 'Shop', href: `/comcraft/dashboard/${guildId}/shop`, icon: ShoppingBag },
     { name: 'Game Verification', href: `/comcraft/dashboard/${guildId}/game-verification`, icon: ShieldCheck },
   ];
 
