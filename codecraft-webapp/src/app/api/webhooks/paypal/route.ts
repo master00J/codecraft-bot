@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getPayPalAccessToken } from '@/lib/comcraft/paypal';
+import { generateShopCode } from '@/lib/comcraft/shop-codes';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,13 +111,37 @@ export async function POST(request: NextRequest) {
 
   const { data: item, error: itemError } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('discord_role_id')
+    .select('discord_role_id, delivery_type')
     .eq('guild_id', guildId)
     .eq('id', shopItemId)
     .maybeSingle();
 
   if (itemError || !item?.discord_role_id) {
     console.error('PayPal webhook: shop item not found', guildId, shopItemId);
+    return NextResponse.json({ received: true });
+  }
+
+  const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
+  const resource = event.resource as {
+    id?: string;
+    supplementary_data?: { related_ids?: { order_id?: string } };
+  };
+  const paypalCaptureId = resource?.id;
+  const paypalOrderId = resource?.supplementary_data?.related_ids?.order_id;
+
+  if (deliveryType === 'code' && paypalCaptureId) {
+    const code = generateShopCode();
+    const { error: insertErr } = await supabaseAdmin.from('guild_shop_codes').insert({
+      guild_id: guildId,
+      shop_item_id: shopItemId,
+      code,
+      discord_role_id: item.discord_role_id,
+      paypal_capture_id: paypalCaptureId,
+      paypal_order_id: paypalOrderId ?? null,
+    });
+    if (insertErr) {
+      console.error('PayPal webhook: failed to create code', guildId, shopItemId, insertErr);
+    }
     return NextResponse.json({ received: true });
   }
 

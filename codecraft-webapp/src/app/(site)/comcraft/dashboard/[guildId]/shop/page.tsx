@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -55,6 +55,7 @@ interface ShopItem {
   price_amount_cents: number;
   currency: string;
   discord_role_id: string;
+  delivery_type: 'role' | 'code';
   enabled: boolean;
   sort_order: number;
   created_at: string;
@@ -83,6 +84,7 @@ export default function ShopDashboard() {
     priceAmountCents: 500,
     currency: 'eur',
     discordRoleId: '',
+    deliveryType: 'role' as 'role' | 'code',
     enabled: true,
   });
 
@@ -130,6 +132,7 @@ export default function ShopDashboard() {
       priceAmountCents: 500,
       currency: 'eur',
       discordRoleId: roles[0]?.id ?? '',
+      deliveryType: 'role',
       enabled: true,
     });
     setDialogOpen(true);
@@ -143,6 +146,7 @@ export default function ShopDashboard() {
       priceAmountCents: item.price_amount_cents,
       currency: item.currency ?? 'eur',
       discordRoleId: item.discord_role_id,
+      deliveryType: item.delivery_type ?? 'role',
       enabled: item.enabled,
     });
     setDialogOpen(true);
@@ -163,14 +167,15 @@ export default function ShopDashboard() {
     }
     setSaving(true);
     try {
-      const body = {
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-        priceAmountCents: form.priceAmountCents,
-        currency: form.currency,
-        discordRoleId: form.discordRoleId,
-        enabled: form.enabled,
-      };
+    const body = {
+      name: form.name.trim(),
+      description: form.description.trim() || null,
+      priceAmountCents: form.priceAmountCents,
+      currency: form.currency,
+      discordRoleId: form.discordRoleId,
+      deliveryType: form.deliveryType,
+      enabled: form.enabled,
+    };
       if (editingId) {
         const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/${editingId}`, {
           method: 'PATCH',
@@ -272,6 +277,7 @@ export default function ShopDashboard() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
@@ -289,6 +295,7 @@ export default function ShopDashboard() {
                       )}
                     </TableCell>
                     <TableCell>{role?.name ?? item.discord_role_id}</TableCell>
+                    <TableCell>{item.delivery_type === 'code' ? 'Gift card' : 'Role'}</TableCell>
                     <TableCell>{formatPrice(item.price_amount_cents, item.currency)}</TableCell>
                     <TableCell>{item.enabled ? 'Enabled' : 'Disabled'}</TableCell>
                     <TableCell>
@@ -313,8 +320,29 @@ export default function ShopDashboard() {
           </Table>
         )}
         <p className="text-xs text-muted-foreground mt-4">
-          Users can see and buy items via the bot command <code className="bg-muted px-1 rounded">/store</code> in your server. Make sure you configured the Stripe webhook in Payments so roles are assigned after payment.
+          Users can buy via the bot command <code className="bg-muted px-1 rounded">/store</code> in your server, or via your <strong>store page</strong> (link below). Configure the Stripe/PayPal webhook in Payments so roles are assigned after payment.
         </p>
+        {items.length > 0 && (
+          <div className="mt-4 p-3 rounded-lg bg-muted/50 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Store page (share this link):</span>
+            <code className="text-xs break-all flex-1 min-w-0">
+              {typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : `…/comcraft/store/${guildId}`}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : '';
+                void navigator.clipboard.writeText(url).then(() => {
+                  toast({ title: 'Copied', description: 'Store link copied to clipboard.' });
+                });
+              }}
+            >
+              <Copy className="h-4 w-4 mr-1" />
+              Copy
+            </Button>
+          </div>
+        )}
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -341,7 +369,7 @@ export default function ShopDashboard() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Discord role to assign</Label>
+              <Label>Discord role (assigned on purchase or when code is redeemed)</Label>
               <Select
                 value={form.discordRoleId}
                 onValueChange={(v) => setForm((f) => ({ ...f, discordRoleId: v }))}
@@ -357,6 +385,24 @@ export default function ShopDashboard() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Delivery type</Label>
+              <Select
+                value={form.deliveryType}
+                onValueChange={(v: 'role' | 'code') => setForm((f) => ({ ...f, deliveryType: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="role">Role (assign immediately after payment)</SelectItem>
+                  <SelectItem value="code">Gift card / Code (buyer gets a code to redeem or give away)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Gift cards: buyer receives a code (e.g. XXXX-XXXX-XXXX) on the thank-you page and can redeem it here or in Discord with /redeem.
+              </p>
             </div>
             <div className="flex gap-4">
               <div className="space-y-2 flex-1">

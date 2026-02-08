@@ -3023,6 +3023,11 @@ client.on('interactionCreate', async (interaction) => {
         break;
       }
 
+      case 'redeem': {
+        await handleRedeemCommand(interaction);
+        break;
+      }
+
       case 'help':
         await handleHelpCommand(interaction);
         break;
@@ -8809,6 +8814,44 @@ async function handleGuildShopBuyButton(interaction) {
 }
 
 /**
+ * Handle /redeem – redeem a gift card code (calls webapp API, assigns role on success).
+ */
+async function handleRedeemCommand(interaction) {
+  const guildId = interaction.guild?.id;
+  const code = interaction.options.getString('code', true)?.trim().toUpperCase().replace(/\s/g, '');
+  if (!guildId || !code) {
+    return interaction.reply({ content: '❌ Please provide a valid code (e.g. XXXX-XXXX-XXXX).', ephemeral: true });
+  }
+  const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
+  const internalSecret = process.env.INTERNAL_API_SECRET;
+  await interaction.deferReply({ ephemeral: true });
+  try {
+    const res = await fetch(`${baseUrl}/api/comcraft/guilds/${guildId}/redeem`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {})
+      },
+      body: JSON.stringify({ discordId: interaction.user.id, code })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return interaction.editReply({
+        content: `❌ ${data.error || 'Invalid or already used code.'}`
+      });
+    }
+    return interaction.editReply({
+      content: '✅ Code redeemed! You received the role.'
+    });
+  } catch (e) {
+    console.error('Redeem error:', e);
+    return interaction.editReply({
+      content: '❌ Something went wrong. Try again later.'
+    });
+  }
+}
+
+/**
  * Handle application apply button – one button per form (application_apply_<configId>) opens that form's modal only
  */
 async function handleApplicationApplyButton(interaction) {
@@ -11291,6 +11334,13 @@ async function registerCommands(clientInstance) {
     new SlashCommandBuilder()
       .setName('store')
       .setDescription('🛒 View server store – buy roles with card (Stripe/PayPal)'),
+
+    new SlashCommandBuilder()
+      .setName('redeem')
+      .setDescription('🎁 Redeem a gift card / code from the server store')
+      .addStringOption((opt) =>
+        opt.setName('code').setDescription('Your code (e.g. XXXX-XXXX-XXXX)').setRequired(true)
+      ),
 
     // ============ STICKY MESSAGES COMMANDS ============
     new SlashCommandBuilder()

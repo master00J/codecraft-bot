@@ -59,7 +59,7 @@ export async function POST(
 
     const { data: item, error: itemError } = await supabaseAdmin
       .from('guild_shop_items')
-      .select('id, name, description, price_amount_cents, currency, discord_role_id, enabled')
+      .select('id, name, description, price_amount_cents, currency, discord_role_id, enabled, delivery_type')
       .eq('guild_id', guildId)
       .eq('id', itemId)
       .eq('enabled', true)
@@ -72,7 +72,11 @@ export async function POST(
     const baseUrl =
       process.env.NEXTAUTH_URL ??
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    const successUrl = `${baseUrl}/comcraft/pay/thank-you?shop=1`;
+    const successUrl =
+      `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}` +
+      ((item as { delivery_type?: string }).delivery_type === 'code'
+        ? '&session_id={CHECKOUT_SESSION_ID}'
+        : '');
     const cancelUrl = `${baseUrl}/comcraft/pay?guildId=${guildId}&shop=1`;
 
     const amountValue = (item.price_amount_cents / 100).toFixed(2);
@@ -103,13 +107,17 @@ export async function POST(
           shop_item_id: item.id,
           discord_id: discordId,
         });
+        const paypalSuccessUrl =
+          (item as { delivery_type?: string }).delivery_type === 'code'
+            ? `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}&paypal_order_id=`
+            : successUrl;
         const { approveUrl, orderId } = await createPayPalOrder({
           accessToken,
           sandbox: ppConfig.sandbox !== false,
           amountValue,
           currencyCode,
           description: item.description || item.name,
-          returnUrl: successUrl,
+          returnUrl: (item as { delivery_type?: string }).delivery_type === 'code' ? paypalSuccessUrl + orderId : successUrl,
           cancelUrl,
           customId,
         });

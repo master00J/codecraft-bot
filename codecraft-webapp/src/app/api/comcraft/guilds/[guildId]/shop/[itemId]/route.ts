@@ -90,6 +90,7 @@ export async function PATCH(
     if (typeof body.discordRoleId === 'string') update.discord_role_id = body.discordRoleId.trim();
     if (typeof body.enabled === 'boolean') update.enabled = body.enabled;
     if (typeof body.sortOrder === 'number') update.sort_order = body.sortOrder;
+    if (body.deliveryType === 'code' || body.deliveryType === 'role') update.delivery_type = body.deliveryType;
 
     const { data, error } = await supabaseAdmin
       .from('guild_shop_items')

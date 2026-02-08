@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import { generateShopCode } from '@/lib/comcraft/shop-codes';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,13 +98,31 @@ export async function POST(request: NextRequest) {
 
   const { data: item, error: itemError } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('discord_role_id')
+    .select('discord_role_id, delivery_type')
     .eq('guild_id', guildId)
     .eq('id', shopItemId)
     .maybeSingle();
 
   if (itemError || !item?.discord_role_id) {
     console.error('Stripe webhook: shop item not found', guildId, shopItemId);
+    return NextResponse.json({ received: true });
+  }
+
+  const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
+  const stripeSessionId = (session as { id?: string }).id;
+
+  if (deliveryType === 'code' && stripeSessionId) {
+    const code = generateShopCode();
+    const { error: insertErr } = await supabaseAdmin.from('guild_shop_codes').insert({
+      guild_id: guildId,
+      shop_item_id: shopItemId,
+      code,
+      discord_role_id: item.discord_role_id,
+      stripe_session_id: stripeSessionId,
+    });
+    if (insertErr) {
+      console.error('Stripe webhook: failed to create code', guildId, shopItemId, insertErr);
+    }
     return NextResponse.json({ received: true });
   }
 

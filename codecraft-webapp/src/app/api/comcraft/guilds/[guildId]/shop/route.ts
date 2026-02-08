@@ -83,6 +83,7 @@ export async function POST(
     const discordRoleId = typeof body.discordRoleId === 'string' ? body.discordRoleId.trim() : '';
     const enabled = body.enabled !== false;
     const sortOrder = typeof body.sortOrder === 'number' ? body.sortOrder : 0;
+    const deliveryType = body.deliveryType === 'code' ? 'code' : 'role';
 
     if (!name || !discordRoleId) {
       return NextResponse.json(
@@ -108,6 +109,7 @@ export async function POST(
         discord_role_id: discordRoleId,
         enabled,
         sort_order: sortOrder,
+        delivery_type: deliveryType,
         updated_at: new Date().toISOString(),
       })
       .select()
