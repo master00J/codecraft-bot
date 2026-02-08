@@ -3007,6 +3007,11 @@ client.on('interactionCreate', async (interaction) => {
         break;
       }
 
+      case 'donate': {
+        await handleDonateCommand(interaction);
+        break;
+      }
+
       case 'help':
         await handleHelpCommand(interaction);
         break;
@@ -8649,10 +8654,54 @@ async function handleApplicationCommand(interaction) {
 }
 
 /**
+ * Handle /donate – show payment link for server owner's Stripe (guild_stripe_config).
+ */
+async function handleDonateCommand(interaction) {
+  const amount = interaction.options.getNumber('amount') ?? 5;
+  const guildId = interaction.guild?.id;
+  if (!guildId) {
+    return interaction.reply({ content: '❌ This command only works in a server.', ephemeral: true });
+  }
+  if (amount < 1 || amount > 999) {
+    return interaction.reply({ content: '❌ Amount must be between 1 and 999.', ephemeral: true });
+  }
+  let stripeEnabled = false;
+  if (applicationsManager?.supabase) {
+    const { data } = await applicationsManager.supabase
+      .from('guild_stripe_config')
+      .select('enabled, stripe_secret_key')
+      .eq('guild_id', guildId)
+      .maybeSingle();
+    stripeEnabled = !!(data?.enabled && data?.stripe_secret_key);
+  }
+  if (!stripeEnabled) {
+    return interaction.reply({
+      content: '❌ This server has not set up payments yet. An admin can enable Stripe in **Dashboard → Payments**.',
+      ephemeral: true
+    });
+  }
+  const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
+  const paymentUrl = `${baseUrl}/api/comcraft/public/checkout?guildId=${encodeURIComponent(guildId)}&amount=${encodeURIComponent(amount)}&currency=eur`;
+  const embed = new EmbedBuilder()
+    .setColor('#57F287')
+    .setTitle('💳 Support this server')
+    .setDescription(`Support **${interaction.guild.name}** with a one-time payment. Click the button below to pay **€${amount}** – the money goes directly to the server owner.`)
+    .setFooter({ text: 'Powered by Stripe • Payments go to the server, not Codecraft' })
+    .setTimestamp();
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel(`Pay €${amount}`)
+      .setStyle(ButtonStyle.Link)
+      .setURL(paymentUrl)
+  );
+  return interaction.reply({ embeds: [embed], components: [row] });
+}
+
+/**
  * Handle application apply button – one button per form (application_apply_<configId>) opens that form's modal only
  */
 async function handleApplicationApplyButton(interaction) {
-  try {
+  async function run() {
     if (!applicationsManager) {
       return interaction.reply({
         content: '❌ Applications system is not available.',
@@ -8689,6 +8738,7 @@ async function handleApplicationApplyButton(interaction) {
           content: `❌ ${canApplyResult.reason}`,
           ephemeral: true
         });
+      }
       const modal = applicationsManager.createApplicationModal(config.questions, {
         configId: config.id,
         roleName: config.name || 'Staff'
@@ -8733,29 +8783,30 @@ async function handleApplicationApplyButton(interaction) {
     }
     // Multiple forms: one button per form (no dropdown)
     const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-    const row = new ActionRowBuilder().addComponents(
-      configs.slice(0, 5).map(c =>
-        new ButtonBuilder()
-          .setCustomId(`application_apply_${c.id}`)
-          .setLabel(`Apply: ${(c.name || 'Staff').substring(0, 76)}`)
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('📝')
-      )
-    );
-    return interaction.reply({
+    const buttons = configs.slice(0, 5).map(function (c) {
+      return new ButtonBuilder()
+        .setCustomId('application_apply_' + c.id)
+        .setLabel(('Apply: ' + (c.name || 'Staff')).substring(0, 80))
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📝');
+    });
+    const row = new ActionRowBuilder().addComponents(buttons);
+    const replyOpts = {
       content: '📝 **Choose an application form** – each has its own form and channel.',
       components: [row],
       ephemeral: true
-    });
-  } catch (error) {
+    };
+    return interaction.reply(replyOpts);
+  }
+  return run().catch(function (error) {
     console.error('Error handling application apply button:', error);
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
+      return interaction.reply({
         content: '❌ An error occurred while opening the application form.',
         ephemeral: true
       }).catch(() => {});
     }
-  }
+  });
 }
 
 /**
@@ -11112,6 +11163,18 @@ async function registerCommands(clientInstance) {
                 { name: 'Rejected', value: 'rejected' }
               )
           )
+      ),
+
+    new SlashCommandBuilder()
+      .setName('donate')
+      .setDescription('💳 Support this server – get a link to pay the server owner directly')
+      .addNumberOption(option =>
+        option
+          .setName('amount')
+          .setDescription('Amount in EUR (e.g. 5 for €5). Default: 5')
+          .setRequired(false)
+          .setMinValue(1)
+          .setMaxValue(999)
       ),
 
     // ============ STICKY MESSAGES COMMANDS ============

@@ -1678,6 +1678,16 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                     </Card>
                   </Link>
 
+                  <Link href={`/comcraft/dashboard/${guildId}/payments`}>
+                    <Card className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-emerald-500/50 h-full hover:scale-105 duration-200">
+                      <div className="bg-gradient-to-br from-emerald-500/10 to-green-500/10 p-5">
+                        <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">💳</div>
+                        <h3 className="font-semibold text-base mb-1">Payments</h3>
+                        <p className="text-xs text-muted-foreground">Stripe – receive payments</p>
+                      </div>
+                    </Card>
+                  </Link>
+
                   {/* Tab Switchers */}
                   <Card 
                     className="group hover:shadow-xl transition-all cursor-pointer border-2 hover:border-primary/50 h-full hover:scale-105 duration-200"
