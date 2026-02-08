@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy } from 'lucide-react';
+import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy, ExternalLink } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -329,6 +329,17 @@ export default function ShopDashboard() {
               {typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : `…/comcraft/store/${guildId}`}
             </code>
             <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : '';
+                if (url) window.open(url, '_blank');
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-1" />
+              Open store
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={() => {
@@ -339,7 +350,7 @@ export default function ShopDashboard() {
               }}
             >
               <Copy className="h-4 w-4 mr-1" />
-              Copy
+              Copy link
             </Button>
           </div>
         )}

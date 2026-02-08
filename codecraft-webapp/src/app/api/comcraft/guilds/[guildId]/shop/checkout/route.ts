@@ -107,9 +107,10 @@ export async function POST(
           shop_item_id: item.id,
           discord_id: discordId,
         });
-        const paypalSuccessUrl =
-          (item as { delivery_type?: string }).delivery_type === 'code'
-            ? `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}&paypal_order_id=`
+        const isCodeDelivery = (item as { delivery_type?: string }).delivery_type === 'code';
+        const paypalReturnUrl =
+          isCodeDelivery
+            ? `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}`
             : successUrl;
         const { approveUrl, orderId } = await createPayPalOrder({
           accessToken,
@@ -117,7 +118,7 @@ export async function POST(
           amountValue,
           currencyCode,
           description: item.description || item.name,
-          returnUrl: (item as { delivery_type?: string }).delivery_type === 'code' ? paypalSuccessUrl + orderId : successUrl,
+          returnUrl: paypalReturnUrl,
           cancelUrl,
           customId,
         });

@@ -11,7 +11,7 @@ export default function PayThankYouPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const sessionId = searchParams.get('session_id');
-  const paypalOrderId = searchParams.get('paypal_order_id');
+  const paypalOrderId = searchParams.get('paypal_order_id') || searchParams.get('token');
   const guildId = searchParams.get('guild_id');
   const [codeData, setCodeData] = useState<{ code: string; itemName: string | null } | null>(null);
   const [codeLoading, setCodeLoading] = useState(false);

@@ -8741,10 +8741,11 @@ async function handleStoreCommand(interaction) {
       ephemeral: true
     });
   }
+  const storePageUrl = `${baseUrl}/comcraft/store/${guildId}`;
   const embed = new EmbedBuilder()
     .setColor('#5865F2')
     .setTitle(`🛒 ${interaction.guild.name} – Store`)
-    .setDescription('Buy a role below. You will be redirected to secure payment (Stripe or PayPal). After payment, the role is assigned automatically.')
+    .setDescription(`Buy a role below, or **open the store in your browser** with the button at the bottom. You'll be redirected to secure payment (Stripe or PayPal); after payment, the role is assigned automatically.`)
     .setFooter({ text: 'Payments go to the server owner' })
     .setTimestamp();
   const rows = [];
@@ -8765,6 +8766,14 @@ async function handleStoreCommand(interaction) {
     }
     rows.push(row);
   }
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel('Open store in browser')
+        .setStyle(ButtonStyle.Link)
+        .setURL(storePageUrl)
+    )
+  );
   return interaction.reply({ embeds: [embed], components: rows });
 }
 
