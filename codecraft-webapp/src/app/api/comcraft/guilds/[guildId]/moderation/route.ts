@@ -95,6 +95,7 @@ export async function GET(
         filter_duplicates: false,
         filter_words: [],
         ai_moderation_enabled: false,
+        ai_image_moderation_enabled: false,
         spam_messages: 5,
         spam_interval: 5,
         caps_threshold: 70,

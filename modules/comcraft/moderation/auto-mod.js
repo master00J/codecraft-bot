@@ -8,6 +8,7 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const configManager = require('../config-manager');
 const aiService = require('../ai');
 const modActions = require('./actions');
+const openaiImageModeration = require('./openai-image-moderation');
 
 class AutoMod {
   constructor() {
@@ -159,6 +160,26 @@ class AutoMod {
       }
     } else {
       console.log('[AutoMod] 🤖 AI moderation disabled in config (ai_moderation_enabled:', config.ai_moderation_enabled, ')');
+    }
+
+    // Check AI image moderation (OpenAI Moderation API – free, omni-moderation-latest)
+    if (config.ai_image_moderation_enabled && message.attachments.size > 0) {
+      const imageUrls = [];
+      for (const [, att] of message.attachments) {
+        if (att.contentType && att.contentType.startsWith('image/') && att.url) {
+          imageUrls.push(att.url);
+        }
+      }
+      if (imageUrls.length > 0 && openaiImageModeration.isConfigured()) {
+        try {
+          const result = await openaiImageModeration.moderateImages(imageUrls);
+          if (result.flagged) {
+            violations.push('ai_image_inappropriate');
+          }
+        } catch (err) {
+          console.error('[AutoMod] OpenAI image moderation error:', err.message);
+        }
+      }
     }
 
     if (violations.length > 0) {
@@ -478,7 +499,8 @@ class AutoMod {
       ai_violence: '🤖 Violent content (AI)',
       ai_sexual: '🤖 Sexual content (AI)',
       ai_profanity: '🤖 Profanity/inappropriate language (AI)',
-      ai_spam: '🤖 Spam (AI)'
+      ai_spam: '🤖 Spam (AI)',
+      ai_image_inappropriate: '🖼️ Inappropriate image (AI)'
     };
 
     return violations.map(v => texts[v] || v).join('\n');

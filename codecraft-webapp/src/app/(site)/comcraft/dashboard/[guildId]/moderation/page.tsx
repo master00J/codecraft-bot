@@ -26,6 +26,7 @@ interface ModerationConfig {
   filter_duplicates: boolean;
   filter_words: string[];
   ai_moderation_enabled: boolean;
+  ai_image_moderation_enabled: boolean;
   spam_messages: number;
   spam_interval: number;
   caps_threshold: number;
@@ -1214,6 +1215,52 @@ export default function ModerationPage() {
                   <p className="text-sm text-muted-foreground">
                     <strong>Note:</strong> AI moderation uses your monthly token quota. Each message check costs ~100-200 tokens.
                     Monitor usage in the AI dashboard.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 border-2 rounded-lg bg-green-500/5">
+                  <div>
+                    <div className="font-semibold text-lg">Enable AI Image Moderation</div>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically remove messages that contain inappropriate images (sexual, violence, self-harm, etc.). Uses OpenAI Moderation API – <strong>free</strong>. Requires OPENAI_API_KEY.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={config.ai_image_moderation_enabled ?? false}
+                    onCheckedChange={async (checked) => {
+                      const newConfig = { ...config, ai_image_moderation_enabled: checked };
+                      setConfig(newConfig);
+                      try {
+                        const response = await fetch(`/api/comcraft/guilds/${guildId}/moderation`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            ...newConfig,
+                            filter_words: badWordsInput.split(',').map(w => w.trim()).filter(Boolean)
+                          })
+                        });
+                        if (response.ok) {
+                          toast({
+                            title: 'Success',
+                            description: 'AI image moderation setting saved'
+                          });
+                        }
+                      } catch (error: any) {
+                        console.error('Error saving AI image moderation setting:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to save AI image moderation setting',
+                          variant: 'destructive'
+                        });
+                        setConfig(config);
+                      }
+                    }}
+                    disabled={!config.automod_enabled}
+                  />
+                </div>
+                <div className="p-4 border-2 border-dashed rounded-lg bg-green-500/5">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Image moderation:</strong> Uses OpenAI&apos;s omni-moderation model. No extra cost – the Moderation API is free. Add OPENAI_API_KEY to your bot environment to enable.
                   </p>
                 </div>
               </div>

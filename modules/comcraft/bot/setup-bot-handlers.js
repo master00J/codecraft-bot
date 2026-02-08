@@ -529,6 +529,18 @@ async function setupBotHandlers(client, options = {}) {
     console.log(`🚀 Bot ${botTag} setup complete!`);
   });
 
+  // When the bot joins a new server, register slash commands for that guild immediately
+  client.on('guildCreate', async (guild) => {
+    const token = botToken || client.token;
+    if (!token || !clientId) return;
+    try {
+      await registerCommands(client, clientId, true, guild.id, token);
+      console.log(`✅ Registered slash commands for new guild: ${guild.name} (${guild.id})`);
+    } catch (err) {
+      console.error(`❌ Failed to register commands for guild ${guild.id}:`, err.message || err);
+    }
+  });
+
   return {
     discordManager,
     autoRolesManager,
@@ -5611,27 +5623,46 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
     }
   }
 
-  const commandsJson = commands.map((c) => (typeof c.toJSON === 'function' ? c.toJSON() : c));
+  const commandsJson = commands
+    .map((c) => (typeof c.toJSON === 'function' ? c.toJSON() : c))
+    .filter(Boolean);
+  const commandNames = commandsJson.map((c) => c.name).filter(Boolean);
+  const hasVerify = commandNames.includes('verify');
+
+  if (commandsJson.length > 50) {
+    console.warn(`⚠️ Slash command count is ${commandsJson.length} (Discord guild limit is 50). Some commands may not appear in servers.`);
+  }
+  console.log(`📝 Registering ${commandsJson.length} slash commands (verify: ${hasVerify ? 'yes' : 'NO'})...`);
 
   const rest = new REST({ version: '10' }).setToken(botToken);
 
   try {
-    console.log('📝 Registering slash commands...');
-
-    // For custom bots, register commands for the specific guild (instant update)
+    // For custom bots (or guildCreate), register commands for the specific guild (instant update)
     if (isCustomBot && guildId) {
-      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commandsJson });
-      console.log(`✅ Successfully registered slash commands for custom bot in guild ${guildId}`);
+      if (commandsJson.length > 50) {
+        console.warn(`⚠️ Cannot register ${commandsJson.length} commands for guild ${guildId} (Discord limit 50). Using global registration only; commands may take up to 1 hour.`);
+        await rest.put(Routes.applicationCommands(clientId), { body: commandsJson });
+      } else {
+        await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commandsJson });
+        console.log(`✅ Successfully registered slash commands for guild ${guildId}`);
+      }
     } else if (process.env.GUILD_ID) {
-      // For main bot, use GUILD_ID if set (instant update)
-      await rest.put(Routes.applicationGuildCommands(clientId, process.env.GUILD_ID), { body: commandsJson });
-      console.log(`✅ Successfully registered slash commands for guild ${process.env.GUILD_ID}`);
+      // For main bot, use GUILD_ID if set (instant update) if under 50 commands
+      if (commandsJson.length > 50) {
+        console.warn(`⚠️ Command count ${commandsJson.length} exceeds guild limit 50. Registering globally only.`);
+        await rest.put(Routes.applicationCommands(clientId), { body: commandsJson });
+        console.log('✅ Registered slash commands globally (may take up to 1 hour in servers).');
+      } else {
+        await rest.put(Routes.applicationGuildCommands(clientId, process.env.GUILD_ID), { body: commandsJson });
+        console.log(`✅ Successfully registered slash commands for guild ${process.env.GUILD_ID}`);
+      }
     } else {
-      // Register globally and per guild so commands appear immediately in every server
+      // Register globally (always)
       await rest.put(Routes.applicationCommands(clientId), { body: commandsJson });
       console.log('✅ Registered slash commands globally');
+      // Per-guild registration only if we're under Discord's 50-command guild limit (instant in each server)
       const guilds = client.guilds?.cache;
-      if (guilds?.size) {
+      if (guilds?.size && commandsJson.length <= 50) {
         let done = 0;
         for (const [gid] of guilds) {
           try {
@@ -5643,12 +5674,17 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
           }
         }
         console.log(`✅ Registered slash commands for ${done} guild(s) (instant availability)`);
+      } else if (commandsJson.length > 50) {
+        console.log('⏳ Global commands only (limit 50 per guild exceeded). Slash commands may take up to 1 hour to appear in servers.');
       } else {
         console.log('⏳ Global commands may take up to 1 hour to appear in servers.');
       }
     }
   } catch (error) {
-    console.error('❌ Error registering commands:', error);
+    const msg = error.message || String(error);
+    const body = error.body || error.raw?.body;
+    console.error('❌ Error registering commands:', msg);
+    if (body) console.error('   Discord API response:', typeof body === 'object' ? JSON.stringify(body) : body);
   }
 }
 
