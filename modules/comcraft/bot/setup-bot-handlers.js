@@ -5611,7 +5611,7 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
     }
   }
 
-  const commandsJson = commands.map((command) => command.toJSON());
+  const commandsJson = commands.map((c) => (typeof c.toJSON === 'function' ? c.toJSON() : c));
 
   const rest = new REST({ version: '10' }).setToken(botToken);
 
@@ -5620,16 +5620,32 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
 
     // For custom bots, register commands for the specific guild (instant update)
     if (isCustomBot && guildId) {
-      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commandsJson });
       console.log(`✅ Successfully registered slash commands for custom bot in guild ${guildId}`);
     } else if (process.env.GUILD_ID) {
       // For main bot, use GUILD_ID if set (instant update)
-      await rest.put(Routes.applicationGuildCommands(clientId, process.env.GUILD_ID), { body: commands });
+      await rest.put(Routes.applicationGuildCommands(clientId, process.env.GUILD_ID), { body: commandsJson });
       console.log(`✅ Successfully registered slash commands for guild ${process.env.GUILD_ID}`);
     } else {
-      // Register commands globally (takes up to 1 hour)
-      await rest.put(Routes.applicationCommands(clientId), { body: commands });
-      console.log('✅ Successfully registered slash commands globally (may take up to 1 hour to appear)');
+      // Register globally and per guild so commands appear immediately in every server
+      await rest.put(Routes.applicationCommands(clientId), { body: commandsJson });
+      console.log('✅ Registered slash commands globally');
+      const guilds = client.guilds?.cache;
+      if (guilds?.size) {
+        let done = 0;
+        for (const [gid] of guilds) {
+          try {
+            await rest.put(Routes.applicationGuildCommands(clientId, gid), { body: commandsJson });
+            done++;
+            if (done % 5 === 0) await new Promise((r) => setTimeout(r, 1000));
+          } catch (e) {
+            console.warn(`⚠️ Could not register commands for guild ${gid}:`, e.message);
+          }
+        }
+        console.log(`✅ Registered slash commands for ${done} guild(s) (instant availability)`);
+      } else {
+        console.log('⏳ Global commands may take up to 1 hour to appear in servers.');
+      }
     }
   } catch (error) {
     console.error('❌ Error registering commands:', error);

@@ -718,16 +718,18 @@ class ConfigManager {
         .eq('guild_id', guild.id);
       
       // Ensure owner is in authorized users (for existing guilds too)
-      await this.supabase
-        .from('guild_authorized_users')
-        .upsert({
-          guild_id: guild.id,
-          discord_id: ownerId,
-          role: 'owner'
-        }, {
-          onConflict: 'guild_id,discord_id'
-        })
-        .catch(err => console.warn('Could not ensure owner in authorized users:', err));
+      try {
+        const { error: upsertErr } = await this.supabase
+          .from('guild_authorized_users')
+          .upsert({
+            guild_id: guild.id,
+            discord_id: ownerId,
+            role: 'owner'
+          }, { onConflict: 'guild_id,discord_id' });
+        if (upsertErr) console.warn('Could not ensure owner in authorized users:', upsertErr);
+      } catch (err) {
+        console.warn('Could not ensure owner in authorized users:', err);
+      }
       
       return existing;
     }
@@ -759,14 +761,18 @@ class ConfigManager {
     }
 
     // Add owner to authorized users
-    await this.supabase
-      .from('guild_authorized_users')
-      .insert({
-        guild_id: guild.id,
-        discord_id: ownerId,
-        role: 'owner'
-      })
-      .catch(err => console.warn('Could not add owner to authorized users:', err));
+    try {
+      const { error: insertErr } = await this.supabase
+        .from('guild_authorized_users')
+        .insert({
+          guild_id: guild.id,
+          discord_id: ownerId,
+          role: 'owner'
+        });
+      if (insertErr) console.warn('Could not add owner to authorized users:', insertErr);
+    } catch (err) {
+      console.warn('Could not add owner to authorized users:', err);
+    }
 
     // Defaults worden automatisch gecreëerd door database trigger
     return data;

@@ -174,8 +174,8 @@ export default function GameVerificationPage() {
               <div className="space-y-2">
                 <Label>Game name (e.g. FC26 Pro Clubs)</Label>
                 <Input
-                  value={config.game_name}
-                  onChange={(e) => setConfig({ ...config, game_name: e.target.value || 'In-Game' })}
+                  value={config.game_name ?? ''}
+                  onChange={(e) => setConfig({ ...config, game_name: e.target.value })}
                   placeholder="e.g. FC26 Pro Clubs"
                 />
                 <p className="text-xs text-muted-foreground">Shown in messages and used for audit reasons.</p>
