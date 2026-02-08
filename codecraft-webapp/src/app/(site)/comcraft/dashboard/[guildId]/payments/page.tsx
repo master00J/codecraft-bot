@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * ComCraft Payments – Stripe integration
- * Server owners add their own Stripe keys; payments go directly to their account.
+ * ComCraft Payments – Stripe & PayPal
+ * Server owners add their own keys; payments go directly to their account.
  */
 
 import { useState, useEffect } from 'react';
@@ -17,6 +17,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Save, ArrowLeft, CreditCard, ExternalLink, Copy, Check } from 'lucide-react';
 
 const STRIPE_DASHBOARD_URL = 'https://dashboard.stripe.com/apikeys';
+const PAYPAL_APPS_URL = 'https://developer.paypal.com/dashboard/applications';
 
 export default function PaymentsDashboard() {
   const params = useParams();
@@ -25,14 +26,25 @@ export default function PaymentsDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPayPal, setSavingPayPal] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [publishableKey, setPublishableKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [hasKeys, setHasKeys] = useState(false);
   const [linkAmount, setLinkAmount] = useState('5');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [stripeLinkCopied, setStripeLinkCopied] = useState(false);
+  const [paypalLinkCopied, setPaypalLinkCopied] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
+
+  const [paypalEnabled, setPaypalEnabled] = useState(false);
+  const [paypalClientId, setPaypalClientId] = useState('');
+  const [paypalClientSecret, setPaypalClientSecret] = useState('');
+  const [paypalHasKeys, setPaypalHasKeys] = useState(false);
+  const [paypalSandbox, setPaypalSandbox] = useState(true);
+  const [paypalWebhookId, setPaypalWebhookId] = useState('');
+  const [paypalWebhookUrl, setPaypalWebhookUrl] = useState('');
 
   useEffect(() => {
     if (guildId) load();
@@ -41,16 +53,30 @@ export default function PaymentsDashboard() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/comcraft/guilds/${guildId}/stripe`);
-      if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json();
-      setEnabled(!!data.enabled);
-      setPublishableKey(data.publishableKey || '');
-      setSecretKey(''); // Never show existing secret
-      setHasKeys(!!data.hasKeys);
-      setWebhookSecret(data.webhookSecret || '');
       const base = typeof window !== 'undefined' ? window.location.origin : '';
-      setWebhookUrl(`${base}/api/webhooks/stripe?guild_id=${guildId}`);
+      const [stripeRes, paypalRes] = await Promise.all([
+        fetch(`/api/comcraft/guilds/${guildId}/stripe`),
+        fetch(`/api/comcraft/guilds/${guildId}/paypal`),
+      ]);
+      if (stripeRes.ok) {
+        const data = await stripeRes.json();
+        setEnabled(!!data.enabled);
+        setPublishableKey(data.publishableKey || '');
+        setSecretKey('');
+        setHasKeys(!!data.hasKeys);
+        setWebhookSecret(data.webhookSecret || '');
+        setWebhookUrl(`${base}/api/webhooks/stripe?guild_id=${guildId}`);
+      }
+      if (paypalRes.ok) {
+        const data = await paypalRes.json();
+        setPaypalEnabled(!!data.enabled);
+        setPaypalClientId(data.clientId || '');
+        setPaypalClientSecret('');
+        setPaypalHasKeys(!!data.hasKeys);
+        setPaypalSandbox(data.sandbox !== false);
+        setPaypalWebhookId(data.webhookId || '');
+        setPaypalWebhookUrl(`${base}/api/webhooks/paypal?guild_id=${guildId}`);
+      }
     } catch (e) {
       toast({
         title: 'Error',
@@ -79,10 +105,7 @@ export default function PaymentsDashboard() {
       }
       setSecretKey('');
       setHasKeys(!!(publishableKey.trim() && (secretKey.trim() || hasKeys)));
-      toast({
-        title: 'Saved',
-        description: 'Payment settings updated.',
-      });
+      toast({ title: 'Saved', description: 'Stripe settings updated.' });
     } catch (e) {
       toast({
         title: 'Error',
@@ -91,6 +114,40 @@ export default function PaymentsDashboard() {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function savePayPal() {
+    setSavingPayPal(true);
+    try {
+      const body: Record<string, unknown> = {
+        enabled: paypalEnabled,
+        clientId: paypalClientId.trim(),
+        sandbox: paypalSandbox,
+        webhookId: paypalWebhookId.trim(),
+      };
+      if (paypalClientSecret.trim()) body.clientSecret = paypalClientSecret.trim();
+
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/paypal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to save');
+      }
+      setPaypalClientSecret('');
+      setPaypalHasKeys(!!paypalClientId.trim());
+      toast({ title: 'Saved', description: 'PayPal settings updated.' });
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'Failed to save.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingPayPal(false);
     }
   }
 
@@ -113,10 +170,10 @@ export default function PaymentsDashboard() {
         </Link>
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <CreditCard className="h-8 w-8" />
-          Payments (Stripe)
+          Payments (Stripe & PayPal)
         </h1>
         <p className="text-muted-foreground mt-1">
-          Receive payments directly to your own Stripe account. Codecraft does not handle funds.
+          Receive payments directly to your own Stripe or PayPal account. Codecraft does not handle funds.
         </p>
       </div>
 
@@ -183,14 +240,14 @@ export default function PaymentsDashboard() {
         </div>
       </Card>
 
-      {hasKeys && enabled && (
+      {(hasKeys && enabled) || (paypalHasKeys && paypalEnabled) ? (
         <Card className="p-6 max-w-xl">
-          <h2 className="text-lg font-semibold mb-2">Payment link</h2>
+          <h2 className="text-lg font-semibold mb-2">Payment links</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Share this link so people can support your server. They can open it in a browser and pay with card or other methods. Money goes to your Stripe account.
+            Share a link so people can support your server. Amount in €. The bot command <code className="bg-muted px-1 rounded">/donate</code> can show both options.
           </p>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[200px] space-y-1">
+          <div className="flex flex-wrap items-end gap-2 mb-4">
+            <div className="flex-1 min-w-[120px] space-y-1">
               <Label htmlFor="link-amount">Amount (€)</Label>
               <Input
                 id="link-amount"
@@ -203,31 +260,45 @@ export default function PaymentsDashboard() {
                 className="w-24"
               />
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Copy link"
-              onClick={() => {
-                const base = typeof window !== 'undefined' ? window.location.origin : '';
-                const url = `${base}/api/comcraft/public/checkout?guildId=${guildId}&amount=${encodeURIComponent(linkAmount || '5')}&currency=eur`;
-                void navigator.clipboard.writeText(url).then(() => {
-                  setLinkCopied(true);
-                  toast({ title: 'Copied', description: 'Payment link copied to clipboard.' });
-                  setTimeout(() => setLinkCopied(false), 2000);
-                });
-              }}
-            >
-              {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
+            {hasKeys && enabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const base = typeof window !== 'undefined' ? window.location.origin : '';
+                  const url = `${base}/api/comcraft/public/checkout?guildId=${guildId}&amount=${encodeURIComponent(linkAmount || '5')}&currency=eur&provider=stripe`;
+                  void navigator.clipboard.writeText(url).then(() => {
+                    setStripeLinkCopied(true);
+                    toast({ title: 'Copied', description: 'Stripe link copied.' });
+                    setTimeout(() => setStripeLinkCopied(false), 2000);
+                  });
+                }}
+              >
+                {stripeLinkCopied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                Copy Stripe link
+              </Button>
+            )}
+            {paypalHasKeys && paypalEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const base = typeof window !== 'undefined' ? window.location.origin : '';
+                  const url = `${base}/api/comcraft/public/checkout?guildId=${guildId}&amount=${encodeURIComponent(linkAmount || '5')}&currency=eur&provider=paypal`;
+                  void navigator.clipboard.writeText(url).then(() => {
+                    setPaypalLinkCopied(true);
+                    toast({ title: 'Copied', description: 'PayPal link copied.' });
+                    setTimeout(() => setPaypalLinkCopied(false), 2000);
+                  });
+                }}
+              >
+                {paypalLinkCopied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                Copy PayPal link
+              </Button>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Link: {typeof window !== 'undefined' ? `${window.location.origin}/api/comcraft/public/checkout?guildId=${guildId}&amount=${linkAmount || '5'}&currency=eur` : '…'}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            You can also use the bot command <code className="bg-muted px-1 rounded">/donate</code> in your server to show a support link.
-          </p>
         </Card>
-      )}
+      ) : null}
 
       {hasKeys && enabled && (
         <Card className="p-6 max-w-xl">
@@ -275,6 +346,100 @@ export default function PaymentsDashboard() {
           </Button>
         </Card>
       )}
+
+      <Card className="p-6 max-w-xl">
+        <h2 className="text-lg font-semibold mb-2">PayPal</h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable PayPal</Label>
+              <p className="text-sm text-muted-foreground">
+                Accept payments via your PayPal account
+              </p>
+            </div>
+            <Switch checked={paypalEnabled} onCheckedChange={setPaypalEnabled} />
+          </div>
+          <div className="rounded-lg bg-muted/50 p-4 text-sm">
+            <p className="font-medium mb-1">Setup</p>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Create an app at{' '}
+                <a href={PAYPAL_APPS_URL} target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-1">
+                  PayPal Developer Dashboard <ExternalLink className="h-3 w-3" />
+                </a>
+              </li>
+              <li>Paste Client ID and Secret below. Use Sandbox for testing.</li>
+              <li>For Shop role assignment: add a webhook in the app and paste the Webhook ID.</li>
+            </ol>
+          </div>
+          <div className="space-y-2">
+            <Label>Client ID</Label>
+            <Input
+              value={paypalClientId}
+              onChange={(e) => setPaypalClientId(e.target.value)}
+              placeholder="From PayPal App credentials"
+              className="font-mono text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Client Secret</Label>
+            <Input
+              type="password"
+              value={paypalClientSecret}
+              onChange={(e) => setPaypalClientSecret(e.target.value)}
+              placeholder={paypalHasKeys ? '•••••••• (leave blank to keep current)' : 'Paste to set'}
+              className="font-mono text-sm"
+              autoComplete="off"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label>Sandbox (testing)</Label>
+            <Switch checked={paypalSandbox} onCheckedChange={setPaypalSandbox} />
+          </div>
+          <Button onClick={savePayPal} disabled={savingPayPal}>
+            {savingPayPal ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Save PayPal
+          </Button>
+        </div>
+        {paypalHasKeys && paypalEnabled && (
+          <>
+            <hr className="my-4" />
+            <h3 className="text-sm font-semibold mb-2">Shop webhook (for role assignment)</h3>
+            <p className="text-xs text-muted-foreground mb-2">
+              In your PayPal app, add webhook URL below and subscribe to <code className="bg-muted px-1 rounded">Payment capture completed</code>. Paste the Webhook ID here.
+            </p>
+            <div className="space-y-2 mb-2">
+              <Label className="text-xs">Webhook URL</Label>
+              <div className="flex gap-2">
+                <Input readOnly value={paypalWebhookUrl} className="font-mono text-xs" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  title="Copy"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(paypalWebhookUrl).then(() => {
+                      toast({ title: 'Copied', description: 'PayPal webhook URL copied.' });
+                    });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Webhook ID</Label>
+              <Input
+                value={paypalWebhookId}
+                onChange={(e) => setPaypalWebhookId(e.target.value)}
+                placeholder="From PayPal after adding webhook"
+                className="font-mono text-sm"
+              />
+            </div>
+            <Button onClick={savePayPal} disabled={savingPayPal} variant="outline" className="mt-2">
+              Save
+            </Button>
+          </>
+        )}
+      </Card>
     </div>
   );
 }

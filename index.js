@@ -8677,34 +8677,37 @@ async function handleDonateCommand(interaction) {
     return interaction.reply({ content: '❌ Amount must be between 1 and 999.', ephemeral: true });
   }
   let stripeEnabled = false;
+  let paypalEnabled = false;
   if (applicationsManager?.supabase) {
-    const { data } = await applicationsManager.supabase
-      .from('guild_stripe_config')
-      .select('enabled, stripe_secret_key')
-      .eq('guild_id', guildId)
-      .maybeSingle();
-    stripeEnabled = !!(data?.enabled && data?.stripe_secret_key);
+    const [stripeRes, paypalRes] = await Promise.all([
+      applicationsManager.supabase.from('guild_stripe_config').select('enabled, stripe_secret_key').eq('guild_id', guildId).maybeSingle(),
+      applicationsManager.supabase.from('guild_paypal_config').select('enabled, client_id, client_secret').eq('guild_id', guildId).maybeSingle()
+    ]);
+    stripeEnabled = !!(stripeRes?.data?.enabled && stripeRes?.data?.stripe_secret_key);
+    paypalEnabled = !!(paypalRes?.data?.enabled && paypalRes?.data?.client_id && paypalRes?.data?.client_secret);
   }
-  if (!stripeEnabled) {
+  if (!stripeEnabled && !paypalEnabled) {
     return interaction.reply({
-      content: '❌ This server has not set up payments yet. An admin can enable Stripe in **Dashboard → Payments**.',
+      content: '❌ This server has not set up payments yet. An admin can enable Stripe or PayPal in **Dashboard → Payments**.',
       ephemeral: true
     });
   }
   const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
-  const paymentUrl = `${baseUrl}/api/comcraft/public/checkout?guildId=${encodeURIComponent(guildId)}&amount=${encodeURIComponent(amount)}&currency=eur`;
   const embed = new EmbedBuilder()
     .setColor('#57F287')
     .setTitle('💳 Support this server')
-    .setDescription(`Support **${interaction.guild.name}** with a one-time payment. Click the button below to pay **€${amount}** – the money goes directly to the server owner.`)
-    .setFooter({ text: 'Powered by Stripe • Payments go to the server, not Codecraft' })
+    .setDescription(`Support **${interaction.guild.name}** with a one-time payment of **€${amount}**. Choose a method below – money goes directly to the server owner.`)
+    .setFooter({ text: 'Payments go to the server, not Codecraft' })
     .setTimestamp();
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel(`Pay €${amount}`)
-      .setStyle(ButtonStyle.Link)
-      .setURL(paymentUrl)
-  );
+  const row = new ActionRowBuilder();
+  if (stripeEnabled) {
+    const stripeUrl = `${baseUrl}/api/comcraft/public/checkout?guildId=${encodeURIComponent(guildId)}&amount=${encodeURIComponent(amount)}&currency=eur&provider=stripe`;
+    row.addComponents(new ButtonBuilder().setLabel(`Stripe €${amount}`).setStyle(ButtonStyle.Link).setURL(stripeUrl));
+  }
+  if (paypalEnabled) {
+    const paypalUrl = `${baseUrl}/api/comcraft/public/checkout?guildId=${encodeURIComponent(guildId)}&amount=${encodeURIComponent(amount)}&currency=eur&provider=paypal`;
+    row.addComponents(new ButtonBuilder().setLabel(`PayPal €${amount}`).setStyle(ButtonStyle.Link).setURL(paypalUrl));
+  }
   return interaction.reply({ embeds: [embed], components: [row] });
 }
 

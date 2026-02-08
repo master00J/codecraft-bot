@@ -1,6 +1,7 @@
 /**
- * Create Stripe Checkout Session for a shop item.
+ * Create Stripe Checkout Session or PayPal order for a shop item.
  * Authenticated: uses session discordId. Or internal call with body.discordId (e.g. from bot).
+ * Query: itemId, provider=stripe|paypal (default stripe).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,6 +9,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getGuildAccess } from '@/lib/comcraft/access-control';
+import { getPayPalAccessToken, createPayPalOrder } from '@/lib/comcraft/paypal';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +52,7 @@ export async function POST(
 
     const { searchParams } = new URL(request.url);
     const itemId = searchParams.get('itemId');
+    const provider = (searchParams.get('provider') || 'stripe').toLowerCase();
     if (!itemId) {
       return NextResponse.json({ error: 'itemId query required' }, { status: 400 });
     }
@@ -66,6 +69,61 @@ export async function POST(
       return NextResponse.json({ error: 'Shop item not found or disabled' }, { status: 404 });
     }
 
+    const baseUrl =
+      process.env.NEXTAUTH_URL ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const successUrl = `${baseUrl}/comcraft/pay/thank-you?shop=1`;
+    const cancelUrl = `${baseUrl}/comcraft/pay?guildId=${guildId}&shop=1`;
+
+    const amountValue = (item.price_amount_cents / 100).toFixed(2);
+    const currencyCode = (item.currency || 'eur').toUpperCase().slice(0, 3);
+
+    if (provider === 'paypal') {
+      const { data: ppConfig, error: configError } = await supabaseAdmin
+        .from('guild_paypal_config')
+        .select('client_id, client_secret, enabled, sandbox')
+        .eq('guild_id', guildId)
+        .maybeSingle();
+
+      if (configError || !ppConfig?.client_id || !ppConfig?.client_secret || !ppConfig.enabled) {
+        return NextResponse.json(
+          { error: 'This server has not set up PayPal yet.' },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const accessToken = await getPayPalAccessToken(
+          ppConfig.client_id,
+          ppConfig.client_secret,
+          ppConfig.sandbox !== false
+        );
+        const customId = JSON.stringify({
+          guild_id: guildId,
+          shop_item_id: item.id,
+          discord_id: discordId,
+        });
+        const { approveUrl, orderId } = await createPayPalOrder({
+          accessToken,
+          sandbox: ppConfig.sandbox !== false,
+          amountValue,
+          currencyCode,
+          description: item.description || item.name,
+          returnUrl: successUrl,
+          cancelUrl,
+          customId,
+        });
+        return NextResponse.json({ url: approveUrl, sessionId: orderId, provider: 'paypal' });
+      } catch (e) {
+        console.error('PayPal shop checkout error:', e);
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : 'PayPal checkout failed' },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Stripe (default)
     const { data: stripeConfig, error: configError } = await supabaseAdmin
       .from('guild_stripe_config')
       .select('stripe_secret_key, enabled')
@@ -79,17 +137,11 @@ export async function POST(
       );
     }
 
-    const baseUrl =
-      process.env.NEXTAUTH_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    const successUrl = `${baseUrl}/comcraft/pay/thank-you?shop=1`;
-    const cancelUrl = `${baseUrl}/comcraft/pay?guildId=${guildId}&shop=1`;
-
     const params = new URLSearchParams();
     params.append('mode', 'payment');
     params.append('success_url', successUrl);
     params.append('cancel_url', cancelUrl);
-    params.append('customer_email', ''); // optional; Stripe can collect
+    params.append('customer_email', '');
     params.append('line_items[0][quantity]', '1');
     params.append('line_items[0][price_data][currency]', (item.currency || 'eur').toLowerCase());
     params.append('line_items[0][price_data][unit_amount]', String(item.price_amount_cents));
