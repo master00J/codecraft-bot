@@ -38,7 +38,7 @@ interface SettingsFormState {
 }
 
 function mapSettingsToForm(raw: any): SettingsFormState {
-  const provider = raw?.default_provider === 'claude' ? 'claude' : raw?.default_provider === 'deepseek' ? 'deepseek' : 'gemini';
+  const provider = raw?.default_provider === 'gemini' ? 'gemini' : raw?.default_provider === 'deepseek' ? 'deepseek' : 'claude';
   return {
     allowQuestions: raw?.allow_question_command !== false,
     allowModeration: Boolean(raw?.allow_moderation),
@@ -120,7 +120,7 @@ export default function GuildAiPage() {
   const [settingsForm, setSettingsForm] = useState<SettingsFormState>({
     allowQuestions: true,
     allowModeration: false,
-    defaultProvider: 'gemini',
+    defaultProvider: 'claude',
     aiModel: null,
     chatEnabled: false,
     chatChannelId: null,

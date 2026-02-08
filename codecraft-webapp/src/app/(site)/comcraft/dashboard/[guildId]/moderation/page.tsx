@@ -1181,6 +1181,52 @@ export default function ModerationPage() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between p-4 border-2 rounded-lg bg-green-500/5">
+                  <div>
+                    <div className="font-semibold text-lg">Enable AI Image Moderation</div>
+                    <p className="text-sm text-muted-foreground">
+                      Remove messages with inappropriate images (sexual, violence, self-harm). Uses OpenAI Moderation API – <strong>free</strong>. Requires OPENAI_API_KEY on the bot.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={config.ai_image_moderation_enabled ?? false}
+                    onCheckedChange={async (checked) => {
+                      const newConfig = { ...config, ai_image_moderation_enabled: checked };
+                      setConfig(newConfig);
+                      try {
+                        const response = await fetch(`/api/comcraft/guilds/${guildId}/moderation`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            ...newConfig,
+                            filter_words: badWordsInput.split(',').map(w => w.trim()).filter(Boolean)
+                          })
+                        });
+                        if (response.ok) {
+                          toast({
+                            title: 'Success',
+                            description: 'AI image moderation setting saved'
+                          });
+                        }
+                      } catch (error: any) {
+                        console.error('Error saving AI image moderation setting:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to save AI image moderation setting',
+                          variant: 'destructive'
+                        });
+                        setConfig(config);
+                      }
+                    }}
+                    disabled={!config.automod_enabled}
+                  />
+                </div>
+                <div className="p-4 border-2 border-dashed rounded-lg bg-green-500/5">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Image moderation:</strong> OpenAI omni-moderation (free). Add OPENAI_API_KEY to your bot environment.
+                  </p>
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-4">
                   <Card className="border-2 p-4 bg-gradient-to-br from-blue-500/5 to-transparent">
                     <h3 className="font-semibold mb-2 flex items-center gap-2">

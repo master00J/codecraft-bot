@@ -122,7 +122,7 @@ export async function GET(
       settings: settingsData || {
         allow_question_command: true,
         allow_moderation: false,
-        default_provider: 'gemini',
+        default_provider: 'claude',
         chat_enabled: false,
         chat_channel_id: null,
         allowed_channel_ids: [],

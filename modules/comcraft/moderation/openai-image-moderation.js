@@ -5,6 +5,8 @@
  */
 
 const OPENAI_MODERATION_URL = 'https://api.openai.com/v1/moderations';
+const MIN_MS_BETWEEN_REQUESTS = 2000; // Avoid bursting; wait 2s between image-moderation calls
+let lastRequestTime = 0;
 
 function getApiKey() {
   return process.env.OPENAI_API_KEY || '';
@@ -12,6 +14,16 @@ function getApiKey() {
 
 function isConfigured() {
   return Boolean(getApiKey());
+}
+
+async function waitForRateLimit() {
+  const now = Date.now();
+  const elapsed = now - lastRequestTime;
+  if (elapsed < MIN_MS_BETWEEN_REQUESTS) {
+    const wait = MIN_MS_BETWEEN_REQUESTS - elapsed;
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  lastRequestTime = Date.now();
 }
 
 /**
@@ -30,12 +42,14 @@ async function moderateImages(imageUrls) {
     return { flagged: false };
   }
 
-  const input = imageUrls.map((url) => ({
+  // Limit to first 5 images per message to reduce rate-limit hits
+  const urls = imageUrls.slice(0, 5);
+  const input = urls.map((url) => ({
     type: 'image_url',
     image_url: { url }
   }));
 
-  try {
+  const doRequest = async () => {
     const res = await fetch(OPENAI_MODERATION_URL, {
       method: 'POST',
       headers: {
@@ -47,6 +61,23 @@ async function moderateImages(imageUrls) {
         input
       })
     });
+    return res;
+  };
+
+  try {
+    await waitForRateLimit();
+    let res = await doRequest();
+    let retries = 0;
+    const maxRetries = 2;
+    const retryDelays = [5000, 10000]; // 5s then 10s
+
+    while (res.status === 429 && retries < maxRetries) {
+      const delay = retryDelays[retries] || 10000;
+      console.warn('[OpenAI Image Moderation] Rate limited (429), retry', retries + 1, 'after', delay / 1000, 's');
+      await new Promise((r) => setTimeout(r, delay));
+      res = await doRequest();
+      retries++;
+    }
 
     if (!res.ok) {
       const errText = await res.text();

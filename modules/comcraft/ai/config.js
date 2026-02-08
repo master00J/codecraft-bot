@@ -4,7 +4,7 @@
  * read tokens and settings in a consistent way.
  */
 
-const DEFAULT_PROVIDER = process.env.AI_PRIMARY_PROVIDER || 'gemini';
+const DEFAULT_PROVIDER = process.env.AI_PRIMARY_PROVIDER || 'claude';
 
 module.exports = {
   getPrimaryProvider() {
