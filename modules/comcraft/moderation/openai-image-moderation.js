@@ -5,8 +5,12 @@
  */
 
 const OPENAI_MODERATION_URL = 'https://api.openai.com/v1/moderations';
-const MIN_MS_BETWEEN_REQUESTS = 2000; // Avoid bursting; wait 2s between image-moderation calls
+// Stricter defaults to avoid 429: 15s between calls, 3 min cooldown after 429, only 1 image per message
+const MIN_MS_BETWEEN_REQUESTS = Number(process.env.OPENAI_IMAGE_MODERATION_MIN_DELAY_MS) || 15000; // 15s
+const COOLDOWN_MS_AFTER_429 = Number(process.env.OPENAI_IMAGE_MODERATION_COOLDOWN_MS) || 180000; // 3 min
+const MAX_IMAGES_PER_MESSAGE = Number(process.env.OPENAI_IMAGE_MODERATION_MAX_IMAGES) || 1; // only first image
 let lastRequestTime = 0;
+let cooldownUntil = 0;
 
 function getApiKey() {
   return process.env.OPENAI_API_KEY || '';
@@ -42,8 +46,11 @@ async function moderateImages(imageUrls) {
     return { flagged: false };
   }
 
-  // Limit to first 5 images per message to reduce rate-limit hits
-  const urls = imageUrls.slice(0, 5);
+  if (Date.now() < cooldownUntil) {
+    return { flagged: false }; // Skip while in cooldown after 429
+  }
+
+  const urls = imageUrls.slice(0, Math.max(1, MAX_IMAGES_PER_MESSAGE));
   const input = urls.map((url) => ({
     type: 'image_url',
     image_url: { url }
@@ -66,17 +73,12 @@ async function moderateImages(imageUrls) {
 
   try {
     await waitForRateLimit();
-    let res = await doRequest();
-    let retries = 0;
-    const maxRetries = 2;
-    const retryDelays = [5000, 10000]; // 5s then 10s
+    const res = await doRequest();
 
-    while (res.status === 429 && retries < maxRetries) {
-      const delay = retryDelays[retries] || 10000;
-      console.warn('[OpenAI Image Moderation] Rate limited (429), retry', retries + 1, 'after', delay / 1000, 's');
-      await new Promise((r) => setTimeout(r, delay));
-      res = await doRequest();
-      retries++;
+    if (res.status === 429) {
+      cooldownUntil = Date.now() + COOLDOWN_MS_AFTER_429;
+      console.warn('[OpenAI Image Moderation] Rate limited (429). Cooldown', COOLDOWN_MS_AFTER_429 / 1000, 's – no image checks until', new Date(cooldownUntil).toISOString());
+      return { flagged: false };
     }
 
     if (!res.ok) {

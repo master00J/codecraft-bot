@@ -9,6 +9,16 @@ const configManager = require('../config-manager');
 const aiService = require('../ai');
 const modActions = require('./actions');
 const openaiImageModeration = require('./openai-image-moderation');
+const claudeImageModeration = require('./claude-image-moderation');
+
+function getImageModerationProvider() {
+  const provider = (process.env.AI_IMAGE_MODERATION_PROVIDER || 'claude').toLowerCase();
+  if (provider === 'openai' && openaiImageModeration.isConfigured()) return openaiImageModeration;
+  if (provider === 'claude' && claudeImageModeration.isConfigured()) return claudeImageModeration;
+  if (openaiImageModeration.isConfigured()) return openaiImageModeration;
+  if (claudeImageModeration.isConfigured()) return claudeImageModeration;
+  return null;
+}
 
 class AutoMod {
   constructor() {
@@ -162,7 +172,7 @@ class AutoMod {
       console.log('[AutoMod] 🤖 AI moderation disabled in config (ai_moderation_enabled:', config.ai_moderation_enabled, ')');
     }
 
-    // Check AI image moderation (OpenAI Moderation API – free, omni-moderation-latest)
+    // Check AI image moderation (Claude Vision or OpenAI Moderation API)
     if (config.ai_image_moderation_enabled && message.attachments.size > 0) {
       const imageUrls = [];
       for (const [, att] of message.attachments) {
@@ -170,14 +180,15 @@ class AutoMod {
           imageUrls.push(att.url);
         }
       }
-      if (imageUrls.length > 0 && openaiImageModeration.isConfigured()) {
+      const imageProvider = getImageModerationProvider();
+      if (imageUrls.length > 0 && imageProvider) {
         try {
-          const result = await openaiImageModeration.moderateImages(imageUrls);
+          const result = await imageProvider.moderateImages(imageUrls);
           if (result.flagged) {
             violations.push('ai_image_inappropriate');
           }
         } catch (err) {
-          console.error('[AutoMod] OpenAI image moderation error:', err.message);
+          console.error('[AutoMod] Image moderation error:', err.message);
         }
       }
     }

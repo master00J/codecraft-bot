@@ -134,7 +134,7 @@ Als je aangeeft welke optie je wilt (alleen upgrade model, of ook OpenAI, of ook
 | **Categorieën (o.a.)** | `sexual`, `sexual/minors` (tekst), `violence`, `violence/graphic`, `self-harm`, `self-harm/intent`, `self-harm/instructions`, `harassment`, `hate`, `illicit`, etc. |
 | **Output** | Per categorie: `flagged` (boolean) en `category_scores` (0–1). Je kiest zelf een drempel (bijv. verwijderen als `sexual` of `violence/graphic` > 0.8). |
 
-**Implementatie-idee:** In `auto-mod.js` (of message-create): als `message.attachments.size > 0` en er zijn afbeeldingen, voor elke image-URL `POST https://api.openai.com/v1/moderations` aanroepen met `model: "omni-moderation-latest"` en `input: [{ type: "image_url", image_url: { url: attachment.url } }]`. Als `results[0].flagged === true` (of bepaalde categorieën boven drempel), dan `message.delete()` en eventueel waarschuwing. Vereist alleen een **OpenAI API key** (zelfde key als voor GPT); er worden geen extra kosten in rekening gebracht voor Moderation.
+**Implementatie:** In `auto-mod.js` wordt bij image attachments een provider aangeroepen. Standaard wordt **Claude Vision** gebruikt (geen aparte moderation rate limit; gebruikt je Anthropic-quota). Optioneel: `AI_IMAGE_MODERATION_PROVIDER=openai` voor de gratis OpenAI Moderation API (wel strikte rate limits). Vereist `ANTHROPIC_API_KEY` (Claude) of `OPENAI_API_KEY` (OpenAI).
 
 ### Alternatief: Vision-LLM (Claude/Gemini) voor custom policy
 
