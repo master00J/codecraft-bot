@@ -22,16 +22,16 @@ class ProviderRegistry {
   }
 
   getPrimary() {
+    // Prefer the provider from config (e.g. AI_PRIMARY_PROVIDER=claude)
+    const desired = config.getPrimaryProvider();
+    const desiredProvider = this.providers.get(desired);
+    if (desiredProvider?.isConfigured()) {
+      this.primary = desired;
+      return desiredProvider;
+    }
     if (this.primary && this.providers.get(this.primary)?.isConfigured()) {
       return this.providers.get(this.primary);
     }
-    const desired = config.getPrimaryProvider();
-    const fallback = this.providers.get(desired);
-    if (fallback?.isConfigured()) {
-      this.primary = desired;
-      return fallback;
-    }
-
     for (const [name, provider] of this.providers.entries()) {
       if (provider.isConfigured()) {
         this.primary = name;

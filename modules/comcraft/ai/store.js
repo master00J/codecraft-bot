@@ -85,7 +85,7 @@ class AiStore {
     const settings = data || {
       allow_question_command: true,
       allow_moderation: false,
-      default_provider: 'gemini',
+      default_provider: 'claude',
       ai_model: null,
       chat_enabled: false,
       chat_channel_id: null,

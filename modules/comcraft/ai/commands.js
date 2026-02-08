@@ -118,7 +118,7 @@ async function handleAiModelCommand(interaction, aiStore) {
 
     if (subcommand === 'view') {
       const settings = await aiStore.getSettings(guildId);
-      const provider = settings?.default_provider || 'gemini';
+      const provider = settings?.default_provider || 'claude';
       const model = settings?.ai_model || 'default';
 
       const embed = {
