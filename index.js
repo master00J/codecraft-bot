@@ -3018,8 +3018,8 @@ client.on('interactionCreate', async (interaction) => {
         break;
       }
 
-      case 'shop': {
-        await handleShopCommand(interaction);
+      case 'store': {
+        await handleStoreCommand(interaction);
         break;
       }
 
@@ -8712,9 +8712,9 @@ async function handleDonateCommand(interaction) {
 }
 
 /**
- * Handle /shop – list guild shop items (roles for sale via Stripe). Buttons open checkout.
+ * Handle /store – list guild shop items (roles for sale via Stripe/PayPal). Buttons open checkout.
  */
-async function handleShopCommand(interaction) {
+async function handleStoreCommand(interaction) {
   const guildId = interaction.guild?.id;
   if (!guildId) {
     return interaction.reply({ content: '❌ This command only works in a server.', ephemeral: true });
@@ -8738,8 +8738,8 @@ async function handleShopCommand(interaction) {
   }
   const embed = new EmbedBuilder()
     .setColor('#5865F2')
-    .setTitle(`🛒 ${interaction.guild.name} – Shop`)
-    .setDescription('Buy a role below. You will be redirected to secure payment (Stripe). After payment, the role is assigned automatically.')
+    .setTitle(`🛒 ${interaction.guild.name} – Store`)
+    .setDescription('Buy a role below. You will be redirected to secure payment (Stripe or PayPal). After payment, the role is assigned automatically.')
     .setFooter({ text: 'Payments go to the server owner' })
     .setTimestamp();
   const rows = [];
@@ -11289,8 +11289,8 @@ async function registerCommands(clientInstance) {
       ),
 
     new SlashCommandBuilder()
-      .setName('shop')
-      .setDescription('🛒 View server shop – buy roles with card (Stripe)'),
+      .setName('store')
+      .setDescription('🛒 View server store – buy roles with card (Stripe/PayPal)'),
 
     // ============ STICKY MESSAGES COMMANDS ============
     new SlashCommandBuilder()

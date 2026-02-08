@@ -313,7 +313,7 @@ export default function ShopDashboard() {
           </Table>
         )}
         <p className="text-xs text-muted-foreground mt-4">
-          Users can see and buy items via the bot command <code className="bg-muted px-1 rounded">/shop</code> in your server. Make sure you configured the Stripe webhook in Payments so roles are assigned after payment.
+          Users can see and buy items via the bot command <code className="bg-muted px-1 rounded">/store</code> in your server. Make sure you configured the Stripe webhook in Payments so roles are assigned after payment.
         </p>
       </Card>
 
