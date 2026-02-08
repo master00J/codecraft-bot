@@ -36,7 +36,7 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
       .from('guild_stripe_config')
-      .select('enabled, stripe_publishable_key, stripe_secret_key')
+      .select('enabled, stripe_publishable_key, stripe_secret_key, stripe_webhook_secret')
       .eq('guild_id', guildId)
       .maybeSingle();
 
@@ -57,6 +57,7 @@ export async function GET(
       enabled: !!data.enabled,
       publishableKey: data.stripe_publishable_key || '',
       hasKeys: !!(data.stripe_publishable_key && data.stripe_secret_key),
+      webhookSecret: data.stripe_webhook_secret || '',
     });
   } catch (e) {
     console.error('Stripe GET error:', e);
@@ -91,6 +92,7 @@ export async function POST(
     const enabled = body.enabled === true;
     const publishableKey = typeof body.publishableKey === 'string' ? body.publishableKey.trim() : '';
     const secretKey = typeof body.secretKey === 'string' ? body.secretKey.trim() : null;
+    const webhookSecret = typeof body.webhookSecret === 'string' ? body.webhookSecret.trim() : null;
 
     const updateData: Record<string, unknown> = {
       enabled,
@@ -98,6 +100,7 @@ export async function POST(
     };
     if (publishableKey !== undefined) updateData.stripe_publishable_key = publishableKey || null;
     if (secretKey !== undefined) updateData.stripe_secret_key = secretKey || null;
+    if (body.hasOwnProperty('webhookSecret')) updateData.stripe_webhook_secret = webhookSecret || null;
 
     const { data: existing } = await supabaseAdmin
       .from('guild_stripe_config')

@@ -1767,7 +1767,13 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-      // Shop buy button handlers
+      // Guild shop (Stripe role purchase) buy button
+      if (interaction.customId.startsWith('guild_shop_buy_')) {
+        await handleGuildShopBuyButton(interaction);
+        return;
+      }
+
+      // Shop buy button handlers (economy/inventory shop)
       if (interaction.customId.startsWith('shop_buy_')) {
         const allowed = await featureGate.checkFeatureOrReply(
           interaction,
@@ -3009,6 +3015,11 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'donate': {
         await handleDonateCommand(interaction);
+        break;
+      }
+
+      case 'shop': {
+        await handleShopCommand(interaction);
         break;
       }
 
@@ -8698,6 +8709,103 @@ async function handleDonateCommand(interaction) {
 }
 
 /**
+ * Handle /shop – list guild shop items (roles for sale via Stripe). Buttons open checkout.
+ */
+async function handleShopCommand(interaction) {
+  const guildId = interaction.guild?.id;
+  if (!guildId) {
+    return interaction.reply({ content: '❌ This command only works in a server.', ephemeral: true });
+  }
+  const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
+  let items = [];
+  try {
+    const res = await fetch(`${baseUrl}/api/comcraft/public/shop?guildId=${encodeURIComponent(guildId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      items = data.items || [];
+    }
+  } catch (e) {
+    console.error('Shop fetch error:', e);
+  }
+  if (!items.length) {
+    return interaction.reply({
+      content: '🛒 This server has no shop items at the moment. Check back later or ask an admin to add items in **Dashboard → Shop**.',
+      ephemeral: true
+    });
+  }
+  const embed = new EmbedBuilder()
+    .setColor('#5865F2')
+    .setTitle(`🛒 ${interaction.guild.name} – Shop`)
+    .setDescription('Buy a role below. You will be redirected to secure payment (Stripe). After payment, the role is assigned automatically.')
+    .setFooter({ text: 'Payments go to the server owner' })
+    .setTimestamp();
+  const rows = [];
+  const maxButtonsPerRow = 5;
+  for (let i = 0; i < items.length; i += maxButtonsPerRow) {
+    const row = new ActionRowBuilder();
+    const chunk = items.slice(i, i + maxButtonsPerRow);
+    for (const item of chunk) {
+      const label = item.name.length > 80 ? item.name.slice(0, 77) + '…' : item.name;
+      const price = (item.price_amount_cents / 100).toFixed(2);
+      const sym = (item.currency || 'eur').toUpperCase() === 'EUR' ? '€' : '$';
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`guild_shop_buy_${item.id}`)
+          .setLabel(`${label} (${sym}${price})`)
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    rows.push(row);
+  }
+  return interaction.reply({ embeds: [embed], components: rows });
+}
+
+/**
+ * Handle guild shop buy button – get checkout URL from webapp and send link to user.
+ */
+async function handleGuildShopBuyButton(interaction) {
+  const guildId = interaction.guild?.id;
+  const itemId = (interaction.customId || '').replace('guild_shop_buy_', '');
+  if (!guildId || !itemId) {
+    return interaction.reply({ content: '❌ Invalid shop button.', ephemeral: true });
+  }
+  const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
+  const internalSecret = process.env.INTERNAL_API_SECRET;
+  await interaction.deferReply({ ephemeral: true });
+  try {
+    const res = await fetch(
+      `${baseUrl}/api/comcraft/guilds/${guildId}/shop/checkout?itemId=${encodeURIComponent(itemId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {})
+        },
+        body: JSON.stringify({ discordId: interaction.user.id })
+      }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.url) {
+      return interaction.editReply({
+        content: data.error || '❌ Could not create checkout. The server may not have payments set up.'
+      });
+    }
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel('Pay now').setStyle(ButtonStyle.Link).setURL(data.url)
+    );
+    return interaction.editReply({
+      content: '✅ Click the button below to complete payment. After paying, your role will be assigned automatically.',
+      components: [row]
+    });
+  } catch (e) {
+    console.error('Guild shop checkout error:', e);
+    return interaction.editReply({
+      content: '❌ Something went wrong. Try again or contact the server admin.'
+    });
+  }
+}
+
+/**
  * Handle application apply button – one button per form (application_apply_<configId>) opens that form's modal only
  */
 async function handleApplicationApplyButton(interaction) {
@@ -11177,6 +11285,10 @@ async function registerCommands(clientInstance) {
           .setMaxValue(999)
       ),
 
+    new SlashCommandBuilder()
+      .setName('shop')
+      .setDescription('🛒 View server shop – buy roles with card (Stripe)'),
+
     // ============ STICKY MESSAGES COMMANDS ============
     new SlashCommandBuilder()
       .setName('sticky')
@@ -11845,6 +11957,37 @@ app.get('/api/discord/:guildId/users/:userId/roles/:roleId', async (req, res) =>
     res.json(result);
   } catch (error) {
     console.error('Error in user role check API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
+// Add role to member (e.g. after shop purchase). Requires X-Internal-Secret.
+app.post('/api/discord/:guildId/users/:userId/roles', async (req, res) => {
+  try {
+    const { guildId, userId, roleId } = { ...req.params, roleId: req.body?.roleId };
+    if (!roleId) {
+      return res.status(400).json({ success: false, error: 'roleId required in body' });
+    }
+
+    let botClient = client;
+    let guild = client.guilds.cache.get(guildId);
+    if (!guild && customBotManager) {
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+        guild = customBot.guilds.cache.get(guildId);
+      }
+    }
+    if (!guild) {
+      return res.json({ success: false, error: 'Guild not found' });
+    }
+
+    const DiscordManager = require('./modules/comcraft/discord-manager');
+    const manager = new DiscordManager(botClient);
+    const result = await manager.addRoleToMember(guildId, userId, roleId, 'Shop purchase');
+    res.json(result);
+  } catch (error) {
+    console.error('Error in add role API:', error);
     res.status(500).json({ success: false, error: error.message || 'Internal server error' });
   }
 });

@@ -70,6 +70,38 @@ class DiscordManager {
   }
 
   /**
+   * Add a role to a member (e.g. after shop purchase). Caller must ensure bot has permission.
+   */
+  async addRoleToMember(guildId, userId, roleId, reason = 'Shop purchase') {
+    try {
+      const guild = this.client.guilds.cache.get(guildId);
+      if (!guild) {
+        return { success: false, error: 'Guild not found' };
+      }
+
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        return { success: false, error: 'User not found in guild' };
+      }
+
+      const role = guild.roles.cache.get(roleId);
+      if (!role) {
+        return { success: false, error: 'Role not found' };
+      }
+
+      if (member.roles.cache.has(roleId)) {
+        return { success: true, alreadyHadRole: true };
+      }
+
+      await member.roles.add(roleId, reason);
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding role to member:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Create a new role
    */
   async createRole(guildId, options = {}) {

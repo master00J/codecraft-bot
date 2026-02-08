@@ -31,6 +31,8 @@ export default function PaymentsDashboard() {
   const [hasKeys, setHasKeys] = useState(false);
   const [linkAmount, setLinkAmount] = useState('5');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
 
   useEffect(() => {
     if (guildId) load();
@@ -46,6 +48,9 @@ export default function PaymentsDashboard() {
       setPublishableKey(data.publishableKey || '');
       setSecretKey(''); // Never show existing secret
       setHasKeys(!!data.hasKeys);
+      setWebhookSecret(data.webhookSecret || '');
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      setWebhookUrl(`${base}/api/webhooks/stripe?guild_id=${guildId}`);
     } catch (e) {
       toast({
         title: 'Error',
@@ -60,7 +65,7 @@ export default function PaymentsDashboard() {
   async function save() {
     setSaving(true);
     try {
-      const body: Record<string, unknown> = { enabled, publishableKey: publishableKey.trim() };
+      const body: Record<string, unknown> = { enabled, publishableKey: publishableKey.trim(), webhookSecret: webhookSecret.trim() };
       if (secretKey.trim()) body.secretKey = secretKey.trim();
 
       const res = await fetch(`/api/comcraft/guilds/${guildId}/stripe`, {
@@ -221,6 +226,53 @@ export default function PaymentsDashboard() {
           <p className="text-xs text-muted-foreground mt-1">
             You can also use the bot command <code className="bg-muted px-1 rounded">/donate</code> in your server to show a support link.
           </p>
+        </Card>
+      )}
+
+      {hasKeys && enabled && (
+        <Card className="p-6 max-w-xl">
+          <h2 className="text-lg font-semibold mb-2">Shop webhook (for role assignment)</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            If you use the Shop to sell roles, add this webhook in Stripe so we can assign the role after payment. In Stripe Dashboard go to Developers → Webhooks → Add endpoint.
+          </p>
+          <div className="space-y-2 mb-4">
+            <Label>Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input readOnly value={webhookUrl} className="font-mono text-sm" />
+              <Button
+                variant="outline"
+                size="icon"
+                title="Copy"
+                onClick={() => {
+                  void navigator.clipboard.writeText(webhookUrl).then(() => {
+                    setLinkCopied(true);
+                    toast({ title: 'Copied', description: 'Webhook URL copied.' });
+                    setTimeout(() => setLinkCopied(false), 2000);
+                  });
+                }}
+              >
+                {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Signing secret</Label>
+            <Input
+              type="password"
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              placeholder="whsec_... (from Stripe after adding the webhook)"
+              className="font-mono text-sm"
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">
+              In Stripe, select event <code className="bg-muted px-1 rounded">checkout.session.completed</code> and paste the signing secret here.
+            </p>
+          </div>
+          <Button onClick={save} disabled={saving} className="mt-4">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Save
+          </Button>
         </Card>
       )}
     </div>
