@@ -16,7 +16,7 @@ class ApplicationsManager {
   }
 
   /**
-   * Setup application config for a guild (one per "name" / functie)
+   * Setup application config for a guild (one per "name" / role type)
    * @param {string} guildId
    * @param {string} channelId
    * @param {string[]} questions
@@ -55,7 +55,7 @@ class ApplicationsManager {
   }
 
   /**
-   * Get all application configs (types/functies) for a guild
+   * Get all application configs (role types) for a guild
    */
   async getConfigs(guildId) {
     try {

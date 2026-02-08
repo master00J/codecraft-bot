@@ -566,7 +566,7 @@ export default function ApplicationsDashboard() {
               {/* Application type selector */}
               {(configs.length > 0 || configName) && (
                 <div className="space-y-2">
-                  <Label>Functie / Type</Label>
+                  <Label>Role / Type</Label>
                   <div className="flex gap-2">
                     <Select
                       value={selectedConfigId || 'new'}
@@ -582,7 +582,7 @@ export default function ApplicationsDashboard() {
                         <SelectValue placeholder="Select type or add new" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="new">+ Nieuwe functie toevoegen</SelectItem>
+                        <SelectItem value="new">+ Add new role</SelectItem>
                         {configs.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.name || 'Staff'}
@@ -592,22 +592,22 @@ export default function ApplicationsDashboard() {
                     </Select>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Meerdere types (bv. Moderator, Helper) – kies er een om te bewerken of voeg een nieuwe toe.
+                    Multiple types (e.g. Moderator, Helper) – select one to edit or add a new one.
                   </p>
                 </div>
               )}
 
               <div>
-                <Label htmlFor="configName">Naam van de functie *</Label>
+                <Label htmlFor="configName">Role name *</Label>
                 <Input
                   id="configName"
                   value={configName}
                   onChange={(e) => setConfigName(e.target.value)}
-                  placeholder="bijv. Moderator, Helper, Event team"
+                  placeholder="e.g. Moderator, Helper, Event team"
                   className="max-w-xs"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Wordt getoond bij /application apply (keuzemenu als je meerdere types hebt).
+                  Shown in /application apply (dropdown when you have multiple types).
                 </p>
               </div>
 

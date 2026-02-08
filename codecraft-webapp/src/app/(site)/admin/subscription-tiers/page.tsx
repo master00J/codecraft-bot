@@ -1152,7 +1152,7 @@ function TierForm({
           className={`font-mono text-sm ${customLimitsError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
         />
         <p className="text-xs text-muted-foreground">
-          Gebruik dit veld voor aanvullende limieten (bijv. API-calls, seats) die nog niet standaard zijn.
+          Use this field for additional limits (e.g. API calls, seats) that are not yet standard.
         </p>
         {customLimitsError && <p className="text-xs text-destructive">{customLimitsError}</p>}
       </div>

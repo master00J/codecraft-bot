@@ -1061,7 +1061,7 @@ export default function ComcraftCheckoutPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Tip: selecteer "Assign later" als je de licentie nog niet direct aan een guild wilt koppelen. Je kunt dit later in het dashboard doen.
+                Tip: select "Assign later" if you don't want to assign the licence to a guild yet. You can do this later in the dashboard.
               </p>
               <Button className="w-full md:w-auto" disabled={startingCheckout} onClick={() => void startCheckout()}>
                 {startingCheckout ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Proceed to Payment'}
