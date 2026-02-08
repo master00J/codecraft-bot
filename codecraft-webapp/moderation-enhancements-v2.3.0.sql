@@ -63,6 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_appeals_case
 ALTER TABLE moderation_appeals ENABLE ROW LEVEL SECURITY;
 
 -- Allow guild owners and authorized users to manage appeals
+DROP POLICY IF EXISTS "Users can view own guild appeals" ON moderation_appeals;
 CREATE POLICY "Users can view own guild appeals"
 ON moderation_appeals
 FOR SELECT
@@ -78,6 +79,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Users can manage own guild appeals" ON moderation_appeals;
 CREATE POLICY "Users can manage own guild appeals"
 ON moderation_appeals
 FOR ALL

@@ -1,5 +1,3 @@
-# ComCraft - Professional Discord Bot Platform
-
 ## 🚀 Introducing ComCraft
 
 **ComCraft** is a premium Discord bot platform designed for content creators, community managers, and gaming communities. With an all-in-one solution that combines powerful moderation, engaging features, and cutting-edge AI technology, ComCraft helps you build and manage thriving Discord communities.
@@ -74,53 +72,9 @@
 - **Welcome Messages**: Customizable welcome messages for new members
 
 
-
-### 📊 **Analytics Dashboard**
-- Comprehensive web dashboard for bot management
-- Server analytics and insights
-- Command usage statistics
-- Member activity tracking
-- Customizable settings for all features
-
-### 🤖 **Custom Bot Branding (Enterprise)**
-- Your own branded bot with custom name and avatar
-- Custom embed colors and styling
-- Custom status messages
-- Full white-label options
-- All ComCraft features work seamlessly
-
 ---
 
-## 💎 Subscription Tiers
 
-### 🆓 **Free Tier** - $0/month
-**Perfect for small communities getting started:**
-- Basic leveling system
-- Basic moderation tools
-- Stream notifications (limited)
-- Support tickets (5/month)
-- Custom commands (5 max)
-- Welcome messages
-- Birthday manager
-- Web dashboard access
-
-
----
-
-## 💰 Referral Program
-
-**Earn FREE Enterprise tier by referring others!**
-
-- Share your unique referral link
-- When someone purchases Enterprise tier (1 month minimum)
-- You automatically receive 1 week FREE Enterprise tier
-- Unlimited referrals = unlimited free weeks
-- Track clicks, signups, and conversions in real-time
-- View your stats in the dashboard
-
-**Get started:** [View Your Referral Dashboard](https://codecraft-solutions.com/en/comcraft/account/referrals)
-
----
 
 ## 🌐 Web Dashboard
 
@@ -146,15 +100,6 @@ All features are easily configurable through our web interface - no coding knowl
 
 ---
 
-## 🎯 Perfect For
-
-- **Content Creators**: Engage your Twitch/YouTube audience
-- **Gaming Communities**: Leveling, economy, and game news
-- **Esports Teams**: Moderation and community management
-- **Gaming Servers**: All-in-one bot solution
-- **Discord Communities**: Professional community management
-
----
 
 ## 🔗 Links
 
@@ -170,25 +115,4 @@ All features are easily configurable through our web interface - no coding knowl
 **New Discord servers receive 30 days of Enterprise tier absolutely FREE!**
 
 Try all premium features, including custom bot branding, unlimited AI, and priority support - completely free for your first month.
-
----
-
-## ⚡ Why Choose ComCraft?
-
-- ✅ **All-in-One Solution**: One bot that does everything
-- ✅ **Professional Dashboard**: Easy configuration without coding
-- ✅ **Regular Updates**: Constantly improving with new features
-- ✅ **Reliable & Fast**: Built for performance and stability
-- ✅ **Active Development**: Regular feature additions and improvements
-- ✅ **Great Support**: Helpful community and dedicated support
-
----
-
-**Ready to transform your Discord community?** Get started today with ComCraft!
-
-🔗 **Invite Now:** [Add ComCraft to Your Server](https://codecraft-solutions.com/en/products/comcraft)
-
----
-
-*ComCraft is developed by CodeCraft Solutions - Building powerful tools for modern communities.*
 

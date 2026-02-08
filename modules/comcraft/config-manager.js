@@ -272,6 +272,39 @@ class ConfigManager {
   }
 
   /**
+   * Get game verification configuration (in-game username verification)
+   */
+  async getGameVerificationConfig(guildId) {
+    const cacheKey = `game_verification:${guildId}`;
+    if (this.cache.has(cacheKey)) {
+      const { config, timestamp } = this.cache.get(cacheKey);
+      if (Date.now() - timestamp < this.cacheTTL) return config;
+    }
+    const { data, error } = await this.supabase
+      .from('game_verification_config')
+      .select('*')
+      .eq('guild_id', guildId)
+      .maybeSingle();
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching game verification config:', error);
+    }
+    const config = data || {
+      guild_id: guildId,
+      game_name: 'In-Game',
+      unregistered_role_id: null,
+      verified_role_id: null,
+      one_time_only: true,
+      enabled: false
+    };
+    this.cache.set(cacheKey, { config, timestamp: Date.now() });
+    return config;
+  }
+
+  clearGameVerificationCache(guildId) {
+    this.cache.delete(`game_verification:${guildId}`);
+  }
+
+  /**
    * Get welcome configuration
    */
   async getWelcomeConfig(guildId) {
