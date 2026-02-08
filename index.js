@@ -1658,8 +1658,8 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // Handle application apply button
-    if (interaction.customId === 'application_apply_button') {
+    // Handle application apply: one button per form (application_apply_<configId>) opens that form's modal only
+    if (interaction.customId.startsWith('application_apply_')) {
       await handleApplicationApplyButton(interaction);
       return;
     }
@@ -2084,7 +2084,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       const modal = applicationsManager.createApplicationModal(config.questions, {
         configId: config.id,
-        title: `${config.name || 'Staff'} Application`
+        roleName: config.name || 'Staff'
       });
       return interaction.showModal(modal);
     }
@@ -2195,6 +2195,20 @@ client.on('interactionCreate', async (interaction) => {
     }
     
     return await autoRolesManager.handleSelectMenuInteraction(interaction);
+  }
+
+  if (interaction.isAutocomplete()) {
+    if (interaction.commandName === 'application' && interaction.options.getSubcommand() === 'apply' && applicationsManager && interaction.guild?.id) {
+      const focused = interaction.options.getFocused(true);
+      if (focused.name === 'type') {
+        const result = await applicationsManager.getConfigs(interaction.guild.id);
+        const configs = (result.success && result.configs) ? result.configs.filter(c => c.enabled) : [];
+        const choices = configs.slice(0, 25).map(c => ({ name: c.name || 'Staff', value: c.id }));
+        await interaction.respond(choices).catch(() => {});
+        return;
+      }
+    }
+    return;
   }
 
   if (!interaction.isChatInputCommand()) return;
@@ -8469,8 +8483,14 @@ async function handleApplicationCommand(interaction) {
             ephemeral: true
           });
         }
-        if (configs.length === 1) {
-          const config = configs[0];
+        const typeOption = interaction.options.getString('type');
+        let config = null;
+        if (typeOption) {
+          const r = await applicationsManager.getConfigById(interaction.guild.id, typeOption);
+          if (r.success && r.config && r.config.enabled) config = r.config;
+        }
+        if (!config && configs.length === 1) config = configs[0];
+        if (config) {
           const canApplyResult = await applicationsManager.canApply(
             interaction.guild.id,
             interaction.user.id,
@@ -8485,25 +8505,24 @@ async function handleApplicationCommand(interaction) {
           }
           const modal = applicationsManager.createApplicationModal(config.questions, {
             configId: config.id,
-            title: `${config.name || 'Staff'} Application`
+            roleName: config.name || 'Staff'
           });
           await interaction.showModal(modal);
           break;
         }
-        // Multiple types: show select menu
-        const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+        // Multiple forms: one button per form (each opens its own modal)
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
         const row = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('application_choose_type')
-            .setPlaceholder('Choose application type…')
-            .addOptions(configs.map(c => ({
-              label: c.name || 'Staff',
-              value: c.id,
-              description: `${(c.questions || []).length} question(s)`
-            })))
+          configs.slice(0, 5).map(c =>
+            new ButtonBuilder()
+              .setCustomId(`application_apply_${c.id}`)
+              .setLabel(`Apply: ${(c.name || 'Staff').substring(0, 76)}`)
+              .setStyle(ButtonStyle.Primary)
+              .setEmoji('📝')
+          )
         );
         await interaction.reply({
-          content: '📝 **Choose which role you want to apply for:**',
+          content: '📝 **Choose an application form** – each has its own form and channel.',
           components: [row],
           ephemeral: true
         });
@@ -8630,7 +8649,7 @@ async function handleApplicationCommand(interaction) {
 }
 
 /**
- * Handle application apply button - opens the application modal
+ * Handle application apply button – one button per form (application_apply_<configId>) opens that form's modal only
  */
 async function handleApplicationApplyButton(interaction) {
   try {
@@ -8641,6 +8660,43 @@ async function handleApplicationApplyButton(interaction) {
       });
     }
 
+    const customId = interaction.customId;
+    // Per-form button: application_apply_<configId> → open that form's modal only
+    if (customId.startsWith('application_apply_') && customId.length > 19) {
+      const configId = customId.replace('application_apply_', '');
+      const r = await applicationsManager.getConfigById(interaction.guild.id, configId);
+      if (!r.success || !r.config) {
+        return interaction.reply({
+          content: '❌ This application form is no longer available.',
+          ephemeral: true
+        });
+      }
+      const config = r.config;
+      if (!config.enabled) {
+        return interaction.reply({
+          content: '❌ This application type is currently disabled.',
+          ephemeral: true
+        });
+      }
+      const canApplyResult = await applicationsManager.canApply(
+        interaction.guild.id,
+        interaction.user.id,
+        interaction.member,
+        config
+      );
+      if (!canApplyResult.canApply) {
+        return interaction.reply({
+          content: `❌ ${canApplyResult.reason}`,
+          ephemeral: true
+        });
+      const modal = applicationsManager.createApplicationModal(config.questions, {
+        configId: config.id,
+        roleName: config.name || 'Staff'
+      });
+      return interaction.showModal(modal);
+    }
+
+    // Legacy single button (application_apply_button): show one button per form or open modal if only one
     const configsResult = await applicationsManager.getConfigs(interaction.guild.id);
     if (!configsResult.success || !configsResult.configs?.length) {
       return interaction.reply({
@@ -8671,23 +8727,23 @@ async function handleApplicationApplyButton(interaction) {
       }
       const modal = applicationsManager.createApplicationModal(config.questions, {
         configId: config.id,
-        title: `${config.name || 'Staff'} Application`
+        roleName: config.name || 'Staff'
       });
       return interaction.showModal(modal);
     }
-    const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+    // Multiple forms: one button per form (no dropdown)
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
     const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('application_choose_type')
-        .setPlaceholder('Choose application type…')
-        .addOptions(configs.map(c => ({
-          label: c.name || 'Staff',
-          value: c.id,
-          description: `${(c.questions || []).length} question(s)`
-        })))
+      configs.slice(0, 5).map(c =>
+        new ButtonBuilder()
+          .setCustomId(`application_apply_${c.id}`)
+          .setLabel(`Apply: ${(c.name || 'Staff').substring(0, 76)}`)
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('📝')
+      )
     );
-    await interaction.reply({
-      content: '📝 **Choose which role you want to apply for:**',
+    return interaction.reply({
+      content: '📝 **Choose an application form** – each has its own form and channel.',
       components: [row],
       ephemeral: true
     });
@@ -11023,6 +11079,13 @@ async function registerCommands(clientInstance) {
         subcommand
           .setName('apply')
           .setDescription('Submit a staff application')
+          .addStringOption(option =>
+            option
+              .setName('type')
+              .setDescription('Role/type to apply for (e.g. Moderator, Helper)')
+              .setRequired(false)
+              .setAutocomplete(true)
+          )
       )
       .addSubcommand(subcommand =>
         subcommand

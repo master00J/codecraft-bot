@@ -150,19 +150,15 @@ export async function POST(
       'Updated staff application configuration'
     );
 
-    // Send application message to Discord channel with Apply button
+    // Send application message to Discord channel – one message per application type, each with its own Apply button (opens that type's modal)
     try {
-      if (channel_id && enabled && COMCRAFT_BOT_API && INTERNAL_SECRET) {
+      if (channel_id && enabled && config && COMCRAFT_BOT_API && INTERNAL_SECRET) {
+        const roleName = config.name || name || 'Staff';
         const embed = {
-          title: '📝 Staff Applications',
-          description: 'Interested in becoming a moderator? Apply here!',
+          title: `📝 Apply for: ${roleName}`,
+          description: `Use the button below to apply for **${roleName}**. You will receive a form with questions.`,
           color: '#5865F2',
           fields: [
-            {
-              name: '📋 How does it work?',
-              value: 'Click the button below to apply. You will receive a form with questions that you need to fill out.',
-              inline: false
-            },
             {
               name: '⏱️ Cooldown',
               value: `${cooldown_days} day(s) between applications`,
@@ -175,12 +171,12 @@ export async function POST(
             }
           ],
           footer: {
-            text: 'Your application will be reviewed by the staff team'
+            text: `Applications for ${roleName} will be reviewed by the staff team`
           },
           timestamp: new Date().toISOString()
         };
 
-        // Create Apply button in Discord format
+        // One button per form: opens the modal for this application type only
         const components = [
           {
             type: 1, // ActionRow
@@ -188,11 +184,9 @@ export async function POST(
               {
                 type: 2, // Button
                 style: 1, // Primary
-                label: 'Apply Now',
-                emoji: {
-                  name: '📝'
-                },
-                custom_id: 'application_apply_button'
+                label: `Apply: ${roleName}`.substring(0, 80),
+                emoji: { name: '📝' },
+                custom_id: `application_apply_${config.id}`
               }
             ]
           }

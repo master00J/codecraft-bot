@@ -184,13 +184,14 @@ class ApplicationsManager {
   }
 
   /**
-   * Create modal for application
+   * Create modal for application (one per role; title shows which role)
    * @param {string[]} questions
-   * @param {Object} options - configId (UUID), title (e.g. 'Moderator Application')
+   * @param {Object} options - configId (UUID), title or roleName (e.g. 'Moderator') for "Apply for: X"
    */
   createApplicationModal(questions, options = {}) {
     const configId = options.configId || '';
-    const title = (options.title || 'Staff Application').substring(0, 45);
+    const roleName = options.roleName || options.title || 'Staff';
+    const title = (`Apply for: ${roleName}`).substring(0, 45);
     const customId = configId ? `application_submit_${configId}` : 'application_submit';
     const modal = new ModalBuilder()
       .setCustomId(customId)
