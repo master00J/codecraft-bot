@@ -38,19 +38,23 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get config
-    const { data: config, error } = await supabase
+    // Get all application types (configs) for this guild
+    const { data: configs, error } = await supabase
       .from('application_configs')
       .select('*')
       .eq('guild_id', guildId)
-      .single();
+      .order('name', { ascending: true });
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching application config:', error);
-      return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 });
+    if (error) {
+      console.error('Error fetching application configs:', error);
+      return NextResponse.json({ error: 'Failed to fetch configs' }, { status: 500 });
     }
 
-    return NextResponse.json({ config: config || null });
+    const list = configs || [];
+    return NextResponse.json({
+      config: list[0] || null,
+      configs: list
+    });
   } catch (error) {
     console.error('Error in application-config GET:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -72,29 +76,25 @@ export async function POST(
 
     const userId = session.user?.id || session.user?.sub || 'unknown';
     const body = await request.json();
-    const { 
-      channel_id, 
+    const {
+      id: configId,
+      name: configName,
+      channel_id,
       review_channel_id,
-      questions, 
-      enabled, 
-      min_age, 
-      cooldown_days, 
-      require_account_age_days, 
+      questions,
+      enabled,
+      min_age,
+      cooldown_days,
+      require_account_age_days,
       auto_thread,
-      ping_role_id 
+      ping_role_id
     } = body;
 
     if (!channel_id || !questions || !Array.isArray(questions)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Check if config already exists
-    const { data: existingConfig } = await supabase
-      .from('application_configs')
-      .select('guild_id')
-      .eq('guild_id', guildId)
-      .maybeSingle();
-
+    const name = (configName || 'Staff').trim() || 'Staff';
     const updateData = {
       channel_id,
       review_channel_id: review_channel_id ?? null,
@@ -109,39 +109,36 @@ export async function POST(
     };
 
     let config;
-    let error;
+    let err;
 
-    if (existingConfig) {
-      // Update existing config
+    if (configId) {
       const result = await supabase
         .from('application_configs')
-        .update(updateData)
+        .update({ ...updateData, name })
+        .eq('id', configId)
         .eq('guild_id', guildId)
         .select()
         .single();
-      
       config = result.data;
-      error = result.error;
+      err = result.error;
     } else {
-      // Create new config
       const result = await supabase
         .from('application_configs')
-        .insert({
-          guild_id: guildId,
-          ...updateData
-        })
+        .upsert(
+          { guild_id: guildId, name, ...updateData },
+          { onConflict: 'guild_id,name' }
+        )
         .select()
         .single();
-      
       config = result.data;
-      error = result.error;
+      err = result.error;
     }
 
-    if (error) {
-      console.error('Error saving application config:', error);
-      return NextResponse.json({ 
+    if (err) {
+      console.error('Error saving application config:', err);
+      return NextResponse.json({
         error: 'Failed to save config',
-        details: error.message 
+        details: err.message
       }, { status: 500 });
     }
 

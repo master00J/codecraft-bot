@@ -16,24 +16,32 @@ class ApplicationsManager {
   }
 
   /**
-   * Setup application system for a guild
+   * Setup application config for a guild (one per "name" / functie)
+   * @param {string} guildId
+   * @param {string} channelId
+   * @param {string[]} questions
+   * @param {Object} options - name (e.g. 'Moderator', 'Helper'), enabled, review_channel_id, etc.
    */
   async setupConfig(guildId, channelId, questions, options = {}) {
     try {
+      const name = (options.name || 'Staff').trim() || 'Staff';
+      const payload = {
+        guild_id: guildId,
+        name,
+        channel_id: channelId,
+        review_channel_id: options.reviewChannelId ?? null,
+        questions,
+        enabled: options.enabled ?? true,
+        min_age: options.minAge ?? 0,
+        cooldown_days: options.cooldownDays ?? 7,
+        require_account_age_days: options.requireAccountAgeDays ?? 0,
+        auto_thread: options.autoThread ?? false,
+        ping_role_id: options.pingRoleId ?? null,
+        updated_at: new Date().toISOString()
+      };
       const { data, error } = await this.supabase
         .from('application_configs')
-        .upsert({
-          guild_id: guildId,
-          channel_id: channelId,
-          questions: questions,
-          enabled: options.enabled ?? true,
-          min_age: options.minAge ?? 0,
-          cooldown_days: options.cooldownDays ?? 7,
-          require_account_age_days: options.requireAccountAgeDays ?? 0,
-          auto_thread: options.autoThread ?? false,
-          ping_role_id: options.pingRoleId ?? null,
-          updated_at: new Date().toISOString()
-        })
+        .upsert(payload, { onConflict: 'guild_id,name', ignoreDuplicates: false })
         .select()
         .single();
 
@@ -47,7 +55,51 @@ class ApplicationsManager {
   }
 
   /**
-   * Get configuration for a guild
+   * Get all application configs (types/functies) for a guild
+   */
+  async getConfigs(guildId) {
+    try {
+      const { data, error } = await this.supabase
+        .from('application_configs')
+        .select('*')
+        .eq('guild_id', guildId)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+
+      return { success: true, configs: data || [] };
+    } catch (error) {
+      console.error('Error getting application configs:', error);
+      return { success: false, error: error.message, configs: [] };
+    }
+  }
+
+  /**
+   * Get one config by id (for a guild)
+   */
+  async getConfigById(guildId, configId) {
+    try {
+      const { data, error } = await this.supabase
+        .from('application_configs')
+        .select('*')
+        .eq('id', configId)
+        .eq('guild_id', guildId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return { success: true, config: null };
+        throw error;
+      }
+
+      return { success: true, config: data };
+    } catch (error) {
+      console.error('Error getting application config by id:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get configuration for a guild (single – first config, for backward compat)
    */
   async getConfig(guildId) {
     try {
@@ -55,14 +107,11 @@ class ApplicationsManager {
         .from('application_configs')
         .select('*')
         .eq('guild_id', guildId)
-        .single();
+        .order('name', { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return { success: true, config: null };
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       return { success: true, config: data };
     } catch (error) {
@@ -72,19 +121,20 @@ class ApplicationsManager {
   }
 
   /**
-   * Check if user can submit application
+   * Check if user can submit application for a given config (type)
+   * @param {string} guildId
+   * @param {string} userId
+   * @param {Object} member - Discord GuildMember
+   * @param {Object} config - application config (type) to apply for
    */
-  async canApply(guildId, userId, member) {
+  async canApply(guildId, userId, member, config) {
     try {
-      const configResult = await this.getConfig(guildId);
-      if (!configResult.success || !configResult.config) {
-        return { canApply: false, reason: 'Application system not configured' };
+      if (!config) {
+        return { canApply: false, reason: 'Application type not found' };
       }
 
-      const config = configResult.config;
-
       if (!config.enabled) {
-        return { canApply: false, reason: 'Applications are currently disabled' };
+        return { canApply: false, reason: 'Applications are currently disabled for this role' };
       }
 
       // Check account age
@@ -92,32 +142,36 @@ class ApplicationsManager {
         const accountAge = Date.now() - member.user.createdTimestamp;
         const requiredAge = config.require_account_age_days * 24 * 60 * 60 * 1000;
         if (accountAge < requiredAge) {
-          return { 
-            canApply: false, 
-            reason: `Your Discord account must be at least ${config.require_account_age_days} days old` 
+          return {
+            canApply: false,
+            reason: `Your Discord account must be at least ${config.require_account_age_days} days old`
           };
         }
       }
 
-      // Check cooldown
-      const { data: recentApps } = await this.supabase
+      // Cooldown: per application type (same user can apply for different types)
+      let query = this.supabase
         .from('applications')
         .select('created_at')
         .eq('guild_id', guildId)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1);
+      if (config.id) {
+        query = query.eq('config_id', config.id);
+      }
+      const { data: recentApps } = await query;
 
       if (recentApps && recentApps.length > 0) {
         const lastApp = new Date(recentApps[0].created_at);
-        const cooldownMs = config.cooldown_days * 24 * 60 * 60 * 1000;
+        const cooldownMs = (config.cooldown_days || 7) * 24 * 60 * 60 * 1000;
         const timeSince = Date.now() - lastApp.getTime();
 
         if (timeSince < cooldownMs) {
           const daysLeft = Math.ceil((cooldownMs - timeSince) / (24 * 60 * 60 * 1000));
-          return { 
-            canApply: false, 
-            reason: `You must wait ${daysLeft} more day(s) before applying again` 
+          return {
+            canApply: false,
+            reason: `You must wait ${daysLeft} more day(s) before applying again for ${config.name || 'this role'}`
           };
         }
       }
@@ -131,11 +185,16 @@ class ApplicationsManager {
 
   /**
    * Create modal for application
+   * @param {string[]} questions
+   * @param {Object} options - configId (UUID), title (e.g. 'Moderator Application')
    */
-  createApplicationModal(questions) {
+  createApplicationModal(questions, options = {}) {
+    const configId = options.configId || '';
+    const title = (options.title || 'Staff Application').substring(0, 45);
+    const customId = configId ? `application_submit_${configId}` : 'application_submit';
     const modal = new ModalBuilder()
-      .setCustomId('application_submit')
-      .setTitle('Staff Application');
+      .setCustomId(customId)
+      .setTitle(title);
 
     // Discord modals support max 5 inputs
     questions.slice(0, 5).forEach((question, index) => {
@@ -158,11 +217,12 @@ class ApplicationsManager {
    */
   async submitApplication(guildId, userId, username, answers, config) {
     try {
-      // Create application in database
+      // Create application in database (link to config/type)
       const { data: application, error } = await this.supabase
         .from('applications')
         .insert({
           guild_id: guildId,
+          config_id: config.id || null,
           user_id: userId,
           username: username,
           answers: answers,
@@ -180,10 +240,11 @@ class ApplicationsManager {
         return { success: false, error: 'Application channel not found' };
       }
 
+      const typeName = config.name || 'Staff';
       // Build embed
       const embed = new EmbedBuilder()
         .setColor('#5865F2')
-        .setTitle('📝 New Staff Application')
+        .setTitle(`📝 New Application: ${typeName}`)
         .setAuthor({ name: username, iconURL: `https://cdn.discordapp.com/avatars/${userId}/${answers.avatar}.png` })
         .setDescription(`**Applicant:** <@${userId}>\n**Status:** 🟡 Pending Review`)
         .setTimestamp()
@@ -238,7 +299,7 @@ class ApplicationsManager {
       if (config.auto_thread && channel.isTextBased()) {
         try {
           thread = await message.startThread({
-            name: `${username}'s Application`,
+            name: `${username} – ${typeName}`,
             autoArchiveDuration: 1440 // 24 hours
           });
         } catch (err) {
@@ -385,13 +446,21 @@ class ApplicationsManager {
     try {
       if (!application.message_id) return { success: false, error: 'No message ID' };
 
-      const configResult = await this.getConfig(application.guild_id);
-      if (!configResult.success || !configResult.config) {
+      let config = null;
+      if (application.config_id) {
+        const r = await this.getConfigById(application.guild_id, application.config_id);
+        config = r.config;
+      }
+      if (!config) {
+        const configResult = await this.getConfig(application.guild_id);
+        config = configResult.config;
+      }
+      if (!config) {
         return { success: false, error: 'Config not found' };
       }
 
       // Use review channel if set, otherwise use application channel
-      const targetChannelId = configResult.config.review_channel_id || configResult.config.channel_id;
+      const targetChannelId = config.review_channel_id || config.channel_id;
       const channel = await this.client.channels.fetch(targetChannelId);
       if (!channel) return { success: false, error: 'Channel not found' };
 

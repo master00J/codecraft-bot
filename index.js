@@ -54,6 +54,8 @@ const GiveawayManager = require('./modules/comcraft/giveaways/manager');
 const FeatureGate = require('./modules/comcraft/feature-gate');
 const GameNewsManager = require('./modules/comcraft/game-news/manager');
 const UpdateNotifier = require('./modules/comcraft/updates/notifier');
+const gameVerificationManager = require('./modules/comcraft/game-verification/manager');
+const { handleVerifyCommand, handleVerifySetCommand, handleAppealCommand } = require('./modules/comcraft/bot/verify-handlers');
 const EventManager = require('./modules/comcraft/events/manager');
 const aiService = require('./modules/comcraft/ai');
 const memoryStore = require('./modules/comcraft/ai/memory-store');
@@ -1996,8 +1998,8 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // Application submit modal handler
-    if (interaction.customId === 'application_submit') {
+    // Application submit modal handler (application_submit or application_submit_<configId>)
+    if (interaction.customId.startsWith('application_submit')) {
       await handleApplicationSubmitModal(interaction);
       return;
     }
@@ -2057,6 +2059,36 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
+    // Application type choice (multiple application types per server)
+    if (interaction.customId === 'application_choose_type' && applicationsManager) {
+      const configId = interaction.values[0];
+      const configResult = await applicationsManager.getConfigById(interaction.guild.id, configId);
+      if (!configResult.success || !configResult.config) {
+        return interaction.reply({
+          content: '❌ This application type is no longer available.',
+          ephemeral: true
+        });
+      }
+      const config = configResult.config;
+      const canApplyResult = await applicationsManager.canApply(
+        interaction.guild.id,
+        interaction.user.id,
+        interaction.member,
+        config
+      );
+      if (!canApplyResult.canApply) {
+        return interaction.reply({
+          content: `❌ ${canApplyResult.reason}`,
+          ephemeral: true
+        });
+      }
+      const modal = applicationsManager.createApplicationModal(config.questions, {
+        configId: config.id,
+        title: `${config.name || 'Staff'} Application`
+      });
+      return interaction.showModal(modal);
+    }
+
     // Profile select menu handler (must be checked early)
     if (interaction.customId.startsWith('profile_select:')) {
       if (!global.profileManager) {
@@ -2386,6 +2418,18 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'case':
         await handleCaseCommand(interaction);
+        break;
+
+      case 'appeal':
+        await handleAppealCommand(interaction);
+        break;
+
+      case 'verify':
+        await handleVerifyCommand(interaction, configManager, gameVerificationManager);
+        break;
+
+      case 'verify-set':
+        await handleVerifySetCommand(interaction, configManager, gameVerificationManager);
         break;
 
       // ============ CUSTOM COMMANDS ============
@@ -8411,32 +8455,58 @@ async function handleApplicationCommand(interaction) {
 
     switch (subcommand) {
       case 'apply': {
-        // Check if user can apply
-        const canApplyResult = await applicationsManager.canApply(
-          interaction.guild.id,
-          interaction.user.id,
-          interaction.member
+        const configsResult = await applicationsManager.getConfigs(interaction.guild.id);
+        if (!configsResult.success || !configsResult.configs?.length) {
+          return interaction.reply({
+            content: '❌ No application types are configured. An admin needs to run `/application setup` or add types in the dashboard.',
+            ephemeral: true
+          });
+        }
+        const configs = configsResult.configs.filter(c => c.enabled);
+        if (configs.length === 0) {
+          return interaction.reply({
+            content: '❌ All application types are currently disabled.',
+            ephemeral: true
+          });
+        }
+        if (configs.length === 1) {
+          const config = configs[0];
+          const canApplyResult = await applicationsManager.canApply(
+            interaction.guild.id,
+            interaction.user.id,
+            interaction.member,
+            config
+          );
+          if (!canApplyResult.canApply) {
+            return interaction.reply({
+              content: `❌ ${canApplyResult.reason}`,
+              ephemeral: true
+            });
+          }
+          const modal = applicationsManager.createApplicationModal(config.questions, {
+            configId: config.id,
+            title: `${config.name || 'Staff'} Application`
+          });
+          await interaction.showModal(modal);
+          break;
+        }
+        // Multiple types: show select menu
+        const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+        const row = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId('application_choose_type')
+            .setPlaceholder('Choose application type…')
+            .addOptions(configs.map(c => ({
+              label: c.name || 'Staff',
+              value: c.id,
+              description: `${(c.questions || []).length} question(s)`
+            })))
         );
-
-        if (!canApplyResult.canApply) {
-          return interaction.reply({
-            content: `❌ ${canApplyResult.reason}`,
-            ephemeral: true
-          });
-        }
-
-        // Get config
-        const configResult = await applicationsManager.getConfig(interaction.guild.id);
-        if (!configResult.success || !configResult.config) {
-          return interaction.reply({
-            content: '❌ Application system is not configured. An admin needs to run `/application setup` first.',
-            ephemeral: true
-          });
-        }
-
-        // Show modal with questions
-        const modal = applicationsManager.createApplicationModal(configResult.config.questions);
-        await interaction.showModal(modal);
+        await interaction.reply({
+          content: '📝 **Choose which role you want to apply for:**',
+          components: [row],
+          ephemeral: true
+        });
         break;
       }
 
@@ -8571,32 +8641,56 @@ async function handleApplicationApplyButton(interaction) {
       });
     }
 
-    // Check if user can apply
-    const canApplyResult = await applicationsManager.canApply(
-      interaction.guild.id,
-      interaction.user.id,
-      interaction.member
-    );
-
-    if (!canApplyResult.canApply) {
-      return interaction.reply({
-        content: `❌ ${canApplyResult.reason}`,
-        ephemeral: true
-      });
-    }
-
-    // Get config
-    const configResult = await applicationsManager.getConfig(interaction.guild.id);
-    if (!configResult.success || !configResult.config) {
+    const configsResult = await applicationsManager.getConfigs(interaction.guild.id);
+    if (!configsResult.success || !configsResult.configs?.length) {
       return interaction.reply({
         content: '❌ Application system is not configured.',
         ephemeral: true
       });
     }
-
-    // Show modal with questions
-    const modal = applicationsManager.createApplicationModal(configResult.config.questions);
-    await interaction.showModal(modal);
+    const configs = configsResult.configs.filter(c => c.enabled);
+    if (configs.length === 0) {
+      return interaction.reply({
+        content: '❌ All application types are currently disabled.',
+        ephemeral: true
+      });
+    }
+    if (configs.length === 1) {
+      const config = configs[0];
+      const canApplyResult = await applicationsManager.canApply(
+        interaction.guild.id,
+        interaction.user.id,
+        interaction.member,
+        config
+      );
+      if (!canApplyResult.canApply) {
+        return interaction.reply({
+          content: `❌ ${canApplyResult.reason}`,
+          ephemeral: true
+        });
+      }
+      const modal = applicationsManager.createApplicationModal(config.questions, {
+        configId: config.id,
+        title: `${config.name || 'Staff'} Application`
+      });
+      return interaction.showModal(modal);
+    }
+    const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('application_choose_type')
+        .setPlaceholder('Choose application type…')
+        .addOptions(configs.map(c => ({
+          label: c.name || 'Staff',
+          value: c.id,
+          description: `${(c.questions || []).length} question(s)`
+        })))
+    );
+    await interaction.reply({
+      content: '📝 **Choose which role you want to apply for:**',
+      components: [row],
+      ephemeral: true
+    });
   } catch (error) {
     console.error('Error handling application apply button:', error);
     if (!interaction.replied && !interaction.deferred) {
@@ -8621,15 +8715,23 @@ async function handleApplicationSubmitModal(interaction) {
       });
     }
 
-    // Get config
-    const configResult = await applicationsManager.getConfig(interaction.guild.id);
-    if (!configResult.success || !configResult.config) {
+    // Get config: from customId (application_submit_<configId>) or single config for guild
+    let config = null;
+    const customId = interaction.customId;
+    if (customId.startsWith('application_submit_') && customId.length > 19) {
+      const configId = customId.replace('application_submit_', '');
+      const r = await applicationsManager.getConfigById(interaction.guild.id, configId);
+      config = r.config;
+    }
+    if (!config) {
+      const configResult = await applicationsManager.getConfig(interaction.guild.id);
+      config = configResult.config;
+    }
+    if (!config) {
       return interaction.editReply({
-        content: '❌ Application system is not configured.',
+        content: '❌ Application type not found or not configured.',
       });
     }
-
-    const config = configResult.config;
 
     // Collect answers from modal
     const responses = [];
@@ -10209,6 +10311,25 @@ async function registerCommands(clientInstance) {
           .setName('id')
           .setDescription('Case ID')
           .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('appeal')
+      .setDescription('Submit a moderation appeal')
+      .addIntegerOption((option) =>
+        option.setName('case').setDescription('Case ID (optional)').setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('verify')
+      .setDescription('Verify with your in-game username (one-time per server)')
+      .addStringOption((option) =>
+        option.setName('username').setDescription('Your in-game username').setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('verify-set')
+      .setDescription("[Admin] Set or update a member's verified in-game username")
+      .addUserOption((option) => option.setName('user').setDescription('User to update').setRequired(true))
+      .addStringOption((option) =>
+        option.setName('username').setDescription('New in-game username').setRequired(true)
       ),
 
     new SlashCommandBuilder()

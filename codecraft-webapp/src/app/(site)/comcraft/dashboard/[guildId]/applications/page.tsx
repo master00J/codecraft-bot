@@ -70,6 +70,7 @@ interface Application {
 interface ApplicationConfig {
   id: string;
   guild_id: string;
+  name: string;
   channel_id: string;
   review_channel_id: string | null;
   questions: string[];
@@ -92,7 +93,9 @@ export default function ApplicationsDashboard() {
   const [saving, setSaving] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [filteredApplications, setFilteredApplications] = useState<Application[]>([]);
+  const [configs, setConfigs] = useState<ApplicationConfig[]>([]);
   const [config, setConfig] = useState<ApplicationConfig | null>(null);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -101,6 +104,7 @@ export default function ApplicationsDashboard() {
   const [channels, setChannels] = useState<any[]>([]);
 
   // Config form state
+  const [configName, setConfigName] = useState('Staff');
   const [channelId, setChannelId] = useState('');
   const [reviewChannelId, setReviewChannelId] = useState('');
   const [questions, setQuestions] = useState<string[]>(['What is your age?', 'Why do you want to join our staff team?', 'Do you have any previous moderation experience?', 'How many hours per week can you dedicate to this role?', 'Tell us about yourself and why you would be a good fit.']);
@@ -133,17 +137,22 @@ export default function ApplicationsDashboard() {
       const configData = await configResponse.json();
       const appsData = await appsResponse.json();
       const channelsData = await channelsResponse.json();
-      
-      if (configData.config) {
-        setConfig(configData.config);
-        setChannelId(configData.config.channel_id);
-        setReviewChannelId(configData.config.review_channel_id || '');
-        setQuestions(configData.config.questions);
-        setEnabled(configData.config.enabled);
-        setCooldownDays(configData.config.cooldown_days);
-        setAccountAgeDays(configData.config.require_account_age_days);
-        setAutoThread(configData.config.auto_thread);
-        setPingRoleId(configData.config.ping_role_id || '');
+
+      const list = configData.configs || (configData.config ? [configData.config] : []);
+      setConfigs(list);
+      const first = list[0];
+      if (first) {
+        setConfig(first);
+        setSelectedConfigId(first.id);
+        setConfigName(first.name || 'Staff');
+        setChannelId(first.channel_id);
+        setReviewChannelId(first.review_channel_id || '');
+        setQuestions(first.questions || []);
+        setEnabled(first.enabled);
+        setCooldownDays(first.cooldown_days ?? 7);
+        setAccountAgeDays(first.require_account_age_days ?? 30);
+        setAutoThread(first.auto_thread ?? true);
+        setPingRoleId(first.ping_role_id || '');
       }
 
       if (appsData.applications) {
@@ -205,12 +214,15 @@ export default function ApplicationsDashboard() {
       return;
     }
 
+    const name = (configName || 'Staff').trim() || 'Staff';
     setSaving(true);
     try {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/application-config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: selectedConfigId || undefined,
+          name,
           channel_id: channelId,
           review_channel_id: reviewChannelId || null,
           questions,
@@ -226,6 +238,13 @@ export default function ApplicationsDashboard() {
 
       const data = await response.json();
       setConfig(data.config);
+      if (data.config) {
+        setConfigs(prev => {
+          const rest = prev.filter(c => c.id !== data.config.id);
+          return [...rest, data.config].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        });
+        setSelectedConfigId(data.config.id);
+      }
 
       toast({
         title: 'Success',
@@ -302,6 +321,34 @@ export default function ApplicationsDashboard() {
     const newQuestions = [...questions];
     newQuestions[index] = value;
     setQuestions(newQuestions);
+  };
+
+  const loadConfigIntoForm = (c: ApplicationConfig) => {
+    setConfig(c);
+    setSelectedConfigId(c.id);
+    setConfigName(c.name || 'Staff');
+    setChannelId(c.channel_id);
+    setReviewChannelId(c.review_channel_id || '');
+    setQuestions(c.questions || []);
+    setEnabled(c.enabled);
+    setCooldownDays(c.cooldown_days ?? 7);
+    setAccountAgeDays(c.require_account_age_days ?? 30);
+    setAutoThread(c.auto_thread ?? true);
+    setPingRoleId(c.ping_role_id || '');
+  };
+
+  const startNewType = () => {
+    setConfig(null);
+    setSelectedConfigId(null);
+    setConfigName('');
+    setChannelId('');
+    setReviewChannelId('');
+    setQuestions(['What is your age?', 'Why do you want to join?', 'Do you have experience?', 'How many hours per week?', 'Tell us about yourself.']);
+    setEnabled(true);
+    setCooldownDays(7);
+    setAccountAgeDays(30);
+    setAutoThread(true);
+    setPingRoleId('');
   };
 
   const getStatusBadge = (status: string) => {
@@ -516,6 +563,54 @@ export default function ApplicationsDashboard() {
           <Card className="p-6">
             <h2 className="text-xl font-semibold mb-4">Application Settings</h2>
             <div className="space-y-6">
+              {/* Application type selector */}
+              {(configs.length > 0 || configName) && (
+                <div className="space-y-2">
+                  <Label>Functie / Type</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectedConfigId || 'new'}
+                      onValueChange={(value) => {
+                        if (value === 'new') startNewType();
+                        else {
+                          const c = configs.find(x => x.id === value);
+                          if (c) loadConfigIntoForm(c);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select type or add new" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="new">+ Nieuwe functie toevoegen</SelectItem>
+                        {configs.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name || 'Staff'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Meerdere types (bv. Moderator, Helper) – kies er een om te bewerken of voeg een nieuwe toe.
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="configName">Naam van de functie *</Label>
+                <Input
+                  id="configName"
+                  value={configName}
+                  onChange={(e) => setConfigName(e.target.value)}
+                  placeholder="bijv. Moderator, Helper, Event team"
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Wordt getoond bij /application apply (keuzemenu als je meerdere types hebt).
+                </p>
+              </div>
+
               {/* Basic Settings */}
               <div className="space-y-4">
                 <div>
