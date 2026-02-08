@@ -54,10 +54,16 @@ interface ShopItem {
   description: string | null;
   price_amount_cents: number;
   currency: string;
-  discord_role_id: string;
-  delivery_type: 'role' | 'code';
+  discord_role_id: string | null;
+  delivery_type: 'role' | 'code' | 'prefilled';
   enabled: boolean;
   sort_order: number;
+  created_at: string;
+}
+
+interface PrefilledCode {
+  id: string;
+  code: string;
   created_at: string;
 }
 
@@ -84,9 +90,13 @@ export default function ShopDashboard() {
     priceAmountCents: 500,
     currency: 'eur',
     discordRoleId: '',
-    deliveryType: 'role' as 'role' | 'code',
+    deliveryType: 'role' as 'role' | 'code' | 'prefilled',
     enabled: true,
   });
+  const [prefilledCodes, setPrefilledCodes] = useState<PrefilledCode[]>([]);
+  const [prefilledCodesLoading, setPrefilledCodesLoading] = useState(false);
+  const [prefilledAddText, setPrefilledAddText] = useState('');
+  const [prefilledAdding, setPrefilledAdding] = useState(false);
 
   useEffect(() => {
     if (guildId) {
@@ -135,21 +145,74 @@ export default function ShopDashboard() {
       deliveryType: 'role',
       enabled: true,
     });
+    setPrefilledCodes([]);
+    setPrefilledAddText('');
     setDialogOpen(true);
   }
 
-  function openEdit(item: ShopItem) {
+  async function addPrefilledCodes() {
+    if (!editingId || !prefilledAddText.trim()) return;
+    setPrefilledAdding(true);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/${editingId}/prefilled`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codes: prefilledAddText.trim().split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add codes');
+      setPrefilledAddText('');
+      const listRes = await fetch(`/api/comcraft/guilds/${guildId}/shop/${editingId}/prefilled`);
+      const listData = await listRes.json();
+      if (listRes.ok && Array.isArray(listData.codes)) setPrefilledCodes(listData.codes);
+      toast({ title: 'Added', description: `${data.added ?? 0} code(s) added.` });
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to add codes', variant: 'destructive' });
+    } finally {
+      setPrefilledAdding(false);
+    }
+  }
+
+  async function removePrefilledCode(codeId: string) {
+    if (!editingId) return;
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/${editingId}/prefilled?codeId=${encodeURIComponent(codeId)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+      setPrefilledCodes((prev) => prev.filter((c) => c.id !== codeId));
+      toast({ title: 'Removed', description: 'Code removed from pool.' });
+    } catch {
+      toast({ title: 'Error', description: 'Could not remove code.', variant: 'destructive' });
+    }
+  }
+
+  async function openEdit(item: ShopItem) {
     setEditingId(item.id);
     setForm({
       name: item.name,
       description: item.description ?? '',
       priceAmountCents: item.price_amount_cents,
       currency: item.currency ?? 'eur',
-      discordRoleId: item.discord_role_id,
+      discordRoleId: item.discord_role_id ?? '',
       deliveryType: item.delivery_type ?? 'role',
       enabled: item.enabled,
     });
+    setPrefilledCodes([]);
+    setPrefilledAddText('');
     setDialogOpen(true);
+    if ((item.delivery_type ?? '') === 'prefilled') {
+      setPrefilledCodesLoading(true);
+      try {
+        const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/${item.id}/prefilled`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.codes)) setPrefilledCodes(data.codes);
+      } catch {
+        // ignore
+      } finally {
+        setPrefilledCodesLoading(false);
+      }
+    }
   }
 
   async function save() {
@@ -157,8 +220,8 @@ export default function ShopDashboard() {
       toast({ title: 'Error', description: 'Name is required.', variant: 'destructive' });
       return;
     }
-    if (!form.discordRoleId) {
-      toast({ title: 'Error', description: 'Select a Discord role.', variant: 'destructive' });
+    if (form.deliveryType !== 'prefilled' && !form.discordRoleId) {
+      toast({ title: 'Error', description: 'Select a Discord role for Role or Gift card items.', variant: 'destructive' });
       return;
     }
     if (form.priceAmountCents < 1) {
@@ -294,8 +357,12 @@ export default function ShopDashboard() {
                         <div className="text-sm text-muted-foreground line-clamp-1">{item.description}</div>
                       )}
                     </TableCell>
-                    <TableCell>{role?.name ?? item.discord_role_id}</TableCell>
-                    <TableCell>{item.delivery_type === 'code' ? 'Gift card' : 'Role'}</TableCell>
+                    <TableCell>
+                      {item.delivery_type === 'prefilled' ? '—' : (role?.name ?? item.discord_role_id ?? '—')}
+                    </TableCell>
+                    <TableCell>
+                      {item.delivery_type === 'prefilled' ? 'Pre-filled code' : item.delivery_type === 'code' ? 'Gift card' : 'Role'}
+                    </TableCell>
                     <TableCell>{formatPrice(item.price_amount_cents, item.currency)}</TableCell>
                     <TableCell>{item.enabled ? 'Enabled' : 'Disabled'}</TableCell>
                     <TableCell>
@@ -380,41 +447,100 @@ export default function ShopDashboard() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Discord role (assigned on purchase or when code is redeemed)</Label>
-              <Select
-                value={form.discordRoleId}
-                onValueChange={(v) => setForm((f) => ({ ...f, discordRoleId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label>Delivery type</Label>
               <Select
                 value={form.deliveryType}
-                onValueChange={(v: 'role' | 'code') => setForm((f) => ({ ...f, deliveryType: v }))}
+                onValueChange={(v: 'role' | 'code' | 'prefilled') => setForm((f) => ({ ...f, deliveryType: v }))}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="role">Role (assign immediately after payment)</SelectItem>
-                  <SelectItem value="code">Gift card / Code (buyer gets a code to redeem or give away)</SelectItem>
+                  <SelectItem value="code">Gift card (buyer gets a code to redeem for role)</SelectItem>
+                  <SelectItem value="prefilled">Pre-filled code (you add codes to sell, e.g. Amazon gift cards)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Gift cards: buyer receives a code (e.g. XXXX-XXXX-XXXX) on the thank-you page and can redeem it here or in Discord with /redeem.
+                Gift card: buyer gets a code to redeem for a role. Pre-filled: you add your own codes (e.g. Amazon); buyer receives one after payment.
               </p>
             </div>
+            {form.deliveryType !== 'prefilled' && (
+              <div className="space-y-2">
+                <Label>Discord role (assigned on purchase or when code is redeemed)</Label>
+                <Select
+                  value={form.discordRoleId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, discordRoleId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {form.deliveryType === 'prefilled' && editingId && (
+              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+                <Label>Codes to sell (one per purchase)</Label>
+                {prefilledCodesLoading ? (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Add codes (e.g. Amazon gift card codes). Buyers receive one code each after payment. Stock: {prefilledCodes.length}
+                    </p>
+                    <div className="flex gap-2">
+                      <Textarea
+                        placeholder="Paste codes (one per line or comma/semicolon separated)"
+                        value={prefilledAddText}
+                        onChange={(e) => setPrefilledAddText(e.target.value)}
+                        rows={2}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={addPrefilledCodes}
+                        disabled={prefilledAdding || !prefilledAddText.trim()}
+                      >
+                        {prefilledAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                      </Button>
+                    </div>
+                    {prefilledCodes.length > 0 && (
+                      <ul className="max-h-32 overflow-y-auto space-y-1 text-sm">
+                        {prefilledCodes.map((c) => (
+                          <li key={c.id} className="flex items-center justify-between gap-2 font-mono bg-background px-2 py-1 rounded">
+                            <span className="truncate">{c.code}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0 text-destructive h-7"
+                              onClick={() => removePrefilledCode(c.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {form.deliveryType === 'prefilled' && !editingId && (
+              <p className="text-xs text-muted-foreground border rounded p-2 bg-muted/30">
+                Save the item first, then click Edit to add codes to sell.
+              </p>
+            )}
             <div className="flex gap-4">
               <div className="space-y-2 flex-1">
                 <Label>Price (cents)</Label>

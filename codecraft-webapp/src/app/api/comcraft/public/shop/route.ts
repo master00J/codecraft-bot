@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data: rows, error } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('id, name, description, price_amount_cents, currency')
+    .select('id, name, description, price_amount_cents, currency, delivery_type')
     .eq('guild_id', guildId)
     .eq('enabled', true)
     .order('sort_order', { ascending: true })
@@ -32,5 +32,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to load shop' }, { status: 500 });
   }
 
-  return NextResponse.json({ items: data ?? [] });
+  const items = (rows ?? []) as { id: string; delivery_type?: string }[];
+  const prefilledIds = items.filter((i) => i.delivery_type === 'prefilled').map((i) => i.id);
+
+  let inStockPrefilled = new Set<string>();
+  if (prefilledIds.length > 0) {
+    const { data: counts } = await supabaseAdmin
+      .from('guild_shop_prefilled_codes')
+      .select('shop_item_id')
+      .in('shop_item_id', prefilledIds);
+    counts?.forEach((r: { shop_item_id: string }) => inStockPrefilled.add(r.shop_item_id));
+  }
+
+  const filtered = items
+    .filter((i) => i.delivery_type !== 'prefilled' || inStockPrefilled.has(i.id))
+    .map(({ delivery_type: _dt, ...rest }) => rest);
+
+  return NextResponse.json({ items: filtered });
 }

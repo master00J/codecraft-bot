@@ -67,6 +67,13 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid or unknown code' }, { status: 404 });
     }
 
+    const roleId = (row as { discord_role_id: string | null }).discord_role_id;
+    if (!roleId) {
+      return NextResponse.json({
+        error: 'This code was a product code (e.g. a gift card). It is not redeemable for a role here.',
+      }, { status: 400 });
+    }
+
     if ((row as { used_at: string | null }).used_at) {
       return NextResponse.json({ error: 'This code has already been used' }, { status: 400 });
     }
@@ -75,8 +82,6 @@ export async function POST(
     if (expiresAt && new Date(expiresAt) < new Date()) {
       return NextResponse.json({ error: 'This code has expired' }, { status: 400 });
     }
-
-    const roleId = (row as { discord_role_id: string }).discord_role_id;
     const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
 
     const addRoleRes = await fetch(

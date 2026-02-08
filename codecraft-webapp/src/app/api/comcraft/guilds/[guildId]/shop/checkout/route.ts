@@ -69,12 +69,27 @@ export async function POST(
       return NextResponse.json({ error: 'Shop item not found or disabled' }, { status: 404 });
     }
 
+    const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
+    if (deliveryType === 'prefilled') {
+      const { count, error: countErr } = await supabaseAdmin
+        .from('guild_shop_prefilled_codes')
+        .select('id', { count: 'exact', head: true })
+        .eq('guild_id', guildId)
+        .eq('shop_item_id', itemId);
+      if (countErr || (count ?? 0) < 1) {
+        return NextResponse.json(
+          { error: 'This item is out of stock. The server owner can add more codes in Dashboard → Shop.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const baseUrl =
       process.env.NEXTAUTH_URL ??
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     const successUrl =
       `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}` +
-      ((item as { delivery_type?: string }).delivery_type === 'code'
+      (deliveryType === 'code' || deliveryType === 'prefilled'
         ? '&session_id={CHECKOUT_SESSION_ID}'
         : '');
     const cancelUrl = `${baseUrl}/comcraft/pay?guildId=${guildId}&shop=1`;
@@ -107,7 +122,7 @@ export async function POST(
           shop_item_id: item.id,
           discord_id: discordId,
         });
-        const isCodeDelivery = (item as { delivery_type?: string }).delivery_type === 'code';
+        const isCodeDelivery = deliveryType === 'code' || deliveryType === 'prefilled';
         const paypalReturnUrl =
           isCodeDelivery
             ? `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}`

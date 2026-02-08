@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     .eq('id', shopItemId)
     .maybeSingle();
 
-  if (itemError || !item?.discord_role_id) {
+  if (itemError || !item) {
     console.error('PayPal webhook: shop item not found', guildId, shopItemId);
     return NextResponse.json({ received: true });
   }
@@ -129,7 +129,33 @@ export async function POST(request: NextRequest) {
   const paypalCaptureId = resource?.id;
   const paypalOrderId = resource?.supplementary_data?.related_ids?.order_id;
 
-  if (deliveryType === 'code' && paypalCaptureId) {
+  if (deliveryType === 'prefilled' && paypalCaptureId) {
+    const { data: poolRow } = await supabaseAdmin
+      .from('guild_shop_prefilled_codes')
+      .select('id, code')
+      .eq('guild_id', guildId)
+      .eq('shop_item_id', shopItemId)
+      .limit(1)
+      .maybeSingle();
+
+    if (poolRow) {
+      await supabaseAdmin
+        .from('guild_shop_prefilled_codes')
+        .delete()
+        .eq('id', (poolRow as { id: string }).id);
+      await supabaseAdmin.from('guild_shop_codes').insert({
+        guild_id: guildId,
+        shop_item_id: shopItemId,
+        code: (poolRow as { code: string }).code,
+        discord_role_id: null,
+        paypal_capture_id: paypalCaptureId,
+        paypal_order_id: paypalOrderId ?? null,
+      });
+    }
+    return NextResponse.json({ received: true });
+  }
+
+  if (deliveryType === 'code' && paypalCaptureId && item.discord_role_id) {
     const code = generateShopCode();
     const { error: insertErr } = await supabaseAdmin.from('guild_shop_codes').insert({
       guild_id: guildId,
@@ -145,24 +171,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
-  const internalSecret = process.env.INTERNAL_API_SECRET;
+  if (deliveryType === 'role' && item.discord_role_id) {
+    const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
+    const internalSecret = process.env.INTERNAL_API_SECRET;
 
-  const addRoleRes = await fetch(
-    `${botApiUrl}/api/discord/${guildId}/users/${discordId}/roles`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {}),
-      },
-      body: JSON.stringify({ roleId: item.discord_role_id }),
+    const addRoleRes = await fetch(
+      `${botApiUrl}/api/discord/${guildId}/users/${discordId}/roles`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {}),
+        },
+        body: JSON.stringify({ roleId: item.discord_role_id }),
+      }
+    );
+
+    if (!addRoleRes.ok) {
+      const err = await addRoleRes.json().catch(() => ({}));
+      console.error('PayPal webhook: failed to add role', guildId, discordId, item.discord_role_id, err);
     }
-  );
-
-  if (!addRoleRes.ok) {
-    const err = await addRoleRes.json().catch(() => ({}));
-    console.error('PayPal webhook: failed to add role', guildId, discordId, item.discord_role_id, err);
   }
 
   return NextResponse.json({ received: true });

@@ -83,11 +83,16 @@ export async function POST(
     const discordRoleId = typeof body.discordRoleId === 'string' ? body.discordRoleId.trim() : '';
     const enabled = body.enabled !== false;
     const sortOrder = typeof body.sortOrder === 'number' ? body.sortOrder : 0;
-    const deliveryType = body.deliveryType === 'code' ? 'code' : 'role';
+    const deliveryType =
+      body.deliveryType === 'prefilled' ? 'prefilled'
+      : body.deliveryType === 'code' ? 'code' : 'role';
 
-    if (!name || !discordRoleId) {
+    if (!name) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+    if (deliveryType !== 'prefilled' && !discordRoleId) {
       return NextResponse.json(
-        { error: 'name and discordRoleId are required' },
+        { error: 'Select a Discord role for this item (required for Role and Gift card)' },
         { status: 400 }
       );
     }
@@ -106,7 +111,7 @@ export async function POST(
         description: description || null,
         price_amount_cents: priceAmountCents,
         currency,
-        discord_role_id: discordRoleId,
+        discord_role_id: deliveryType === 'prefilled' ? null : discordRoleId,
         enabled,
         sort_order: sortOrder,
         delivery_type: deliveryType,
