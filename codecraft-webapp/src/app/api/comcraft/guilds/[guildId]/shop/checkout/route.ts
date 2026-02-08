@@ -141,7 +141,6 @@ export async function POST(
     params.append('mode', 'payment');
     params.append('success_url', successUrl);
     params.append('cancel_url', cancelUrl);
-    params.append('customer_email', '');
     params.append('line_items[0][quantity]', '1');
     params.append('line_items[0][price_data][currency]', (item.currency || 'eur').toLowerCase());
     params.append('line_items[0][price_data][unit_amount]', String(item.price_amount_cents));
