@@ -10,6 +10,8 @@ const aiService = require('../ai');
 const modActions = require('./actions');
 const openaiImageModeration = require('./openai-image-moderation');
 const claudeImageModeration = require('./claude-image-moderation');
+const usageTracker = require('../ai/usage-tracker');
+const aiConfig = require('../ai/config');
 
 function getImageModerationProvider() {
   const provider = (process.env.AI_IMAGE_MODERATION_PROVIDER || 'claude').toLowerCase();
@@ -186,6 +188,18 @@ class AutoMod {
           const result = await imageProvider.moderateImages(imageUrls);
           if (result.flagged) {
             violations.push('ai_image_inappropriate');
+          }
+          const guildId = message.guild?.id;
+          if (guildId && result.inputTokens != null && result.outputTokens != null) {
+            const isClaude = imageProvider === claudeImageModeration;
+            usageTracker.logUsage({
+              guildId,
+              provider: isClaude ? 'claude' : 'openai',
+              model: isClaude ? aiConfig.getClaudeConfig().model : 'omni-moderation-latest',
+              taskType: 'image_moderation',
+              tokens: { input: result.inputTokens, output: result.outputTokens },
+              metadata: { imageCount: imageUrls.length },
+            }).catch((err) => console.warn('[AutoMod] Usage log failed:', err.message));
           }
         } catch (err) {
           console.error('[AutoMod] Image moderation error:', err.message);
