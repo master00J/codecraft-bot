@@ -333,7 +333,7 @@
       "prize": "Prize",
       "prizePlaceholder": "VIP access, merch voucher, …",
       "duration": "Duration",
-      "durationHelp": "Between 1 minute and 7 days.",
+      "durationHelp": "Minimum 1 minute. No maximum.",
       "durationUnitMinutes": "Minutes",
       "durationUnitHours": "Hours",
       "durationUnitDays": "Days",

@@ -331,7 +331,7 @@
       "prize": "Prijs",
       "prizePlaceholder": "VIP-toegang, merch voucher, …",
       "duration": "Duur",
-      "durationHelp": "Tussen 1 minuut en 7 dagen.",
+      "durationHelp": "Minimaal 1 minuut. Geen maximum.",
       "durationUnitMinutes": "Minuten",
       "durationUnitHours": "Uren",
       "durationUnitDays": "Dagen",

@@ -594,7 +594,6 @@ export default function GiveawaysPage() {
                             id="giveaway-duration"
                             type="number"
                             min={1}
-                            max={formState.durationUnit === 'minutes' ? 10080 : formState.durationUnit === 'hours' ? 168 : 7}
                             value={formState.durationValue}
                             onChange={(e) => setFormState((c) => ({ ...c, durationValue: Number(e.target.value) || 1 }))}
                             className="flex-1"
@@ -924,7 +923,6 @@ export default function GiveawaysPage() {
               <Input
                 type="number"
                 min={1}
-                max={recurringForm.durationUnit === 'minutes' ? 10080 : recurringForm.durationUnit === 'hours' ? 168 : 7}
                 value={recurringForm.durationValue}
                 onChange={(e) => setRecurringForm((f) => ({ ...f, durationValue: Number(e.target.value) || 1 }))}
                 className="flex-1"
