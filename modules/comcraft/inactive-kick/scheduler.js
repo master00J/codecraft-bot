@@ -134,6 +134,7 @@ class InactiveKickScheduler {
       try {
         await member.kick(`Auto-kick: inactive for more than ${inactiveDays} days.`);
         kicked++;
+        await this.logKick(guildId, member.id, member.user.username || member.user.tag, inactiveDays);
       } catch (e) {
         errors++;
         if (errors <= 3) {
@@ -144,6 +145,22 @@ class InactiveKickScheduler {
 
     if (kicked > 0 || errors > 0) {
       console.log(`✅ [InactiveKick] ${guild.name} (${guildId}): kicked ${kicked}, errors ${errors}`);
+    }
+  }
+
+  /**
+   * Log a kick to the database for dashboard display
+   */
+  async logKick(guildId, userId, username, inactiveDays) {
+    try {
+      await this.supabase.from('inactive_kick_logs').insert({
+        guild_id: guildId,
+        user_id: userId,
+        username: username || null,
+        inactive_days: inactiveDays
+      });
+    } catch (e) {
+      console.warn(`⚠️ [InactiveKick] Failed to log kick for ${userId}:`, e.message);
     }
   }
 }

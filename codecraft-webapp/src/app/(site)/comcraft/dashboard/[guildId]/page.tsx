@@ -51,6 +51,7 @@ export default function GuildDashboard() {
   const [autoKickInactiveEnabled, setAutoKickInactiveEnabled] = useState(false);
   const [autoKickInactiveDays, setAutoKickInactiveDays] = useState<number>(30);
   const [autoKickInactiveSaving, setAutoKickInactiveSaving] = useState(false);
+  const [autoKickLogs, setAutoKickLogs] = useState<{ id?: string; user_id: string; username: string | null; inactive_days: number; kicked_at: string }[]>([]);
   
   // Leveling customization state
   const [levelingConfig, setLevelingConfig] = useState<any>(null);
@@ -330,7 +331,7 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
     
     try {
       // Only fetch config, channels, roles, and update notifications (needed for overview)
-      const [configRes, channelsRes, rolesRes, updateNotificationsRes, autoKickRes] = await Promise.all([
+      const [configRes, channelsRes, rolesRes, updateNotificationsRes, autoKickRes, autoKickLogsRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/config`).catch(e => {
           if (isDev) console.error('❌ Config fetch failed:', e);
           return { ok: false, json: async () => ({}) };
@@ -350,15 +351,20 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
         fetch(`/api/comcraft/guilds/${guildId}/auto-kick-inactive`).catch(e => {
           if (isDev) console.error('❌ Auto-kick-inactive failed:', e);
           return { ok: false, json: async () => ({ enabled: false, days: null }) };
+        }),
+        fetch(`/api/comcraft/guilds/${guildId}/auto-kick-inactive/logs`).catch(e => {
+          if (isDev) console.error('❌ Auto-kick-inactive logs failed:', e);
+          return { ok: false, json: async () => ({ logs: [] }) };
         })
       ]);
 
-      const [configData, channelsData, rolesData, updateNotificationsData, autoKickData] = await Promise.all([
+      const [configData, channelsData, rolesData, updateNotificationsData, autoKickData, autoKickLogsData] = await Promise.all([
         configRes.json().catch(e => { if (isDev) console.error('❌ Config JSON parse failed:', e); return {}; }),
         channelsRes.json().catch(e => { if (isDev) console.error('❌ Channels JSON failed:', e); return { channels: { text: [] } }; }),
         rolesRes.json().catch(e => { if (isDev) console.error('❌ Roles JSON failed:', e); return { roles: [] }; }),
         updateNotificationsRes.json().catch(e => { if (isDev) console.error('❌ Update notifications JSON failed:', e); return { enabled: true }; }),
-        autoKickRes.json().catch(e => { if (isDev) console.error('❌ Auto-kick JSON failed:', e); return { enabled: false, days: null }; })
+        autoKickRes.json().catch(e => { if (isDev) console.error('❌ Auto-kick JSON failed:', e); return { enabled: false, days: null }; }),
+        autoKickLogsRes.json().catch(e => { if (isDev) console.error('❌ Auto-kick logs JSON failed:', e); return { logs: [] }; })
       ]);
 
       // Set essential data
@@ -378,6 +384,10 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
       if (autoKickData && (autoKickData.enabled !== undefined || autoKickData.days !== undefined)) {
         setAutoKickInactiveEnabled(autoKickData.enabled ?? false);
         setAutoKickInactiveDays(autoKickData.days != null ? Number(autoKickData.days) : 30);
+      }
+
+      if (autoKickLogsData?.logs) {
+        setAutoKickLogs(autoKickLogsData.logs);
       }
 
       if (channelsData?.channels?.text) {
@@ -1563,6 +1573,35 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                   </div>
                 </div>
               )}
+              <div className="pt-4 border-t mt-4">
+                <Label className="mb-2 font-semibold">{t('recent_kicks')}</Label>
+                {autoKickLogs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('no_kicks_yet')}</p>
+                ) : (
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-2 font-medium">{t('user')}</th>
+                          <th className="text-left p-2 font-medium">{t('kicked_at')}</th>
+                          <th className="text-right p-2 font-medium">{t('inactive_days')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {autoKickLogs.slice(0, 20).map((log) => (
+                          <tr key={log.id || `${log.user_id}-${log.kicked_at}`} className="border-t">
+                            <td className="p-2">{log.username || log.user_id}</td>
+                            <td className="p-2 text-muted-foreground">
+                              {new Date(log.kicked_at).toLocaleString()}
+                            </td>
+                            <td className="p-2 text-right">{log.inactive_days}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </Card>
 
             {/* Module Status */}

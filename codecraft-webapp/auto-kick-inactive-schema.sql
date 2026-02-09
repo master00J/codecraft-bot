@@ -14,3 +14,18 @@ COMMENT ON COLUMN guild_configs.auto_kick_inactive_days IS 'Number of days of in
 CREATE INDEX IF NOT EXISTS idx_guild_configs_auto_kick_inactive
   ON guild_configs(auto_kick_inactive_enabled)
   WHERE auto_kick_inactive_enabled = true;
+
+-- Log of members kicked by auto-kick (for dashboard)
+CREATE TABLE IF NOT EXISTS inactive_kick_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  inactive_days INTEGER NOT NULL,
+  kicked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inactive_kick_logs_guild_at
+  ON inactive_kick_logs(guild_id, kicked_at DESC);
+
+COMMENT ON TABLE inactive_kick_logs IS 'Log of members kicked by the auto-kick inactive feature, for dashboard display';

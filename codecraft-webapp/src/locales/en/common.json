@@ -436,7 +436,12 @@
       "inactivity_days_hint": "Members with no message activity (or who never sent a message) for this many days will be kicked. The bot runs this check every 6 hours.",
       "days_range": "days (7–365)",
       "toast_saved": "Auto kick inactive members settings have been updated.",
-      "toast_error": "Failed to save settings"
+      "toast_error": "Failed to save settings",
+      "recent_kicks": "Recent kicks",
+      "user": "User",
+      "kicked_at": "Kicked at",
+      "inactive_days": "Inactive (days)",
+      "no_kicks_yet": "No members have been kicked yet. The log will appear here after the first run."
     }
   }
 }

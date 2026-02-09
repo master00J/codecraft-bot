@@ -93,11 +93,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'enabled must be a boolean' }, { status: 400 });
     }
 
-    const updateData: { auto_kick_inactive_enabled: boolean; auto_kick_inactive_days: number | null; updated_at: string } = {
-      auto_kick_inactive_enabled: enabled,
-      updated_at: new Date().toISOString()
-    };
-
+    let autoKickDays: number | null = null;
     if (enabled) {
       const daysNum = days != null ? Number(days) : null;
       if (daysNum !== null && (daysNum < MIN_DAYS || daysNum > MAX_DAYS)) {
@@ -106,10 +102,14 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      updateData.auto_kick_inactive_days = daysNum ?? 30;
-    } else {
-      updateData.auto_kick_inactive_days = null;
+      autoKickDays = daysNum ?? 30;
     }
+
+    const updateData = {
+      auto_kick_inactive_enabled: enabled,
+      auto_kick_inactive_days: autoKickDays,
+      updated_at: new Date().toISOString()
+    };
 
     const { data, error } = await supabase
       .from('guild_configs')

@@ -434,7 +434,12 @@
       "inactivity_days_hint": "Leden zonder berichtactiviteit (of die nooit een bericht stuurden) worden na zoveel dagen gekickt. De bot voert deze check elke 6 uur uit.",
       "days_range": "dagen (7–365)",
       "toast_saved": "Instellingen voor automatisch kicken van inactieve leden zijn opgeslagen.",
-      "toast_error": "Instellingen opslaan mislukt"
+      "toast_error": "Instellingen opslaan mislukt",
+      "recent_kicks": "Recente kicks",
+      "user": "Gebruiker",
+      "kicked_at": "Gekickt op",
+      "inactive_days": "Inactief (dagen)",
+      "no_kicks_yet": "Er zijn nog geen leden gekickt. Het log verschijnt hier na de eerste run."
     }
   }
 }
