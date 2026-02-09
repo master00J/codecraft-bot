@@ -298,9 +298,7 @@ export async function DELETE(
 
     if (!data) {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true, case: data });
+    }    return NextResponse.json({ success: true, case: data });
   } catch (error: any) {
     console.error('Moderation logs DELETE error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

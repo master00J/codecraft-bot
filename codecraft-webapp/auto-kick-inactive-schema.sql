@@ -4,12 +4,16 @@
 -- Add columns to guild_configs
 ALTER TABLE guild_configs
   ADD COLUMN IF NOT EXISTS auto_kick_inactive_enabled BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS auto_kick_inactive_days INTEGER;
+  ADD COLUMN IF NOT EXISTS auto_kick_inactive_days INTEGER,
+  ADD COLUMN IF NOT EXISTS auto_kick_effective_from TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS auto_kick_grace_days INTEGER;
 
 -- Constraint: days must be between 7 and 365 when enabled (optional, can be enforced in app)
 -- COMMENT for documentation
 COMMENT ON COLUMN guild_configs.auto_kick_inactive_enabled IS 'When true, members with no activity for auto_kick_inactive_days are automatically kicked';
 COMMENT ON COLUMN guild_configs.auto_kick_inactive_days IS 'Number of days of inactivity after which a member is kicked (e.g. 30). Only used when auto_kick_inactive_enabled is true';
+COMMENT ON COLUMN guild_configs.auto_kick_effective_from IS 'Auto-kick only runs from this time (grace period after enabling). Set to NOW() + auto_kick_grace_days when owner enables; null = already past grace.';
+COMMENT ON COLUMN guild_configs.auto_kick_grace_days IS 'Number of days after enabling before auto-kick runs (server owner can set 1–30). Lets the bot collect activity first.';
 
 CREATE INDEX IF NOT EXISTS idx_guild_configs_auto_kick_inactive
   ON guild_configs(auto_kick_inactive_enabled)

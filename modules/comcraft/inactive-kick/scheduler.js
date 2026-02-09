@@ -59,7 +59,7 @@ class InactiveKickScheduler {
     try {
       const { data: guildConfigs, error } = await this.supabase
         .from('guild_configs')
-        .select('guild_id, auto_kick_inactive_days')
+        .select('guild_id, auto_kick_inactive_days, auto_kick_effective_from')
         .eq('auto_kick_inactive_enabled', true)
         .not('auto_kick_inactive_days', 'is', null);
 
@@ -73,9 +73,13 @@ class InactiveKickScheduler {
         return;
       }
 
+      const now = Date.now();
       for (const row of guildConfigs) {
         const days = parseInt(row.auto_kick_inactive_days, 10);
         if (days < MIN_DAYS || days > MAX_DAYS) continue;
+
+        const effectiveFrom = row.auto_kick_effective_from ? new Date(row.auto_kick_effective_from).getTime() : null;
+        if (effectiveFrom != null && now < effectiveFrom) continue;
 
         await this.processGuild(row.guild_id, days);
       }
@@ -127,6 +131,7 @@ class InactiveKickScheduler {
       if (member.id === guild.ownerId) continue;
       if (!member.kickable) continue;
 
+      // Use last_xp_gain when available; otherwise join date (only runs after grace period so safe).
       const lastActivityMs = lastActivityByUser[member.id] ?? (member.joinedAt ? member.joinedAt.getTime() : 0);
       const lastActivity = new Date(lastActivityMs);
       if (lastActivity >= cutoffDate) continue;

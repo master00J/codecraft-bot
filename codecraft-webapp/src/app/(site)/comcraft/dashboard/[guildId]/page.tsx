@@ -50,6 +50,8 @@ export default function GuildDashboard() {
 
   const [autoKickInactiveEnabled, setAutoKickInactiveEnabled] = useState(false);
   const [autoKickInactiveDays, setAutoKickInactiveDays] = useState<number>(30);
+  const [autoKickGraceDays, setAutoKickGraceDays] = useState<number>(7);
+  const [autoKickEffectiveFrom, setAutoKickEffectiveFrom] = useState<string | null>(null);
   const [autoKickInactiveSaving, setAutoKickInactiveSaving] = useState(false);
   const [autoKickLogs, setAutoKickLogs] = useState<{ id?: string; user_id: string; username: string | null; inactive_days: number; kicked_at: string }[]>([]);
   
@@ -384,6 +386,8 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
       if (autoKickData && (autoKickData.enabled !== undefined || autoKickData.days !== undefined)) {
         setAutoKickInactiveEnabled(autoKickData.enabled ?? false);
         setAutoKickInactiveDays(autoKickData.days != null ? Number(autoKickData.days) : 30);
+        setAutoKickGraceDays(autoKickData.graceDays != null ? Number(autoKickData.graceDays) : 7);
+        setAutoKickEffectiveFrom(autoKickData.effectiveFrom ?? null);
       }
 
       if (autoKickLogsData?.logs) {
@@ -682,7 +686,7 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
     }
   };
 
-  const saveAutoKickInactiveSettings = async (updates: { enabled?: boolean; days?: number }) => {
+  const saveAutoKickInactiveSettings = async (updates: { enabled?: boolean; days?: number; graceDays?: number }) => {
     setAutoKickInactiveSaving(true);
     try {
       const response = await fetch(`/api/comcraft/guilds/${guildId}/auto-kick-inactive`, {
@@ -690,7 +694,8 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enabled: updates.enabled !== undefined ? updates.enabled : autoKickInactiveEnabled,
-          days: updates.days !== undefined ? updates.days : autoKickInactiveDays
+          days: updates.days !== undefined ? updates.days : autoKickInactiveDays,
+          graceDays: updates.graceDays !== undefined ? updates.graceDays : autoKickGraceDays
         })
       });
       if (!response.ok) {
@@ -700,6 +705,8 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
       const result = await response.json();
       if (updates.enabled !== undefined) setAutoKickInactiveEnabled(result.enabled);
       if (updates.days !== undefined) setAutoKickInactiveDays(result.days ?? 30);
+      if (result.graceDays !== undefined) setAutoKickGraceDays(result.graceDays ?? 7);
+      if (result.effectiveFrom !== undefined) setAutoKickEffectiveFrom(result.effectiveFrom ?? null);
       toast({
         title: 'Settings saved',
         description: t('toast_saved')
@@ -1547,8 +1554,35 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                   )}
                 </div>
               </div>
-              {autoKickInactiveEnabled && (
+                  {autoKickInactiveEnabled && (
                 <div className="space-y-4 pt-4 border-t">
+                  {autoKickEffectiveFrom && new Date(autoKickEffectiveFrom) > new Date() && (
+                    <p className="text-sm text-amber-600 dark:text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
+                      {t('grace_period')} {new Date(autoKickEffectiveFrom).toLocaleDateString(undefined, { dateStyle: 'medium' })}.
+                    </p>
+                  )}
+                  <div>
+                    <Label className="mb-2 font-semibold">{t('grace_days_label')}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={autoKickGraceDays}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!isNaN(v)) setAutoKickGraceDays(Math.min(30, Math.max(1, v)));
+                        }}
+                        onBlur={() => saveAutoKickInactiveSettings({ graceDays: autoKickGraceDays })}
+                        disabled={autoKickInactiveSaving}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">{t('grace_days_range')}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t('grace_days_hint')}
+                    </p>
+                  </div>
                   <div>
                     <Label className="mb-2 font-semibold">{t('inactivity_days_label')}</Label>
                     <div className="flex items-center gap-2">
