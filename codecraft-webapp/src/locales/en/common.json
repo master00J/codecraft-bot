@@ -427,6 +427,17 @@
         "description": "Please try again or contact support."
       }
     }
+  },
+  "dashboard_overview": {
+    "auto_kick_inactive": {
+      "title": "Auto Kick Inactive Members",
+      "description": "Automatically kick members who have not sent a message (or joined without activity) for a set number of days",
+      "inactivity_days_label": "Inactivity period (days)",
+      "inactivity_days_hint": "Members with no message activity (or who never sent a message) for this many days will be kicked. The bot runs this check every 6 hours.",
+      "days_range": "days (7–365)",
+      "toast_saved": "Auto kick inactive members settings have been updated.",
+      "toast_error": "Failed to save settings"
+    }
   }
 }
 

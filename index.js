@@ -75,6 +75,7 @@ const createFeedbackHandlers = require('./modules/comcraft/bot/interactions/feed
 const createEventHandlers = require('./modules/comcraft/bot/interactions/events');
 const TopGGManager = require('./modules/comcraft/topgg/manager');
 const VoteRewardsScheduler = require('./modules/comcraft/vote-rewards/scheduler');
+const InactiveKickScheduler = require('./modules/comcraft/inactive-kick/scheduler');
 const DiscordStatsManager = require('./modules/comcraft/stats/discord-stats-manager');
 // Music commands removed - now handled by separate music-bot
 // const MusicManager = require('./modules/comcraft/music/manager');
@@ -939,6 +940,16 @@ client.once('ready', async () => {
     console.log('🎁 Vote Rewards Scheduler initialized');
   } catch (error) {
     console.error('❌ Failed to initialize Vote Rewards Scheduler:', error.message);
+  }
+
+  // Initialize Inactive Kick Scheduler (auto-kick inactive members per guild settings)
+  try {
+    const inactiveKickScheduler = new InactiveKickScheduler(client);
+    inactiveKickScheduler.start();
+    global.inactiveKickScheduler = inactiveKickScheduler;
+    console.log('👋 Inactive Kick Scheduler initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Inactive Kick Scheduler:', error.message);
   }
 
   // Initialize Discord Stats Manager (for support server stats display)

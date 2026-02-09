@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import { useTranslations } from 'next-intl';
 
 const DEFAULT_FEEDBACK_DESCRIPTION = 'Click the button below to submit your sample for feedback.\n\n• Provide a Soundcloud, YouTube, Dropbox... link\n• Optionally add context (genre, type of feedback)\n• Moderators pick submissions in order during feedback sessions';
 const DEFAULT_FEEDBACK_BUTTON_LABEL = '🎵 Submit Sample';
@@ -46,6 +47,10 @@ export default function GuildDashboard() {
   const [updateNotificationChannelId, setUpdateNotificationChannelId] = useState<string>('none');
   const [updateNotificationTypes, setUpdateNotificationTypes] = useState<string[]>(['feature', 'improvement', 'bugfix', 'security', 'breaking']);
   const [updateNotificationRoleIds, setUpdateNotificationRoleIds] = useState<string[]>([]);
+
+  const [autoKickInactiveEnabled, setAutoKickInactiveEnabled] = useState(false);
+  const [autoKickInactiveDays, setAutoKickInactiveDays] = useState<number>(30);
+  const [autoKickInactiveSaving, setAutoKickInactiveSaving] = useState(false);
   
   // Leveling customization state
   const [levelingConfig, setLevelingConfig] = useState<any>(null);
@@ -63,6 +68,7 @@ export default function GuildDashboard() {
   const [streams, setStreams] = useState<any[]>([]);
 
   const { toast } = useToast();
+  const t = useTranslations('dashboard_overview.auto_kick_inactive');
 
   const defaultBirthdaySettings = {
     birthdays_enabled: false,
@@ -324,7 +330,7 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
     
     try {
       // Only fetch config, channels, roles, and update notifications (needed for overview)
-      const [configRes, channelsRes, rolesRes, updateNotificationsRes] = await Promise.all([
+      const [configRes, channelsRes, rolesRes, updateNotificationsRes, autoKickRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/config`).catch(e => {
           if (isDev) console.error('❌ Config fetch failed:', e);
           return { ok: false, json: async () => ({}) };
@@ -340,14 +346,19 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
         fetch(`/api/comcraft/guilds/${guildId}/update-notifications`).catch(e => {
           if (isDev) console.error('❌ Update notifications failed:', e);
           return { ok: false, json: async () => ({ enabled: true }) };
+        }),
+        fetch(`/api/comcraft/guilds/${guildId}/auto-kick-inactive`).catch(e => {
+          if (isDev) console.error('❌ Auto-kick-inactive failed:', e);
+          return { ok: false, json: async () => ({ enabled: false, days: null }) };
         })
       ]);
 
-      const [configData, channelsData, rolesData, updateNotificationsData] = await Promise.all([
+      const [configData, channelsData, rolesData, updateNotificationsData, autoKickData] = await Promise.all([
         configRes.json().catch(e => { if (isDev) console.error('❌ Config JSON parse failed:', e); return {}; }),
         channelsRes.json().catch(e => { if (isDev) console.error('❌ Channels JSON failed:', e); return { channels: { text: [] } }; }),
         rolesRes.json().catch(e => { if (isDev) console.error('❌ Roles JSON failed:', e); return { roles: [] }; }),
-        updateNotificationsRes.json().catch(e => { if (isDev) console.error('❌ Update notifications JSON failed:', e); return { enabled: true }; })
+        updateNotificationsRes.json().catch(e => { if (isDev) console.error('❌ Update notifications JSON failed:', e); return { enabled: true }; }),
+        autoKickRes.json().catch(e => { if (isDev) console.error('❌ Auto-kick JSON failed:', e); return { enabled: false, days: null }; })
       ]);
 
       // Set essential data
@@ -362,6 +373,11 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
         setUpdateNotificationChannelId(updateNotificationsData.channelId || 'none');
         setUpdateNotificationTypes(updateNotificationsData.types || ['feature', 'improvement', 'bugfix', 'security', 'breaking']);
         setUpdateNotificationRoleIds(updateNotificationsData.roleIds || []);
+      }
+
+      if (autoKickData && (autoKickData.enabled !== undefined || autoKickData.days !== undefined)) {
+        setAutoKickInactiveEnabled(autoKickData.enabled ?? false);
+        setAutoKickInactiveDays(autoKickData.days != null ? Number(autoKickData.days) : 30);
       }
 
       if (channelsData?.channels?.text) {
@@ -656,6 +672,38 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
     }
   };
 
+  const saveAutoKickInactiveSettings = async (updates: { enabled?: boolean; days?: number }) => {
+    setAutoKickInactiveSaving(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/auto-kick-inactive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: updates.enabled !== undefined ? updates.enabled : autoKickInactiveEnabled,
+          days: updates.days !== undefined ? updates.days : autoKickInactiveDays
+        })
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update setting');
+      }
+      const result = await response.json();
+      if (updates.enabled !== undefined) setAutoKickInactiveEnabled(result.enabled);
+      if (updates.days !== undefined) setAutoKickInactiveDays(result.days ?? 30);
+      toast({
+        title: 'Settings saved',
+        description: t('toast_saved')
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : t('toast_error'),
+        variant: 'destructive'
+      });
+    } finally {
+      setAutoKickInactiveSaving(false);
+    }
+  };
 
   const saveBirthdaySettings = async () => {
     setBirthdaySettingsSaving(true);
@@ -1454,6 +1502,63 @@ const [feedbackNotificationMessage, setFeedbackNotificationMessage] = useState(D
                     )}
                     <p className="text-xs text-muted-foreground mt-1">
                       Select roles to mention in notifications (leave empty to only mention server owner)
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* Auto Kick Inactive Members */}
+            <Card className="p-6 border-2 shadow-lg">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-lg">
+                      <span className="text-2xl">👋</span>
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold">{t('title')}</h2>
+                      <p className="text-sm text-muted-foreground">
+                        {t('description')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={autoKickInactiveEnabled}
+                    onCheckedChange={async (checked) => {
+                      await saveAutoKickInactiveSettings({ enabled: checked, days: checked ? autoKickInactiveDays : undefined });
+                    }}
+                    disabled={autoKickInactiveSaving}
+                  />
+                  {autoKickInactiveSaving && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+              {autoKickInactiveEnabled && (
+                <div className="space-y-4 pt-4 border-t">
+                  <div>
+                    <Label className="mb-2 font-semibold">{t('inactivity_days_label')}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={7}
+                        max={365}
+                        value={autoKickInactiveDays}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!isNaN(v)) setAutoKickInactiveDays(Math.min(365, Math.max(7, v)));
+                        }}
+                        onBlur={() => saveAutoKickInactiveSettings({ days: autoKickInactiveDays })}
+                        disabled={autoKickInactiveSaving}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">{t('days_range')}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t('inactivity_days_hint')}
                     </p>
                   </div>
                 </div>
