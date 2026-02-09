@@ -1,5 +1,6 @@
 const withNextIntl = require('next-intl/plugin')('./next-intl.config.ts');
 
+// Next.js config for Vercel
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
