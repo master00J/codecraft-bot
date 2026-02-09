@@ -43,6 +43,7 @@ class GiveawayManager {
     const run = async () => {
       try {
         await this.processDueGiveaways();
+        await this.processRecurringGiveaways();
       } catch (error) {
         console.error('Giveaway scheduler error:', error);
       }
@@ -93,6 +94,90 @@ class GiveawayManager {
         await this.endGiveaway(giveaway.id, { automated: true });
       } catch (error) {
         console.error(`Failed to process giveaway ${giveaway.id}:`, error);
+      }
+    }
+  }
+
+  async processRecurringGiveaways() {
+    const now = new Date().toISOString();
+    const { data: templates, error } = await this.supabase
+      .from('recurring_giveaways')
+      .select('*')
+      .eq('enabled', true)
+      .lte('next_run_at', now)
+      .limit(10);
+
+    if (error || !templates?.length) {
+      if (error) console.error('Recurring giveaways fetch error:', error);
+      return;
+    }
+
+    for (const t of templates) {
+      try {
+        const hasFeature = await configManager.hasFeature(t.guild_id, GIVEAWAY_FEATURE);
+        if (!hasFeature) {
+          await this.supabase
+            .from('recurring_giveaways')
+            .update({ next_run_at: new Date(Date.now() + t.interval_hours * 60 * 60 * 1000).toISOString(), updated_at: new Date().toISOString() })
+            .eq('id', t.id);
+          continue;
+        }
+
+        const guild = this.client.guilds?.cache?.get(t.guild_id) || await this.client.guilds?.fetch(t.guild_id).catch(() => null);
+        if (!guild) {
+          continue;
+        }
+
+        const channel = await guild.channels.fetch(t.channel_id).catch(() => null);
+        if (!channel?.isTextBased()) {
+          continue;
+        }
+
+        const hostMember = await guild.members.fetch(t.created_by_discord_id).catch(() => null);
+        const host = hostMember || guild.members.me;
+        const hostName = hostMember?.displayName || host?.user?.username || 'Server';
+
+        const embed = {
+          title: t.embed_title || undefined,
+          description: t.embed_description || undefined,
+          color: t.embed_color || undefined,
+          footer: t.embed_footer || undefined,
+          imageUrl: t.embed_image_url || undefined,
+          thumbnailUrl: t.embed_thumbnail_url || undefined,
+          joinButtonLabel: t.join_button_label || undefined,
+          linkLabel: t.cta_button_label || undefined,
+          linkUrl: t.cta_button_url || undefined,
+        };
+        const rewards = {
+          roleId: t.reward_role_id || undefined,
+          roleRemoveAfter: t.reward_role_remove_after ?? undefined,
+          dmMessage: t.reward_dm_message || undefined,
+          channelId: t.reward_channel_id || undefined,
+          channelMessage: t.reward_channel_message || undefined,
+        };
+
+        const result = await this.createGiveaway({
+          guild,
+          channel,
+          host,
+          hostName,
+          prize: t.prize,
+          durationMinutes: t.duration_minutes,
+          winnerCount: t.winner_count,
+          requiredRoleId: t.required_role_id || undefined,
+          embed,
+          rewards,
+        });
+
+        if (result.success) {
+          const nextRun = new Date(Date.now() + t.interval_hours * 60 * 60 * 1000).toISOString();
+          await this.supabase
+            .from('recurring_giveaways')
+            .update({ next_run_at: nextRun, updated_at: new Date().toISOString() })
+            .eq('id', t.id);
+        }
+      } catch (err) {
+        console.error(`Recurring giveaway ${t.id} failed:`, err.message);
       }
     }
   }

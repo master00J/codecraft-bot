@@ -35,6 +35,19 @@ interface GiveawayRecord {
   created_at: string;
 }
 
+interface RecurringGiveaway {
+  id: string;
+  guild_id: string;
+  channel_id: string;
+  prize: string;
+  winner_count: number;
+  duration_minutes: number;
+  interval_hours: number;
+  next_run_at: string;
+  enabled: boolean;
+  created_at: string;
+}
+
 interface DiscordChannel {
   id: string;
   name: string;
@@ -87,6 +100,18 @@ export default function GiveawaysPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'basic' | 'embed' | 'rewards'>('basic');
 
+  const [recurringGiveaways, setRecurringGiveaways] = useState<RecurringGiveaway[]>([]);
+  const [recurringForm, setRecurringForm] = useState({
+    prize: '',
+    channelId: '',
+    durationMinutes: 60,
+    winnerCount: 1,
+    intervalHours: 24,
+    firstRunAt: '',
+  });
+  const [recurringSaving, setRecurringSaving] = useState(false);
+  const [recurringActionId, setRecurringActionId] = useState<string | null>(null);
+
   useEffect(() => {
     if (guildId) {
       void fetchData();
@@ -95,8 +120,11 @@ export default function GiveawaysPage() {
   }, [guildId]);
 
   useEffect(() => {
-    if (channels.length > 0 && !formState.channelId) {
-      setFormState((current) => ({ ...current, channelId: current.channelId || channels[0].id }));
+    if (channels.length > 0) {
+      if (!formState.channelId) {
+        setFormState((current) => ({ ...current, channelId: channels[0].id }));
+      }
+      setRecurringForm((f) => (f.channelId ? f : { ...f, channelId: channels[0].id }));
     }
   }, [channels, formState.channelId]);
 
@@ -177,13 +205,18 @@ export default function GiveawaysPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [giveawaysRes, channelsRes, rolesRes] = await Promise.all([
+      const [giveawaysRes, channelsRes, rolesRes, recurringRes] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/giveaways`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/channels`),
         fetch(`/api/comcraft/guilds/${guildId}/discord/roles`),
+        fetch(`/api/comcraft/guilds/${guildId}/giveaways/recurring`),
       ]);
 
       const giveawaysData = await giveawaysRes.json();
+      const recurringData = await recurringRes.json();
+      if (recurringRes.ok && Array.isArray(recurringData.recurring)) {
+        setRecurringGiveaways(recurringData.recurring);
+      }
       if (!giveawaysRes.ok) {
         throw new Error(giveawaysData.error || 'Failed to load giveaways');
       }
@@ -380,6 +413,80 @@ export default function GiveawaysPage() {
   const lookupChannelName = (channelId: string) => {
     const channel = channels.find((item) => item.id === channelId);
     return channel ? channel.name : t('labels.unknownChannel');
+  };
+
+  const INTERVAL_PRESETS: { value: number; label: string }[] = [
+    { value: 6, label: t('recurring.interval6h') },
+    { value: 12, label: t('recurring.interval12h') },
+    { value: 24, label: t('recurring.interval24h') },
+    { value: 48, label: t('recurring.interval48h') },
+    { value: 168, label: t('recurring.intervalWeekly') },
+  ];
+
+  const handleCreateRecurring = async () => {
+    if (!recurringForm.prize.trim() || !recurringForm.channelId) {
+      toast({ title: t('toast.validation.title'), description: t('recurring.validationPrizeChannel'), variant: 'destructive' });
+      return;
+    }
+    setRecurringSaving(true);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/giveaways/recurring`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prize: recurringForm.prize.trim(),
+          channelId: recurringForm.channelId,
+          durationMinutes: recurringForm.durationMinutes,
+          winnerCount: recurringForm.winnerCount,
+          intervalHours: recurringForm.intervalHours,
+          firstRunAt: recurringForm.firstRunAt || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create');
+      toast({ title: t('recurring.toastCreated.title'), description: t('recurring.toastCreated.description') });
+      setRecurringForm({ prize: '', channelId: recurringForm.channelId, durationMinutes: 60, winnerCount: 1, intervalHours: 24, firstRunAt: '' });
+      await fetchData();
+    } catch (e: any) {
+      toast({ title: t('toast.error.title'), description: e.message || t('toast.error.description'), variant: 'destructive' });
+    } finally {
+      setRecurringSaving(false);
+    }
+  };
+
+  const handleToggleRecurring = async (id: string, enabled: boolean) => {
+    setRecurringActionId(id);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/giveaways/recurring/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update');
+      await fetchData();
+    } catch (e: any) {
+      toast({ title: t('toast.error.title'), description: e.message, variant: 'destructive' });
+    } finally {
+      setRecurringActionId(null);
+    }
+  };
+
+  const handleDeleteRecurring = async (id: string) => {
+    setRecurringActionId(id);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/giveaways/recurring/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete');
+      }
+      toast({ title: t('recurring.toastDeleted.title'), description: t('recurring.toastDeleted.description') });
+      await fetchData();
+    } catch (e: any) {
+      toast({ title: t('toast.error.title'), description: e.message, variant: 'destructive' });
+    } finally {
+      setRecurringActionId(null);
+    }
   };
 
   return (
@@ -727,6 +834,120 @@ export default function GiveawaysPage() {
           )}
         </div>
       </div>
+
+      <Card className="p-6 space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">{t('recurring.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('recurring.description')}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 items-end">
+          <div className="space-y-1.5">
+            <Label>{t('recurring.prize')}</Label>
+            <Input
+              value={recurringForm.prize}
+              onChange={(e) => setRecurringForm((f) => ({ ...f, prize: e.target.value }))}
+              placeholder={t('fields.prizePlaceholder')}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('recurring.channel')}</Label>
+            <Select
+              value={recurringForm.channelId}
+              onValueChange={(v) => setRecurringForm((f) => ({ ...f, channelId: v }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t('fields.channelPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {channels.map((ch) => (
+                  <SelectItem key={ch.id} value={ch.id}>#{ch.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('recurring.duration')}</Label>
+            <Input
+              type="number"
+              min={1}
+              max={10080}
+              value={recurringForm.durationMinutes}
+              onChange={(e) => setRecurringForm((f) => ({ ...f, durationMinutes: Number(e.target.value) || 60 }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('recurring.interval')}</Label>
+            <Select
+              value={INTERVAL_PRESETS.some((p) => p.value === recurringForm.intervalHours) ? String(recurringForm.intervalHours) : 'custom'}
+              onValueChange={(v) => setRecurringForm((f) => ({ ...f, intervalHours: v === 'custom' ? 24 : Number(v) }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INTERVAL_PRESETS.map((p) => (
+                  <SelectItem key={p.value} value={String(p.value)}>{p.label}</SelectItem>
+                ))}
+                <SelectItem value="custom">{t('recurring.intervalCustom')}</SelectItem>
+              </SelectContent>
+            </Select>
+            {!INTERVAL_PRESETS.some((p) => p.value === recurringForm.intervalHours) && (
+              <Input
+                type="number"
+                min={1}
+                max={8760}
+                value={recurringForm.intervalHours}
+                onChange={(e) => setRecurringForm((f) => ({ ...f, intervalHours: Number(e.target.value) || 24 }))}
+                className="mt-1"
+              />
+            )}
+          </div>
+          <Button onClick={handleCreateRecurring} disabled={recurringSaving || !featureEnabled}>
+            {recurringSaving ? t('actions.saving') : t('recurring.add')}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{t('recurring.hint')}</p>
+        {recurringGiveaways.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('recurring.empty')}</p>
+        ) : (
+          <div className="space-y-2">
+            {recurringGiveaways.map((r) => (
+              <div
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+              >
+                <div>
+                  <span className="font-medium">{r.prize}</span>
+                  <span className="text-muted-foreground text-sm ml-2">
+                    #{lookupChannelName(r.channel_id)} · {r.duration_minutes}m · {t('recurring.every', { hours: r.interval_hours })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {t('recurring.nextRun')} {formatDateTime(r.next_run_at)}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant={r.enabled ? 'secondary' : 'default'}
+                    onClick={() => handleToggleRecurring(r.id, !r.enabled)}
+                    disabled={recurringActionId === r.id}
+                  >
+                    {r.enabled ? t('recurring.disable') : t('recurring.enable')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDeleteRecurring(r.id)}
+                    disabled={recurringActionId === r.id}
+                  >
+                    {t('recurring.delete')}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card className="p-6 space-y-4">
         <div className="flex items-center justify-between">
