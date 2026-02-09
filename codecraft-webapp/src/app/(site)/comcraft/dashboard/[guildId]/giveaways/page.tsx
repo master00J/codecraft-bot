@@ -58,9 +58,23 @@ interface DiscordRole {
   name: string;
 }
 
+type DurationUnit = 'minutes' | 'hours' | 'days';
+type IntervalUnit = 'hours' | 'days';
+
+function toMinutes(value: number, unit: DurationUnit): number {
+  if (unit === 'minutes') return Math.round(value);
+  if (unit === 'hours') return Math.round(value * 60);
+  return Math.round(value * 24 * 60); // days
+}
+
+function toIntervalHours(value: number, unit: IntervalUnit): number {
+  return unit === 'hours' ? value : value * 24;
+}
+
 const DEFAULT_FORM = {
   prize: '',
-  durationMinutes: 60,
+  durationValue: 60,
+  durationUnit: 'minutes' as DurationUnit,
   channelId: '',
   winnerCount: 1,
   requiredRoleId: 'none',
@@ -104,9 +118,12 @@ export default function GiveawaysPage() {
   const [recurringForm, setRecurringForm] = useState({
     prize: '',
     channelId: '',
-    durationMinutes: 60,
+    durationValue: 60,
+    durationUnit: 'minutes' as DurationUnit,
     winnerCount: 1,
-    intervalHours: 24,
+    intervalPreset: '24' as string,
+    intervalCustomValue: 24,
+    intervalCustomUnit: 'hours' as IntervalUnit,
     firstRunAt: '',
   });
   const [recurringSaving, setRecurringSaving] = useState(false);
@@ -120,11 +137,12 @@ export default function GiveawaysPage() {
   }, [guildId]);
 
   useEffect(() => {
-    if (channels.length > 0) {
+    const first = channels?.[0];
+    if (first?.id) {
       if (!formState.channelId) {
-        setFormState((current) => ({ ...current, channelId: channels[0].id }));
+        setFormState((current) => ({ ...current, channelId: first.id }));
       }
-      setRecurringForm((f) => (f.channelId ? f : { ...f, channelId: channels[0].id }));
+      setRecurringForm((f) => (f.channelId ? f : { ...f, channelId: first.id }));
     }
   }, [channels, formState.channelId]);
 
@@ -197,8 +215,9 @@ export default function GiveawaysPage() {
   };
 
   const refreshDefaultChannel = (channelList: DiscordChannel[]) => {
-    if (!formState.channelId && channelList.length > 0) {
-      setFormState((current) => ({ ...current, channelId: channelList[0].id }));
+    const first = channelList?.[0];
+    if (!formState.channelId && first?.id) {
+      setFormState((current) => ({ ...current, channelId: first.id }));
     }
   };
 
@@ -228,7 +247,9 @@ export default function GiveawaysPage() {
       const channelsData = await channelsRes.json();
       if (channelsRes.ok && channelsData.success !== false) {
         const textChannels: DiscordChannel[] = Array.isArray(channelsData.channels?.text)
-          ? channelsData.channels.text.map((channel: any) => ({ id: channel.id, name: channel.name }))
+          ? channelsData.channels.text
+              .filter((ch: any) => ch && ch.id)
+              .map((channel: any) => ({ id: String(channel.id), name: String(channel.name ?? '') }))
           : [];
         setChannels(textChannels);
         refreshDefaultChannel(textChannels);
@@ -237,7 +258,9 @@ export default function GiveawaysPage() {
       const rolesData = await rolesRes.json();
       if (rolesRes.ok && rolesData.success !== false) {
         const mappedRoles: DiscordRole[] = Array.isArray(rolesData.roles)
-          ? rolesData.roles.map((role: any) => ({ id: role.id, name: role.name }))
+          ? rolesData.roles
+              .filter((r: any) => r && r.id)
+              .map((role: any) => ({ id: String(role.id), name: String(role.name ?? '') }))
           : [];
         setRoles(mappedRoles);
       }
@@ -318,7 +341,7 @@ export default function GiveawaysPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prize: formState.prize.trim(),
-          durationMinutes: Number(formState.durationMinutes),
+          durationMinutes: toMinutes(Number(formState.durationValue) || 60, formState.durationUnit),
           channelId: formState.channelId,
           winnerCount: Number(formState.winnerCount) || 1,
           requiredRoleId: formState.requiredRoleId === 'none' ? null : formState.requiredRoleId,
@@ -423,6 +446,10 @@ export default function GiveawaysPage() {
     { value: 168, label: t('recurring.intervalWeekly') },
   ];
 
+  const recurringIntervalHours = recurringForm.intervalPreset === 'custom'
+    ? toIntervalHours(Number(recurringForm.intervalCustomValue) || 24, recurringForm.intervalCustomUnit)
+    : Number(recurringForm.intervalPreset) || 24;
+
   const handleCreateRecurring = async () => {
     if (!recurringForm.prize.trim() || !recurringForm.channelId) {
       toast({ title: t('toast.validation.title'), description: t('recurring.validationPrizeChannel'), variant: 'destructive' });
@@ -436,16 +463,26 @@ export default function GiveawaysPage() {
         body: JSON.stringify({
           prize: recurringForm.prize.trim(),
           channelId: recurringForm.channelId,
-          durationMinutes: recurringForm.durationMinutes,
+          durationMinutes: toMinutes(Number(recurringForm.durationValue) || 60, recurringForm.durationUnit),
           winnerCount: recurringForm.winnerCount,
-          intervalHours: recurringForm.intervalHours,
+          intervalHours: recurringIntervalHours,
           firstRunAt: recurringForm.firstRunAt || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create');
       toast({ title: t('recurring.toastCreated.title'), description: t('recurring.toastCreated.description') });
-      setRecurringForm({ prize: '', channelId: recurringForm.channelId, durationMinutes: 60, winnerCount: 1, intervalHours: 24, firstRunAt: '' });
+      setRecurringForm({
+        prize: '',
+        channelId: recurringForm.channelId,
+        durationValue: 60,
+        durationUnit: 'minutes',
+        winnerCount: 1,
+        intervalPreset: '24',
+        intervalCustomValue: 24,
+        intervalCustomUnit: 'hours',
+        firstRunAt: '',
+      });
       await fetchData();
     } catch (e: any) {
       toast({ title: t('toast.error.title'), description: e.message || t('toast.error.description'), variant: 'destructive' });
@@ -552,14 +589,30 @@ export default function GiveawaysPage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
                         <Label htmlFor="giveaway-duration">{t('fields.duration')}</Label>
-                        <Input
-                          id="giveaway-duration"
-                          type="number"
-                          min={1}
-                          max={10080}
-                          value={formState.durationMinutes}
-                          onChange={(event) => setFormState((current) => ({ ...current, durationMinutes: Number(event.target.value) }))}
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            id="giveaway-duration"
+                            type="number"
+                            min={1}
+                            max={formState.durationUnit === 'minutes' ? 10080 : formState.durationUnit === 'hours' ? 168 : 7}
+                            value={formState.durationValue}
+                            onChange={(e) => setFormState((c) => ({ ...c, durationValue: Number(e.target.value) || 1 }))}
+                            className="flex-1"
+                          />
+                          <Select
+                            value={formState.durationUnit}
+                            onValueChange={(v) => setFormState((c) => ({ ...c, durationUnit: v as DurationUnit }))}
+                          >
+                            <SelectTrigger className="w-[120px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="minutes">{t('fields.durationUnitMinutes')}</SelectItem>
+                              <SelectItem value="hours">{t('fields.durationUnitHours')}</SelectItem>
+                              <SelectItem value="days">{t('fields.durationUnitDays')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <p className="text-xs text-muted-foreground">{t('fields.durationHelp')}</p>
                       </div>
                       <div className="space-y-1.5">
@@ -590,7 +643,7 @@ export default function GiveawaysPage() {
                               {t('fields.noChannels')}
                             </SelectItem>
                           )}
-                          {channels.map((channel) => (
+                          {channels.filter((ch) => ch?.id).map((channel) => (
                             <SelectItem key={channel.id} value={channel.id}>
                               #{channel.name}
                             </SelectItem>
@@ -755,7 +808,7 @@ export default function GiveawaysPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">{t('fields.rewardChannelNone')}</SelectItem>
-                            {channels.map((channel) => (
+                            {channels.filter((ch) => ch?.id).map((channel) => (
                               <SelectItem key={channel.id} value={channel.id}>
                                 #{channel.name}
                               </SelectItem>
@@ -859,7 +912,7 @@ export default function GiveawaysPage() {
                 <SelectValue placeholder={t('fields.channelPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                {channels.map((ch) => (
+                {channels.filter((ch) => ch?.id).map((ch) => (
                   <SelectItem key={ch.id} value={ch.id}>#{ch.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -867,19 +920,35 @@ export default function GiveawaysPage() {
           </div>
           <div className="space-y-1.5">
             <Label>{t('recurring.duration')}</Label>
-            <Input
-              type="number"
-              min={1}
-              max={10080}
-              value={recurringForm.durationMinutes}
-              onChange={(e) => setRecurringForm((f) => ({ ...f, durationMinutes: Number(e.target.value) || 60 }))}
-            />
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={recurringForm.durationUnit === 'minutes' ? 10080 : recurringForm.durationUnit === 'hours' ? 168 : 7}
+                value={recurringForm.durationValue}
+                onChange={(e) => setRecurringForm((f) => ({ ...f, durationValue: Number(e.target.value) || 1 }))}
+                className="flex-1"
+              />
+              <Select
+                value={recurringForm.durationUnit}
+                onValueChange={(v) => setRecurringForm((f) => ({ ...f, durationUnit: v as DurationUnit }))}
+              >
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="minutes">{t('fields.durationUnitMinutes')}</SelectItem>
+                  <SelectItem value="hours">{t('fields.durationUnitHours')}</SelectItem>
+                  <SelectItem value="days">{t('fields.durationUnitDays')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>{t('recurring.interval')}</Label>
             <Select
-              value={INTERVAL_PRESETS.some((p) => p.value === recurringForm.intervalHours) ? String(recurringForm.intervalHours) : 'custom'}
-              onValueChange={(v) => setRecurringForm((f) => ({ ...f, intervalHours: v === 'custom' ? 24 : Number(v) }))}
+              value={recurringForm.intervalPreset}
+              onValueChange={(v) => setRecurringForm((f) => ({ ...f, intervalPreset: v, intervalCustomValue: v === 'custom' ? recurringForm.intervalCustomValue : Number(v) || 24, intervalCustomUnit: recurringForm.intervalCustomUnit }))}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -891,15 +960,29 @@ export default function GiveawaysPage() {
                 <SelectItem value="custom">{t('recurring.intervalCustom')}</SelectItem>
               </SelectContent>
             </Select>
-            {!INTERVAL_PRESETS.some((p) => p.value === recurringForm.intervalHours) && (
-              <Input
-                type="number"
-                min={1}
-                max={8760}
-                value={recurringForm.intervalHours}
-                onChange={(e) => setRecurringForm((f) => ({ ...f, intervalHours: Number(e.target.value) || 24 }))}
-                className="mt-1"
-              />
+            {recurringForm.intervalPreset === 'custom' && (
+              <div className="flex gap-2 mt-1">
+                <Input
+                  type="number"
+                  min={1}
+                  max={recurringForm.intervalCustomUnit === 'days' ? 365 : 8760}
+                  value={recurringForm.intervalCustomValue}
+                  onChange={(e) => setRecurringForm((f) => ({ ...f, intervalCustomValue: Number(e.target.value) || 1 }))}
+                  className="flex-1"
+                />
+                <Select
+                  value={recurringForm.intervalCustomUnit}
+                  onValueChange={(v) => setRecurringForm((f) => ({ ...f, intervalCustomUnit: v as IntervalUnit }))}
+                >
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hours">{t('recurring.intervalUnitHours')}</SelectItem>
+                    <SelectItem value="days">{t('recurring.intervalUnitDays')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </div>
           <Button onClick={handleCreateRecurring} disabled={recurringSaving || !featureEnabled}>
