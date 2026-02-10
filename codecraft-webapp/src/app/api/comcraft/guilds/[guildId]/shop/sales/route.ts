@@ -33,7 +33,7 @@ export async function GET(
       console.error('Shop sales fetch error:', error);
       return NextResponse.json({ error: 'Failed to load sales' }, { status: 500 });
     }
-    const itemIds = [...new Set((orders ?? []).map((o: { shop_item_id: string }) => o.shop_item_id))];
+    const itemIds = Array.from(new Set((orders ?? []).map((o: { shop_item_id: string }) => o.shop_item_id)));
     let itemNames: Record<string, string> = {};
     if (itemIds.length > 0) {
       const { data: items } = await supabaseAdmin

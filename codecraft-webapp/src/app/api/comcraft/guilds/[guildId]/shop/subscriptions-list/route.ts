@@ -33,7 +33,7 @@ export async function GET(
       console.error('Shop subscriptions fetch error:', error);
       return NextResponse.json({ error: 'Failed to load subscriptions' }, { status: 500 });
     }
-    const itemIds = [...new Set((rows ?? []).map((r: { shop_item_id: string }) => r.shop_item_id))];
+    const itemIds = Array.from(new Set((rows ?? []).map((r: { shop_item_id: string }) => r.shop_item_id)));
     let itemNames: Record<string, string> = {};
     if (itemIds.length > 0) {
       const { data: items } = await supabaseAdmin
