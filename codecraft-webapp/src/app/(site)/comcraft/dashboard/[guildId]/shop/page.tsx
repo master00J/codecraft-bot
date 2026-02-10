@@ -688,12 +688,16 @@ export default function ShopDashboard() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, color: settingsForm.storePrimaryColor || '#5865F2' }),
               });
-              if (!res.ok) throw new Error();
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                toast({ title: 'Error', description: data.error || 'Could not create category.', variant: 'destructive' });
+                return;
+              }
               toast({ title: 'Added', description: 'Category created.' });
               loadCategories();
               (e.currentTarget.elements.namedItem('catName') as HTMLInputElement).value = '';
-            } catch {
-              toast({ title: 'Error', description: 'Could not create category.', variant: 'destructive' });
+            } catch (e) {
+              toast({ title: 'Error', description: e instanceof Error ? e.message : 'Could not create category.', variant: 'destructive' });
             }
           }}
         >

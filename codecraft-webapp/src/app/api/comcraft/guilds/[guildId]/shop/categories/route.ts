@@ -98,7 +98,10 @@ export async function POST(
 
     if (error) {
       console.error('Shop category insert error:', error);
-      return NextResponse.json({ error: 'Failed to create category' }, { status: 500 });
+      const message = error.code === '42P01'
+        ? 'Categories table not found. Run the guild-shop-professional.sql migration in Supabase.'
+        : (error.message || 'Failed to create category');
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     return NextResponse.json(data);
