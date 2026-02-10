@@ -389,7 +389,7 @@ export default function StorePage() {
               const priceLabel = isSub
                 ? `${formatPrice(item.price_amount_cents, item.currency)}/${item.subscription_interval === 'year' ? 'year' : 'month'}`
                 : formatPrice(item.price_amount_cents, item.currency);
-              const soldOut = item.stock_remaining !== null && item.stock_remaining <= 0;
+              const soldOut = item.stock_remaining != null && item.stock_remaining <= 0;
               return (
                 <Card
                   key={item.id}
