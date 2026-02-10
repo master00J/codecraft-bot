@@ -14,9 +14,9 @@ function getKey(identifier: string): string {
 
 function cleanup() {
   const now = Date.now();
-  for (const [key, v] of store.entries()) {
+  Array.from(store.entries()).forEach(([key, v]) => {
     if (v.resetAt < now) store.delete(key);
-  }
+  });
 }
 
 export function checkRateLimit(identifier: string): { allowed: boolean; remaining: number } {
