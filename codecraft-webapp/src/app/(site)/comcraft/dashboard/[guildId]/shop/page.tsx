@@ -680,7 +680,8 @@ export default function ShopDashboard() {
           className="mt-3 flex flex-wrap gap-2 items-end"
           onSubmit={async (e) => {
             e.preventDefault();
-            const name = (e.currentTarget.elements.namedItem('catName') as HTMLInputElement)?.value?.trim();
+            const form = e.currentTarget;
+            const name = (form.elements.namedItem('catName') as HTMLInputElement)?.value?.trim();
             if (!name) return;
             try {
               const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/categories`, {
@@ -695,9 +696,10 @@ export default function ShopDashboard() {
               }
               toast({ title: 'Added', description: 'Category created.' });
               loadCategories();
-              (e.currentTarget.elements.namedItem('catName') as HTMLInputElement).value = '';
-            } catch (e) {
-              toast({ title: 'Error', description: e instanceof Error ? e.message : 'Could not create category.', variant: 'destructive' });
+              const input = form.elements.namedItem('catName') as HTMLInputElement | null;
+              if (input) input.value = '';
+            } catch (err) {
+              toast({ title: 'Error', description: err instanceof Error ? err.message : 'Could not create category.', variant: 'destructive' });
             }
           }}
         >
