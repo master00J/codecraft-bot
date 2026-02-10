@@ -110,6 +110,10 @@ export async function PATCH(
       update.subscription_interval = null;
       update.subscription_interval_count = null;
     }
+    if (body.categoryId !== undefined) update.category_id = typeof body.categoryId === 'string' && body.categoryId.trim() ? body.categoryId.trim() : null;
+    if (typeof body.imageUrl === 'string') update.image_url = body.imageUrl.trim() || null;
+    if (body.compareAtPriceCents !== undefined) update.compare_at_price_cents = typeof body.compareAtPriceCents === 'number' && body.compareAtPriceCents >= 0 ? body.compareAtPriceCents : null;
+    if (body.maxQuantityPerUser !== undefined) update.max_quantity_per_user = typeof body.maxQuantityPerUser === 'number' && body.maxQuantityPerUser >= 1 ? body.maxQuantityPerUser : null;
 
     const { data, error } = await supabaseAdmin
       .from('guild_shop_items')

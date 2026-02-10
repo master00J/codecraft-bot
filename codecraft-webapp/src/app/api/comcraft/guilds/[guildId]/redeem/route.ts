@@ -1,12 +1,13 @@
 /**
  * Redeem a shop code (gift card). Session required; assigns the role to the logged-in user.
+ * Rate limited per IP.
  */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getGuildAccess } from '@/lib/comcraft/access-control';
+import { checkRateLimit, getIdentifier } from '@/lib/comcraft/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,13 @@ export async function POST(
     let discordId: string | null = null;
 
     const internalSecret = request.headers.get('x-internal-secret');
+    if (!internalSecret || internalSecret !== INTERNAL_SECRET) {
+      const id = getIdentifier(request);
+      const { allowed } = checkRateLimit(`redeem:${id}`);
+      if (!allowed) {
+        return NextResponse.json({ error: 'Too many attempts. Try again in a minute.' }, { status: 429 });
+      }
+    }
     if (INTERNAL_SECRET && internalSecret === INTERNAL_SECRET) {
       const body = await request.json();
       discordId = typeof body.discordId === 'string' ? body.discordId.trim() : null;

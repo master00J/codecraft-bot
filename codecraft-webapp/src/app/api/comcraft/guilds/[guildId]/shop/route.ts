@@ -93,6 +93,10 @@ export async function POST(
     const subscriptionIntervalCount = billingType === 'subscription'
       ? (typeof body.subscriptionIntervalCount === 'number' && body.subscriptionIntervalCount >= 1 ? body.subscriptionIntervalCount : 1)
       : null;
+    const categoryId = typeof body.categoryId === 'string' && body.categoryId.trim() ? body.categoryId.trim() : null;
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : null;
+    const compareAtPriceCents = typeof body.compareAtPriceCents === 'number' && body.compareAtPriceCents >= 0 ? body.compareAtPriceCents : null;
+    const maxQuantityPerUser = typeof body.maxQuantityPerUser === 'number' && body.maxQuantityPerUser >= 1 ? body.maxQuantityPerUser : null;
 
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
@@ -131,6 +135,10 @@ export async function POST(
         billing_type: billingType,
         subscription_interval: subscriptionInterval,
         subscription_interval_count: subscriptionIntervalCount,
+        category_id: categoryId,
+        image_url: imageUrl,
+        compare_at_price_cents: compareAtPriceCents,
+        max_quantity_per_user: maxQuantityPerUser,
         updated_at: new Date().toISOString(),
       })
       .select()

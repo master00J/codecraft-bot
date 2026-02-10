@@ -2,6 +2,7 @@
  * Create Stripe Checkout Session or PayPal order for a shop item.
  * Authenticated: uses session discordId. Or internal call with body.discordId (e.g. from bot).
  * Query: itemId, provider=stripe|paypal (default stripe).
+ * Body: { couponCode?: string }. Rate limited; respects max_quantity_per_user and coupons.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,6 +11,8 @@ import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getGuildAccess } from '@/lib/comcraft/access-control';
 import { getPayPalAccessToken, createPayPalOrder } from '@/lib/comcraft/paypal';
+import { checkRateLimit, getIdentifier } from '@/lib/comcraft/rate-limit';
+import { validateCoupon } from '@/lib/comcraft/shop-coupon';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +26,11 @@ export async function POST(
 
   try {
     let discordId: string | null = null;
+    let body: { discordId?: string; couponCode?: string } = {};
 
     const internalSecret = request.headers.get('x-internal-secret');
     if (INTERNAL_SECRET && internalSecret === INTERNAL_SECRET) {
-      const body = await request.json();
+      body = await request.json().catch(() => ({}));
       discordId = typeof body.discordId === 'string' ? body.discordId.trim() : null;
       if (!discordId) {
         return NextResponse.json(
@@ -35,6 +39,14 @@ export async function POST(
         );
       }
     } else {
+      const id = getIdentifier(request);
+      const { allowed } = checkRateLimit(`checkout:${id}`);
+      if (!allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please try again in a minute.' },
+          { status: 429 }
+        );
+      }
       const session = await getServerSession(authOptions);
       if (!session?.user) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -48,6 +60,7 @@ export async function POST(
       if (!access.allowed) {
         return NextResponse.json({ error: 'Access denied' }, { status: 403 });
       }
+      body = await request.json().catch(() => ({}));
     }
 
     const { searchParams } = new URL(request.url);
@@ -59,7 +72,7 @@ export async function POST(
 
     const { data: item, error: itemError } = await supabaseAdmin
       .from('guild_shop_items')
-      .select('id, name, description, price_amount_cents, currency, discord_role_id, enabled, delivery_type, billing_type, subscription_interval, subscription_interval_count')
+      .select('id, name, description, price_amount_cents, currency, discord_role_id, enabled, delivery_type, billing_type, subscription_interval, subscription_interval_count, max_quantity_per_user')
       .eq('guild_id', guildId)
       .eq('id', itemId)
       .eq('enabled', true)
@@ -72,6 +85,8 @@ export async function POST(
     const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
     const billingType = (item as { billing_type?: string }).billing_type || 'one_time';
     const isSubscription = billingType === 'subscription';
+    const maxQty = (item as { max_quantity_per_user?: number | null }).max_quantity_per_user ?? null;
+
     if (isSubscription && deliveryType !== 'role') {
       return NextResponse.json(
         { error: 'Subscription items must be role delivery.' },
@@ -92,6 +107,49 @@ export async function POST(
       }
     }
 
+    if (maxQty != null && maxQty >= 1 && discordId) {
+      if (isSubscription) {
+        const { count } = await supabaseAdmin
+          .from('guild_shop_subscriptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('guild_id', guildId)
+          .eq('discord_user_id', discordId)
+          .eq('shop_item_id', itemId)
+          .eq('status', 'active');
+        if ((count ?? 0) >= maxQty) {
+          return NextResponse.json(
+            { error: `You can have at most ${maxQty} active subscription(s) for this item.` },
+            { status: 400 }
+          );
+        }
+      } else {
+        const { count } = await supabaseAdmin
+          .from('guild_shop_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('guild_id', guildId)
+          .eq('discord_user_id', discordId)
+          .eq('shop_item_id', itemId);
+        if ((count ?? 0) >= maxQty) {
+          return NextResponse.json(
+            { error: `You can purchase this item at most ${maxQty} time(s).` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    let priceCents = item.price_amount_cents;
+    let couponId: string | null = null;
+    const couponCode = typeof body.couponCode === 'string' ? body.couponCode.trim() : '';
+    if (couponCode) {
+      const result = await validateCoupon(guildId, couponCode, priceCents, item.currency || 'eur');
+      if (!result.valid) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      priceCents = result.finalCents;
+      couponId = result.couponId;
+    }
+
     const baseUrl =
       process.env.NEXTAUTH_URL ??
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
@@ -102,7 +160,7 @@ export async function POST(
         : '');
     const cancelUrl = `${baseUrl}/comcraft/pay?guildId=${guildId}&shop=1`;
 
-    const amountValue = (item.price_amount_cents / 100).toFixed(2);
+    const amountValue = (priceCents / 100).toFixed(2);
     const currencyCode = (item.currency || 'eur').toUpperCase().slice(0, 3);
 
     if (provider === 'paypal') {
@@ -175,7 +233,6 @@ export async function POST(
     params.append('cancel_url', cancelUrl);
     params.append('line_items[0][quantity]', '1');
     params.append('line_items[0][price_data][currency]', (item.currency || 'eur').toLowerCase());
-    params.append('line_items[0][price_data][unit_amount]', String(item.price_amount_cents));
     params.append('line_items[0][price_data][product_data][name]', item.name);
     if (item.description) {
       params.append('line_items[0][price_data][product_data][description]', item.description);
@@ -189,6 +246,10 @@ export async function POST(
     params.append('metadata[guild_id]', guildId);
     params.append('metadata[shop_item_id]', item.id);
     params.append('metadata[discord_id]', discordId);
+    if (couponId) {
+      params.append('metadata[coupon_id]', couponId);
+    }
+    params.append('line_items[0][price_data][unit_amount]', String(priceCents));
 
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',

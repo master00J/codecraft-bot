@@ -1,11 +1,9 @@
 'use client';
 
 /**
- * Public store page: browse and buy server shop items (roles, subscriptions, etc.).
- * Sign in with Discord to purchase; payment via Stripe or PayPal.
- * Supports store branding (name, description, color, logo, footer).
+ * Public store page: browse and buy server shop items.
+ * Categories, images, trust badges, testimonials, owned/subscribed status, coupons, stock.
  */
-
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
@@ -13,17 +11,28 @@ import Image from 'next/image';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ShoppingBag, LogIn, ShieldCheck, BadgeCheck } from 'lucide-react';
+import { Loader2, ShoppingBag, LogIn, ShieldCheck, BadgeCheck, ImageIcon } from 'lucide-react';
+
+interface StoreCategory {
+  id: string;
+  name: string;
+  color: string | null;
+  sort_order: number;
+}
 
 interface StoreItem {
   id: string;
   name: string;
   description: string | null;
   price_amount_cents: number;
+  compare_at_price_cents?: number | null;
   currency: string;
   billing_type?: 'one_time' | 'subscription';
   subscription_interval?: string | null;
   subscription_interval_count?: number | null;
+  image_url?: string | null;
+  category_id?: string | null;
+  stock_remaining?: number | null;
 }
 
 interface StoreSettings {
@@ -32,6 +41,16 @@ interface StoreSettings {
   storePrimaryColor: string;
   storeLogoUrl: string | null;
   storeFooterText: string | null;
+  trustBadges?: { text: string }[] | null;
+  testimonials?: { quote: string; author?: string }[] | null;
+  termsUrl?: string | null;
+  refundPolicyUrl?: string | null;
+  currencyDisclaimer?: string | null;
+}
+
+interface MyStatus {
+  ownedItemIds: string[];
+  subscriptions: { itemId: string; currentPeriodEnd: string; stripeSubscriptionId: string | null }[];
 }
 
 function formatPrice(cents: number, currency: string) {
@@ -45,11 +64,15 @@ export default function StorePage() {
   const { data: session, status } = useSession();
   const { toast } = useToast();
   const [items, setItems] = useState<StoreItem[]>([]);
+  const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
+  const [myStatus, setMyStatus] = useState<MyStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!guildId) return;
@@ -57,13 +80,36 @@ export default function StorePage() {
       .then((res) => res.json())
       .then((data) => {
         setItems(data.items ?? []);
+        setCategories(data.categories ?? []);
         setSettings(data.settings ?? null);
       })
-      .catch(() => { setItems([]); setSettings(null); })
+      .catch(() => {
+        setItems([]);
+        setCategories([]);
+        setSettings(null);
+      })
       .finally(() => setLoading(false));
   }, [guildId]);
 
+  useEffect(() => {
+    if (!guildId || status !== 'authenticated') return;
+    fetch(`/api/comcraft/guilds/${guildId}/shop/my-status`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => setMyStatus(data))
+      .catch(() => setMyStatus(null));
+  }, [guildId, status]);
+
+  useEffect(() => {
+    if (settings?.storeName) {
+      document.title = `${settings.storeName} | Store`;
+    }
+  }, [settings?.storeName]);
+
   const primaryColor = settings?.storePrimaryColor || '#5865F2';
+  const filteredItems =
+    selectedCategoryId == null
+      ? items
+      : items.filter((i) => i.category_id === selectedCategoryId);
 
   async function handleBuy(itemId: string) {
     if (status !== 'authenticated') {
@@ -74,7 +120,12 @@ export default function StorePage() {
     try {
       const res = await fetch(
         `/api/comcraft/guilds/${guildId}/shop/checkout?itemId=${encodeURIComponent(itemId)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ couponCode: couponCode.trim() || undefined }),
+        }
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -90,14 +141,29 @@ export default function StorePage() {
         return;
       }
       toast({ title: 'Error', description: 'No checkout URL received.', variant: 'destructive' });
-    } catch (e) {
-      toast({
-        title: 'Error',
-        description: 'Something went wrong. Try again.',
-        variant: 'destructive',
-      });
+    } catch {
+      toast({ title: 'Error', description: 'Something went wrong. Try again.', variant: 'destructive' });
     } finally {
       setBuyingId(null);
+    }
+  }
+
+  async function handlePortal() {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/portal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ returnUrl: typeof window !== 'undefined' ? window.location.href : '' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Error', description: data.error || 'Could not open portal.', variant: 'destructive' });
+        return;
+      }
+      if (data.url) window.location.href = data.url;
+    } catch {
+      toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
     }
   }
 
@@ -132,9 +198,26 @@ export default function StorePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 bg-gradient-to-b from-background to-muted/30">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Loading store…</p>
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
+        <div className="container max-w-5xl mx-auto px-4 py-8">
+          <div className="animate-pulse space-y-6">
+            <div className="h-20 w-20 mx-auto rounded-xl bg-muted" />
+            <div className="h-8 w-32 mx-auto bg-muted rounded" />
+            <div className="h-4 max-w-md mx-auto bg-muted rounded" />
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 mt-10">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <Card key={i} className="overflow-hidden rounded-xl">
+                  <div className="aspect-video bg-muted" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-5 w-3/4 bg-muted rounded" />
+                    <div className="h-4 w-1/2 bg-muted rounded" />
+                    <div className="h-10 w-full bg-muted rounded mt-4" />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -145,12 +228,13 @@ export default function StorePage() {
         <header className="text-center mb-10">
           {settings?.storeLogoUrl ? (
             <div className="relative w-20 h-20 mx-auto mb-4 rounded-xl overflow-hidden border-2 shadow-lg" style={{ borderColor: primaryColor }}>
-              <Image src={settings.storeLogoUrl} alt="" fill className="object-cover" unoptimized />
+              <Image src={settings.storeLogoUrl} alt="" fill className="object-cover" unoptimized sizes="80px" />
             </div>
           ) : (
             <div
               className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
               style={{ backgroundColor: `${primaryColor}20`, color: primaryColor }}
+              aria-hidden
             >
               <ShoppingBag className="h-8 w-8" />
             </div>
@@ -161,62 +245,176 @@ export default function StorePage() {
           <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
             {settings?.storeDescription || 'Support the server and get roles or perks. Pay with card or PayPal; your role is assigned automatically.'}
           </p>
+          {settings?.currencyDisclaimer && (
+            <p className="text-xs text-muted-foreground mt-1">{settings.currencyDisclaimer}</p>
+          )}
         </header>
+
+        {(settings?.trustBadges?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap justify-center gap-4 mb-6">
+            {settings.trustBadges!.map((b, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border bg-card"
+                style={{ borderColor: `${primaryColor}40` }}
+              >
+                <ShieldCheck className="h-4 w-4" style={{ color: primaryColor }} aria-hidden />
+                {b.text}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {(settings?.testimonials?.length ?? 0) > 0 && (
+          <Card className="p-4 mb-8 rounded-xl border-2" style={{ borderColor: `${primaryColor}20` }}>
+            <p className="text-sm font-medium mb-2" style={{ color: primaryColor }}>What others say</p>
+            <div className="flex flex-wrap gap-4">
+              {settings.testimonials!.slice(0, 3).map((t, i) => (
+                <blockquote key={i} className="text-sm text-muted-foreground max-w-xs">
+                  &ldquo;{t.quote}&rdquo;
+                  {t.author && <cite className="block mt-1 not-italic font-medium text-foreground">— {t.author}</cite>}
+                </blockquote>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {status !== 'authenticated' && (
           <Card className="p-4 mb-8 flex flex-wrap items-center justify-between gap-4 border-2" style={{ borderColor: `${primaryColor}40`, backgroundColor: `${primaryColor}08` }}>
             <div className="flex items-center gap-3">
-              <LogIn className="h-5 w-5" style={{ color: primaryColor }} />
+              <LogIn className="h-5 w-5" style={{ color: primaryColor }} aria-hidden />
               <span className="text-sm font-medium">Sign in with Discord to purchase. Your role will be assigned automatically after payment.</span>
             </div>
             <Button
               onClick={() => signIn('discord', { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined })}
               style={{ backgroundColor: primaryColor }}
-              className="hover:opacity-90"
+              className="hover:opacity-90 focus:ring-2 focus:ring-offset-2 min-h-[44px]"
+              aria-label="Sign in with Discord to purchase"
             >
               Sign in with Discord
             </Button>
           </Card>
         )}
 
+        {myStatus && myStatus.subscriptions.length > 0 && (
+          <div className="mb-6">
+            <Button
+              variant="outline"
+              onClick={handlePortal}
+              className="min-h-[44px]"
+              style={{ borderColor: primaryColor }}
+              aria-label="Manage your subscription"
+            >
+              Manage subscription
+            </Button>
+          </div>
+        )}
+
         <Card className="p-5 mb-8 rounded-xl border-2 shadow-sm">
           <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <BadgeCheck className="h-4 w-4" style={{ color: primaryColor }} />
+            <BadgeCheck className="h-4 w-4" style={{ color: primaryColor }} aria-hidden />
             Redeem a code
           </h2>
           <p className="text-xs text-muted-foreground mb-3">Have a gift card? Enter it below. You must be signed in and in the server.</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               type="text"
               placeholder="XXXX-XXXX-XXXX"
               value={redeemCode}
               onChange={(e) => setRedeemCode(e.target.value)}
-              className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-background text-sm font-mono"
+              className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border bg-background text-sm font-mono focus:ring-2 focus:ring-offset-2"
+              aria-label="Gift card code"
             />
             <Button
               onClick={handleRedeem}
               disabled={redeeming || !redeemCode.trim()}
               style={{ backgroundColor: primaryColor }}
-              className="hover:opacity-90"
+              className="hover:opacity-90 min-h-[44px]"
+              aria-label="Redeem code"
             >
-              {redeeming ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Redeem'}
+              {redeeming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : 'Redeem'}
             </Button>
           </div>
         </Card>
 
-        {items.length === 0 ? (
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Filter by category">
+            <Button
+              variant={selectedCategoryId === null ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedCategoryId(null)}
+              style={selectedCategoryId === null ? { backgroundColor: primaryColor } : {}}
+              aria-pressed={selectedCategoryId === null}
+            >
+              All
+            </Button>
+            {categories.map((c) => (
+              <Button
+                key={c.id}
+                variant={selectedCategoryId === c.id ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedCategoryId(c.id)}
+                style={selectedCategoryId === c.id ? { backgroundColor: c.color ?? primaryColor } : { borderColor: c.color ?? primaryColor }}
+                aria-pressed={selectedCategoryId === c.id}
+              >
+                {c.name}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        <div className="mb-4">
+          <label htmlFor="coupon-store" className="text-sm text-muted-foreground mr-2">Coupon code (optional):</label>
+          <input
+            id="coupon-store"
+            type="text"
+            placeholder="DISCOUNT10"
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+            className="px-3 py-2 rounded-lg border bg-background text-sm max-w-[180px] focus:ring-2 focus:ring-offset-2"
+            aria-label="Coupon code"
+          />
+        </div>
+
+        {filteredItems.length === 0 ? (
           <Card className="p-12 text-center rounded-xl">
-            <p className="text-muted-foreground">No items in the store right now. Check back later.</p>
+            <p className="text-muted-foreground">No items in this category. Try another filter or check back later.</p>
           </Card>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((item) => {
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="list">
+            {filteredItems.map((item) => {
               const isSub = item.billing_type === 'subscription';
+              const owned = myStatus?.ownedItemIds?.includes(item.id);
+              const sub = myStatus?.subscriptions?.find((s) => s.itemId === item.id);
               const priceLabel = isSub
                 ? `${formatPrice(item.price_amount_cents, item.currency)}/${item.subscription_interval === 'year' ? 'year' : 'month'}`
                 : formatPrice(item.price_amount_cents, item.currency);
+              const soldOut = item.stock_remaining !== null && item.stock_remaining <= 0;
               return (
-                <Card key={item.id} className="overflow-hidden flex flex-col rounded-xl border-2 shadow-sm hover:shadow-md transition-shadow">
+                <Card
+                  key={item.id}
+                  className="overflow-hidden flex flex-col rounded-xl border-2 shadow-sm hover:shadow-md transition-shadow focus-within:ring-2 focus-within:ring-offset-2"
+                  role="listitem"
+                >
+                  <div className="relative aspect-video bg-muted flex items-center justify-center">
+                    {item.image_url ? (
+                      <Image
+                        src={item.image_url}
+                        alt=""
+                        fill
+                        className="object-cover"
+                        unoptimized
+                        sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+                      />
+                    ) : (
+                      <ImageIcon className="h-12 w-12 text-muted-foreground" aria-hidden />
+                    )}
+                    {soldOut && (
+                      <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                        <span className="font-semibold text-destructive">Sold out</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="p-6 flex-1 flex flex-col">
                     <div className="flex items-start justify-between gap-2">
                       <h2 className="text-lg font-semibold">{item.name}</h2>
@@ -232,27 +430,53 @@ export default function StorePage() {
                     {item.description && (
                       <p className="text-sm text-muted-foreground mt-2 line-clamp-3 flex-1">{item.description}</p>
                     )}
-                    <div className="mt-4 flex items-end justify-between gap-4">
+                    {item.stock_remaining != null && item.stock_remaining > 0 && (
+                      <p className="text-xs text-muted-foreground mt-2">{item.stock_remaining} left</p>
+                    )}
+                    <div className="mt-4 flex items-end justify-between gap-4 flex-wrap">
                       <div>
+                        {item.compare_at_price_cents != null && item.compare_at_price_cents > item.price_amount_cents && (
+                          <span className="text-sm text-muted-foreground line-through mr-2">
+                            {formatPrice(item.compare_at_price_cents, item.currency)}
+                          </span>
+                        )}
                         <span className="text-xl font-bold" style={{ color: primaryColor }}>{priceLabel}</span>
                         {isSub && (
                           <p className="text-xs text-muted-foreground mt-0.5">Recurring; cancel anytime. Role removed when subscription ends.</p>
                         )}
                       </div>
-                      <Button
-                        onClick={() => handleBuy(item.id)}
-                        disabled={buyingId !== null}
-                        className="shrink-0"
-                        style={{ backgroundColor: primaryColor }}
-                      >
-                        {buyingId === item.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : isSub ? (
-                          'Subscribe'
+                      <div className="flex gap-2 shrink-0">
+                        {sub ? (
+                          <Button
+                            variant="outline"
+                            onClick={handlePortal}
+                            className="min-h-[44px]"
+                            aria-label="Manage subscription"
+                          >
+                            Manage
+                          </Button>
+                        ) : owned && !isSub ? (
+                          <span className="inline-flex items-center px-3 py-2 rounded-md text-sm font-medium bg-muted">Owned</span>
+                        ) : soldOut ? (
+                          <Button disabled className="min-h-[44px]">Sold out</Button>
                         ) : (
-                          'Buy'
+                          <Button
+                            onClick={() => handleBuy(item.id)}
+                            disabled={buyingId !== null}
+                            className="min-h-[44px] focus:ring-2 focus:ring-offset-2"
+                            style={{ backgroundColor: primaryColor }}
+                            aria-label={isSub ? 'Subscribe' : 'Buy'}
+                          >
+                            {buyingId === item.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                            ) : isSub ? (
+                              'Subscribe'
+                            ) : (
+                              'Buy'
+                            )}
+                          </Button>
                         )}
-                      </Button>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -262,11 +486,21 @@ export default function StorePage() {
         )}
 
         <footer className="mt-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-          {settings?.storeFooterText && (
-            <p className="max-w-md">{settings.storeFooterText}</p>
-          )}
+          {settings?.storeFooterText && <p className="max-w-md">{settings.storeFooterText}</p>}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            {settings?.termsUrl && (
+              <a href={settings.termsUrl} target="_blank" rel="noopener noreferrer" className="underline focus:ring-2 focus:ring-offset-2 rounded">
+                Terms of sale
+              </a>
+            )}
+            {settings?.refundPolicyUrl && (
+              <a href={settings.refundPolicyUrl} target="_blank" rel="noopener noreferrer" className="underline focus:ring-2 focus:ring-offset-2 rounded">
+                Refund policy
+              </a>
+            )}
+          </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <ShieldCheck className="h-4 w-4" />
+            <ShieldCheck className="h-4 w-4" aria-hidden />
             <span>Payments go to the server owner. Powered by Codecraft.</span>
           </div>
         </footer>

@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy, ExternalLink, Palette, RefreshCw } from 'lucide-react';
+import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy, ExternalLink, Palette, RefreshCw, Tag, Receipt, CreditCard, Ticket } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -53,6 +53,7 @@ interface ShopItem {
   name: string;
   description: string | null;
   price_amount_cents: number;
+  compare_at_price_cents?: number | null;
   currency: string;
   discord_role_id: string | null;
   delivery_type: 'role' | 'code' | 'prefilled';
@@ -62,6 +63,9 @@ interface ShopItem {
   enabled: boolean;
   sort_order: number;
   created_at: string;
+  category_id?: string | null;
+  image_url?: string | null;
+  max_quantity_per_user?: number | null;
 }
 
 interface ShopSettings {
@@ -70,6 +74,39 @@ interface ShopSettings {
   store_primary_color: string | null;
   store_logo_url: string | null;
   store_footer_text: string | null;
+  trust_badges_json?: unknown;
+  testimonials_json?: unknown;
+  terms_url?: string | null;
+  refund_policy_url?: string | null;
+  currency_disclaimer?: string | null;
+}
+
+interface ShopCategory {
+  id: string;
+  name: string;
+  color: string | null;
+  sort_order: number;
+}
+
+interface Sale {
+  id: string;
+  shopItemId: string;
+  itemName: string | null;
+  discordUserId: string;
+  amountCents: number;
+  currency: string;
+  deliveryType: string;
+  createdAt: string;
+}
+
+interface Coupon {
+  id: string;
+  code: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value_cents: number;
+  max_redemptions: number | null;
+  redemption_count: number;
+  valid_until: string | null;
 }
 
 interface PrefilledCode {
@@ -108,6 +145,10 @@ export default function ShopDashboard() {
     subscriptionInterval: 'month' as 'month' | 'year',
     subscriptionIntervalCount: 1,
     enabled: true,
+    categoryId: '',
+    imageUrl: '',
+    compareAtPriceCents: 0,
+    maxQuantityPerUser: 0,
   });
   const [settingsForm, setSettingsForm] = useState({
     storeName: '',
@@ -115,7 +156,16 @@ export default function ShopDashboard() {
     storePrimaryColor: '#5865F2',
     storeLogoUrl: '',
     storeFooterText: '',
+    trustBadgesText: '',
+    testimonialsText: '',
+    termsUrl: '',
+    refundPolicyUrl: '',
+    currencyDisclaimer: '',
   });
+  const [categories, setCategories] = useState<ShopCategory[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [prefilledCodes, setPrefilledCodes] = useState<PrefilledCode[]>([]);
   const [prefilledCodesLoading, setPrefilledCodesLoading] = useState(false);
   const [prefilledAddText, setPrefilledAddText] = useState('');
@@ -126,8 +176,22 @@ export default function ShopDashboard() {
       loadItems();
       loadRoles();
       loadSettings();
+      loadCategories();
+      loadCoupons();
+      loadSales();
     }
   }, [guildId]);
+
+  async function loadCoupons() {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/coupons`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCoupons(data.coupons ?? []);
+    } catch {
+      // ignore
+    }
+  }
 
   async function loadSettings() {
     try {
@@ -135,25 +199,92 @@ export default function ShopDashboard() {
       if (!res.ok) return;
       const data = await res.json();
       setSettings(data);
+      const trustArr = Array.isArray(data.trust_badges_json) ? data.trust_badges_json : [];
+      const testimonialArr = Array.isArray(data.testimonials_json) ? data.testimonials_json : [];
       setSettingsForm({
         storeName: data.store_name ?? '',
         storeDescription: data.store_description ?? '',
         storePrimaryColor: data.store_primary_color ?? '#5865F2',
         storeLogoUrl: data.store_logo_url ?? '',
         storeFooterText: data.store_footer_text ?? '',
+        trustBadgesText: trustArr.map((b: { text?: string }) => b?.text ?? '').filter(Boolean).join('\n'),
+        testimonialsText: testimonialArr.map((t: { quote?: string; author?: string }) => `${t?.quote ?? ''}|${t?.author ?? ''}`.trim()).filter(Boolean).join('\n'),
+        termsUrl: data.terms_url ?? '',
+        refundPolicyUrl: data.refund_policy_url ?? '',
+        currencyDisclaimer: data.currency_disclaimer ?? '',
       });
     } catch {
       // ignore
     }
   }
 
+  async function loadCategories() {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/categories`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCategories(data.categories ?? []);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadCoupons() {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/coupons`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCoupons(data.coupons ?? []);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadSales() {
+    setSalesLoading(true);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/sales?limit=20`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setSales(data.sales ?? []);
+    } catch {
+      // ignore
+    } finally {
+      setSalesLoading(false);
+    }
+  }
+
   async function saveSettings() {
     setSettingsSaving(true);
     try {
+      const trustBadges = settingsForm.trustBadgesText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((text) => ({ text }));
+      const testimonials = settingsForm.testimonialsText
+        .split('\n')
+        .map((line) => {
+          const idx = line.indexOf('|');
+          if (idx >= 0) return { quote: line.slice(0, idx).trim(), author: line.slice(idx + 1).trim() };
+          return { quote: line.trim(), author: '' };
+        })
+        .filter((t) => t.quote);
       const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsForm),
+        body: JSON.stringify({
+          storeName: settingsForm.storeName,
+          storeDescription: settingsForm.storeDescription,
+          storePrimaryColor: settingsForm.storePrimaryColor,
+          storeLogoUrl: settingsForm.storeLogoUrl,
+          storeFooterText: settingsForm.storeFooterText,
+          trustBadges,
+          testimonials,
+          termsUrl: settingsForm.termsUrl || null,
+          refundPolicyUrl: settingsForm.refundPolicyUrl || null,
+          currencyDisclaimer: settingsForm.currencyDisclaimer || null,
+        }),
       });
       if (!res.ok) throw new Error('Failed to save');
       toast({ title: 'Saved', description: 'Store appearance updated.' });
@@ -207,6 +338,10 @@ export default function ShopDashboard() {
       subscriptionInterval: 'month',
       subscriptionIntervalCount: 1,
       enabled: true,
+      categoryId: '',
+      imageUrl: '',
+      compareAtPriceCents: 0,
+      maxQuantityPerUser: 0,
     });
     setPrefilledCodes([]);
     setPrefilledAddText('');
@@ -263,6 +398,10 @@ export default function ShopDashboard() {
       subscriptionInterval: (item.subscription_interval === 'year' ? 'year' : 'month') as 'month' | 'year',
       subscriptionIntervalCount: item.subscription_interval_count ?? 1,
       enabled: item.enabled,
+      categoryId: item.category_id ?? '',
+      imageUrl: item.image_url ?? '',
+      compareAtPriceCents: item.compare_at_price_cents ?? 0,
+      maxQuantityPerUser: item.max_quantity_per_user ?? 0,
     });
     setPrefilledCodes([]);
     setPrefilledAddText('');
@@ -311,6 +450,10 @@ export default function ShopDashboard() {
       subscriptionInterval: form.billingType === 'subscription' ? form.subscriptionInterval : undefined,
       subscriptionIntervalCount: form.billingType === 'subscription' ? form.subscriptionIntervalCount : undefined,
       enabled: form.enabled,
+      categoryId: form.categoryId || undefined,
+      imageUrl: form.imageUrl || undefined,
+      compareAtPriceCents: form.compareAtPriceCents > 0 ? form.compareAtPriceCents : undefined,
+      maxQuantityPerUser: form.maxQuantityPerUser >= 1 ? form.maxQuantityPerUser : undefined,
     };
       if (editingId) {
         const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/${editingId}`, {
@@ -455,6 +598,48 @@ export default function ShopDashboard() {
               placeholder="e.g. Thank you for supporting the server!"
             />
           </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Trust badges (one per line, optional)</Label>
+            <Textarea
+              value={settingsForm.trustBadgesText}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, trustBadgesText: e.target.value }))}
+              placeholder="Secure payment&#10;Instant delivery"
+              rows={2}
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Testimonials (one per line: quote | author, optional)</Label>
+            <Textarea
+              value={settingsForm.testimonialsText}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, testimonialsText: e.target.value }))}
+              placeholder="Great server! | User123"
+              rows={2}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Terms URL (optional)</Label>
+            <Input
+              value={settingsForm.termsUrl}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, termsUrl: e.target.value }))}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Refund policy URL (optional)</Label>
+            <Input
+              value={settingsForm.refundPolicyUrl}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, refundPolicyUrl: e.target.value }))}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Currency disclaimer (optional)</Label>
+            <Input
+              value={settingsForm.currencyDisclaimer}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, currencyDisclaimer: e.target.value }))}
+              placeholder="e.g. Prices in EUR"
+            />
+          </div>
         </div>
         <div className="mt-4 flex justify-end">
           <Button onClick={saveSettings} disabled={settingsSaving}>
@@ -462,6 +647,144 @@ export default function ShopDashboard() {
             Save appearance
           </Button>
         </div>
+      </Card>
+
+      <Card className="p-6 border-2">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Tag className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Categories</h2>
+            <p className="text-sm text-muted-foreground">Group items on the store (e.g. Roles, Perks). Assign per item below.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {categories.map((c) => (
+            <span
+              key={c.id}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border"
+              style={{ borderColor: c.color ?? '#5865F2', backgroundColor: `${c.color ?? '#5865F2'}15` }}
+            >
+              {c.name}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-destructive"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/categories/${c.id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error();
+                    toast({ title: 'Deleted', description: 'Category removed.' });
+                    loadCategories();
+                  } catch {
+                    toast({ title: 'Error', description: 'Could not delete category.', variant: 'destructive' });
+                  }
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </span>
+          ))}
+        </div>
+        <form
+          className="mt-3 flex flex-wrap gap-2 items-end"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const name = (e.currentTarget.elements.namedItem('catName') as HTMLInputElement)?.value?.trim();
+            if (!name) return;
+            try {
+              const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/categories`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, color: settingsForm.storePrimaryColor || '#5865F2' }),
+              });
+              if (!res.ok) throw new Error();
+              toast({ title: 'Added', description: 'Category created.' });
+              loadCategories();
+              (e.currentTarget.elements.namedItem('catName') as HTMLInputElement).value = '';
+            } catch {
+              toast({ title: 'Error', description: 'Could not create category.', variant: 'destructive' });
+            }
+          }}
+        >
+          <Input name="catName" placeholder="Category name" className="w-40" />
+          <Button type="submit" size="sm">Add category</Button>
+        </form>
+      </Card>
+
+      <Card className="p-6 border-2">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Ticket className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Coupons</h2>
+            <p className="text-sm text-muted-foreground">Discount codes for the store. Percentage (1–100) or fixed amount in cents.</p>
+          </div>
+        </div>
+        <div className="space-y-2 max-h-40 overflow-y-auto">
+          {coupons.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-2 py-2 border-b text-sm">
+              <span className="font-mono font-medium">{c.code}</span>
+              <span className="text-muted-foreground">
+                {c.discount_type === 'percentage' ? `${c.discount_value_cents}%` : `€${(c.discount_value_cents / 100).toFixed(2)}`}
+                {c.max_redemptions != null && ` · ${c.redemption_count}/${c.max_redemptions} used`}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive h-8"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/coupons/${c.id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error();
+                    toast({ title: 'Deleted', description: 'Coupon removed.' });
+                    loadCoupons();
+                  } catch {
+                    toast({ title: 'Error', description: 'Could not delete coupon.', variant: 'destructive' });
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+        <form
+          className="mt-3 flex flex-wrap gap-2 items-end"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const code = (e.currentTarget.elements.namedItem('couponCode') as HTMLInputElement)?.value?.trim().toUpperCase();
+            const discountType = (e.currentTarget.elements.namedItem('couponType') as HTMLSelectElement)?.value as 'percentage' | 'fixed';
+            const value = parseInt((e.currentTarget.elements.namedItem('couponValue') as HTMLInputElement)?.value ?? '0', 10);
+            if (!code || !value) return;
+            try {
+              const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/coupons`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, discountType, discountValue: value }),
+              });
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error);
+              }
+              toast({ title: 'Added', description: 'Coupon created.' });
+              loadCoupons();
+              (e.currentTarget as HTMLFormElement).reset();
+            } catch (err) {
+              toast({ title: 'Error', description: err instanceof Error ? err.message : 'Could not create coupon.', variant: 'destructive' });
+            }
+          }}
+        >
+          <Input name="couponCode" placeholder="CODE" className="w-28 font-mono" maxLength={32} />
+          <select name="couponType" className="h-10 rounded-md border px-3 bg-background text-sm">
+            <option value="percentage">%</option>
+            <option value="fixed">€ fixed</option>
+          </select>
+          <Input name="couponValue" type="number" placeholder="10 or 500" className="w-24" min={1} />
+          <Button type="submit" size="sm">Add coupon</Button>
+        </form>
       </Card>
 
       <Card className="p-6">
@@ -569,7 +892,49 @@ export default function ShopDashboard() {
               <Copy className="h-4 w-4 mr-1" />
               Copy link
             </Button>
+            <Link href={`/comcraft/dashboard/${guildId}/shop/subscriptions`}>
+              <Button variant="outline" size="sm">
+                <CreditCard className="h-4 w-4 mr-1" />
+                Subscriptions
+              </Button>
+            </Link>
           </div>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Receipt className="h-5 w-5" />
+            Recent sales
+          </h2>
+          <Button variant="ghost" size="sm" onClick={loadSales} disabled={salesLoading}>
+            {salesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        </div>
+        {sales.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">No sales yet. Orders appear here after payment.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sales.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell>{s.itemName ?? s.shopItemId}</TableCell>
+                  <TableCell>{(s.amountCents / 100).toFixed(2)} {s.currency.toUpperCase()}</TableCell>
+                  <TableCell>{s.deliveryType}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{new Date(s.createdAt).toLocaleDateString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </Card>
 
@@ -594,6 +959,31 @@ export default function ShopDashboard() {
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="Short description for the product"
                 rows={2}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Category (optional)</Label>
+              <Select
+                value={form.categoryId || '_none'}
+                onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v === '_none' ? '' : v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">None</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Image URL (optional)</Label>
+              <Input
+                value={form.imageUrl}
+                onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                placeholder="https://..."
               />
             </div>
             <div className="space-y-2">
@@ -740,8 +1130,8 @@ export default function ShopDashboard() {
                 Save the item first, then click Edit to add codes to sell.
               </p>
             )}
-            <div className="flex gap-4">
-              <div className="space-y-2 flex-1">
+            <div className="flex gap-4 flex-wrap">
+              <div className="space-y-2 flex-1 min-w-[120px]">
                 <Label>Price (cents)</Label>
                 <Input
                   type="number"
@@ -765,6 +1155,27 @@ export default function ShopDashboard() {
                     <SelectItem value="usd">USD</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2 w-28">
+                <Label>Compare at (cents)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.compareAtPriceCents || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, compareAtPriceCents: parseInt(e.target.value, 10) || 0 }))}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground">Original price (sale)</p>
+              </div>
+              <div className="space-y-2 w-28">
+                <Label>Max per user</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.maxQuantityPerUser || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, maxQuantityPerUser: parseInt(e.target.value, 10) || 0 }))}
+                  placeholder="Unlimited"
+                />
               </div>
             </div>
             <div className="flex items-center justify-between">

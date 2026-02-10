@@ -134,6 +134,12 @@ export async function POST(request: NextRequest) {
       .update({ status: 'cancelled', updated_at: new Date().toISOString() })
       .eq('id', (row as { id: string }).id);
 
+    await supabaseAdmin.from('guild_shop_audit_log').insert({
+      guild_id: guildId,
+      action: 'subscription_cancelled',
+      details: { stripe_subscription_id: subId, shop_item_id: (row as { shop_item_id: string }).shop_item_id, discord_user_id: discordUserId },
+    });
+
     return NextResponse.json({ received: true });
   }
 
@@ -141,11 +147,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  const session = event.data?.object as { id?: string; mode?: string; subscription?: string; metadata?: Record<string, string> };
+  const session = event.data?.object as {
+    id?: string;
+    mode?: string;
+    subscription?: string;
+    metadata?: Record<string, string>;
+    amount_total?: number;
+    currency?: string;
+  };
   const metadata = session?.metadata;
   const metaGuildId = metadata?.guild_id;
   const shopItemId = metadata?.shop_item_id;
   const discordId = metadata?.discord_id;
+  const couponId = metadata?.coupon_id;
 
   if (!metaGuildId || !shopItemId || !discordId) {
     return NextResponse.json({ received: true });
@@ -157,7 +171,7 @@ export async function POST(request: NextRequest) {
 
   const { data: item, error: itemError } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('discord_role_id, delivery_type, billing_type')
+    .select('discord_role_id, delivery_type, billing_type, price_amount_cents, currency')
     .eq('guild_id', guildId)
     .eq('id', shopItemId)
     .maybeSingle();
@@ -171,6 +185,45 @@ export async function POST(request: NextRequest) {
   const billingType = (item as { billing_type?: string }).billing_type || 'one_time';
   const stripeSessionId = session?.id;
   const isSubscription = session?.mode === 'subscription' && billingType === 'subscription' && session?.subscription;
+  const amountCents = session?.amount_total ?? (item as { price_amount_cents?: number }).price_amount_cents ?? 0;
+  const currency = (session?.currency ?? (item as { currency?: string }).currency ?? 'eur').toLowerCase();
+
+  if (couponId) {
+    const { data: couponRow } = await supabaseAdmin
+      .from('guild_shop_coupons')
+      .select('redemption_count')
+      .eq('id', couponId)
+      .eq('guild_id', guildId)
+      .single();
+    const count = (couponRow as { redemption_count?: number } | null)?.redemption_count ?? 0;
+    await supabaseAdmin
+      .from('guild_shop_coupons')
+      .update({ redemption_count: count + 1, updated_at: new Date().toISOString() })
+      .eq('id', couponId)
+      .eq('guild_id', guildId);
+  }
+
+  let orderId: string | null = null;
+  const { data: orderRow } = await supabaseAdmin
+    .from('guild_shop_orders')
+    .insert({
+      guild_id: guildId,
+      shop_item_id: shopItemId,
+      discord_user_id: discordId,
+      amount_cents: amountCents,
+      currency,
+      delivery_type: deliveryType,
+      stripe_session_id: stripeSessionId,
+    })
+    .select('id')
+    .single();
+  orderId = (orderRow as { id?: string } | null)?.id ?? null;
+
+  await supabaseAdmin.from('guild_shop_audit_log').insert({
+    guild_id: guildId,
+    action: 'order_created',
+    details: { shop_item_id: shopItemId, discord_user_id: discordId, stripe_session_id: stripeSessionId, order_id: orderId },
+  });
 
   if (deliveryType === 'prefilled' && stripeSessionId) {
     const { data: poolRow } = await supabaseAdmin
@@ -254,6 +307,12 @@ export async function POST(request: NextRequest) {
     if (!addRoleRes.ok) {
       const err = await addRoleRes.json().catch(() => ({}));
       console.error('Stripe webhook: failed to add role', guildId, discordId, item.discord_role_id, err);
+    } else {
+      await supabaseAdmin.from('guild_shop_audit_log').insert({
+        guild_id: guildId,
+        action: 'role_assigned',
+        details: { shop_item_id: shopItemId, discord_user_id: discordId, stripe_session_id: stripeSessionId },
+      });
     }
   }
 

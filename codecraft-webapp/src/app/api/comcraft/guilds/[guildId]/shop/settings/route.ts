@@ -93,6 +93,11 @@ export async function PATCH(
     if (typeof body.storePrimaryColor === 'string') update.store_primary_color = body.storePrimaryColor.trim() || '#5865F2';
     if (typeof body.storeLogoUrl === 'string') update.store_logo_url = body.storeLogoUrl.trim() || null;
     if (typeof body.storeFooterText === 'string') update.store_footer_text = body.storeFooterText.trim() || null;
+    if (body.trustBadges !== undefined) update.trust_badges_json = Array.isArray(body.trustBadges) ? body.trustBadges : null;
+    if (body.testimonials !== undefined) update.testimonials_json = Array.isArray(body.testimonials) ? body.testimonials : null;
+    if (typeof body.termsUrl === 'string') update.terms_url = body.termsUrl.trim() || null;
+    if (typeof body.refundPolicyUrl === 'string') update.refund_policy_url = body.refundPolicyUrl.trim() || null;
+    if (typeof body.currencyDisclaimer === 'string') update.currency_disclaimer = body.currencyDisclaimer.trim() || null;
 
     const { data, error } = await supabaseAdmin
       .from('guild_shop_settings')
