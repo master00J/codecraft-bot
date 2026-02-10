@@ -252,7 +252,7 @@ export default function StorePage() {
 
         {(settings?.trustBadges?.length ?? 0) > 0 && (
           <div className="flex flex-wrap justify-center gap-4 mb-6">
-            {settings.trustBadges!.map((b, i) => (
+            {(settings?.trustBadges ?? []).map((b, i) => (
               <span
                 key={i}
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border bg-card"
@@ -269,7 +269,7 @@ export default function StorePage() {
           <Card className="p-4 mb-8 rounded-xl border-2" style={{ borderColor: `${primaryColor}20` }}>
             <p className="text-sm font-medium mb-2" style={{ color: primaryColor }}>What others say</p>
             <div className="flex flex-wrap gap-4">
-              {settings.testimonials!.slice(0, 3).map((t, i) => (
+              {(settings?.testimonials ?? []).slice(0, 3).map((t, i) => (
                 <blockquote key={i} className="text-sm text-muted-foreground max-w-xs">
                   &ldquo;{t.quote}&rdquo;
                   {t.author && <cite className="block mt-1 not-italic font-medium text-foreground">— {t.author}</cite>}
