@@ -56,7 +56,7 @@ export async function GET(
 
     const fromOrders = (ordersRes.data ?? []).map((r: { shop_item_id: string }) => r.shop_item_id);
     const fromCodes = (codesRes.data ?? []).map((r: { shop_item_id: string }) => r.shop_item_id);
-    const ownedItemIds = [...new Set([...fromOrders, ...fromCodes])];
+    const ownedItemIds = Array.from(new Set([...fromOrders, ...fromCodes]));
     const subscriptions = (subsRes.data ?? []).map((r: { shop_item_id: string; current_period_end: string; stripe_subscription_id: string | null }) => ({
       itemId: r.shop_item_id,
       currentPeriodEnd: r.current_period_end,
