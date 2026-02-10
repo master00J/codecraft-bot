@@ -102,6 +102,33 @@ class DiscordManager {
   }
 
   /**
+   * Remove a role from a member (e.g. when shop subscription ends).
+   */
+  async removeRoleFromMember(guildId, userId, roleId, reason = 'Subscription ended') {
+    try {
+      const guild = this.client.guilds.cache.get(guildId);
+      if (!guild) {
+        return { success: false, error: 'Guild not found' };
+      }
+
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        return { success: false, error: 'User not found in guild' };
+      }
+
+      if (!member.roles.cache.has(roleId)) {
+        return { success: true, alreadyRemoved: true };
+      }
+
+      await member.roles.remove(roleId, reason);
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing role from member:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Create a new role
    */
   async createRole(guildId, options = {}) {

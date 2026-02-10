@@ -131,10 +131,10 @@ class InactiveKickScheduler {
       if (member.id === guild.ownerId) continue;
       if (!member.kickable) continue;
 
-      // Use last_xp_gain when available; otherwise join date (only runs after grace period so safe).
+      // Last activity = last message (user_levels) or join date if never sent a message (new members get full grace period)
       const lastActivityMs = lastActivityByUser[member.id] ?? (member.joinedAt ? member.joinedAt.getTime() : 0);
       const lastActivity = new Date(lastActivityMs);
-      if (lastActivity >= cutoffDate) continue;
+      if (lastActivity >= cutoffDate) continue; // Skip: active recently (or joined recently)
 
       try {
         await member.kick(`Auto-kick: inactive for more than ${inactiveDays} days.`);

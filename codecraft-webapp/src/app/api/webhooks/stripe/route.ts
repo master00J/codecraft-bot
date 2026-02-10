@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
   const { data: config, error: configError } = await supabaseAdmin
     .from('guild_stripe_config')
-    .select('stripe_webhook_secret')
+    .select('stripe_webhook_secret, stripe_secret_key')
     .eq('guild_id', guildId)
     .maybeSingle();
 
@@ -78,12 +78,71 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
+  if (event.type === 'customer.subscription.updated') {
+    const subscription = event.data?.object as { id?: string; current_period_end?: number };
+    const subId = subscription?.id;
+    const periodEnd = subscription?.current_period_end;
+    if (!subId || periodEnd == null) return NextResponse.json({ received: true });
+
+    const periodEndIso = new Date(periodEnd * 1000).toISOString();
+    await supabaseAdmin
+      .from('guild_shop_subscriptions')
+      .update({ current_period_end: periodEndIso, updated_at: new Date().toISOString() })
+      .eq('guild_id', guildId)
+      .eq('stripe_subscription_id', subId);
+    return NextResponse.json({ received: true });
+  }
+
+  if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data?.object as { id?: string };
+    const subId = subscription?.id;
+    if (!subId) return NextResponse.json({ received: true });
+
+    const { data: row, error: subErr } = await supabaseAdmin
+      .from('guild_shop_subscriptions')
+      .select('id, guild_id, shop_item_id, discord_user_id')
+      .eq('guild_id', guildId)
+      .eq('stripe_subscription_id', subId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (subErr || !row) return NextResponse.json({ received: true });
+
+    const { data: shopItem } = await supabaseAdmin
+      .from('guild_shop_items')
+      .select('discord_role_id')
+      .eq('id', (row as { shop_item_id: string }).shop_item_id)
+      .maybeSingle();
+
+    const roleId = shopItem?.discord_role_id;
+    const discordUserId = (row as { discord_user_id: string }).discord_user_id;
+
+    if (roleId) {
+      const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
+      const internalSecret = process.env.INTERNAL_API_SECRET;
+      await fetch(
+        `${botApiUrl}/api/discord/${guildId}/users/${discordUserId}/roles/${roleId}`,
+        {
+          method: 'DELETE',
+          headers: internalSecret ? { 'X-Internal-Secret': internalSecret } : {},
+        }
+      ).catch((e) => console.error('Stripe webhook: failed to remove role', e));
+    }
+
+    await supabaseAdmin
+      .from('guild_shop_subscriptions')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', (row as { id: string }).id);
+
+    return NextResponse.json({ received: true });
+  }
+
   if (event.type !== 'checkout.session.completed') {
     return NextResponse.json({ received: true });
   }
 
-  const session = event.data?.object;
-  const metadata = session?.metadata as Record<string, string> | undefined;
+  const session = event.data?.object as { id?: string; mode?: string; subscription?: string; metadata?: Record<string, string> };
+  const metadata = session?.metadata;
   const metaGuildId = metadata?.guild_id;
   const shopItemId = metadata?.shop_item_id;
   const discordId = metadata?.discord_id;
@@ -98,7 +157,7 @@ export async function POST(request: NextRequest) {
 
   const { data: item, error: itemError } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('discord_role_id, delivery_type')
+    .select('discord_role_id, delivery_type, billing_type')
     .eq('guild_id', guildId)
     .eq('id', shopItemId)
     .maybeSingle();
@@ -109,7 +168,9 @@ export async function POST(request: NextRequest) {
   }
 
   const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
-  const stripeSessionId = (session as { id?: string }).id;
+  const billingType = (item as { billing_type?: string }).billing_type || 'one_time';
+  const stripeSessionId = session?.id;
+  const isSubscription = session?.mode === 'subscription' && billingType === 'subscription' && session?.subscription;
 
   if (deliveryType === 'prefilled' && stripeSessionId) {
     const { data: poolRow } = await supabaseAdmin
@@ -152,6 +213,29 @@ export async function POST(request: NextRequest) {
   }
 
   if (deliveryType === 'role' && item.discord_role_id) {
+    if (isSubscription && session?.subscription && config?.stripe_secret_key) {
+      const stripeSubRes = await fetch(`https://api.stripe.com/v1/subscriptions/${session.subscription}`, {
+        headers: { Authorization: `Bearer ${config.stripe_secret_key}` },
+      });
+      const stripeSub = await stripeSubRes.json().catch(() => ({}));
+      const periodEnd = stripeSub.current_period_end
+        ? new Date((stripeSub.current_period_end as number) * 1000).toISOString()
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      await supabaseAdmin.from('guild_shop_subscriptions').upsert(
+        {
+          guild_id: guildId,
+          shop_item_id: shopItemId,
+          discord_user_id: discordId,
+          stripe_subscription_id: session.subscription,
+          status: 'active',
+          current_period_end: periodEnd,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'guild_id,shop_item_id,discord_user_id' }
+      );
+    }
+
     const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
     const internalSecret = process.env.INTERNAL_API_SECRET;
 

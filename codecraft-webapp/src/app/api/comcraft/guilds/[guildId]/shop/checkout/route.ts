@@ -59,7 +59,7 @@ export async function POST(
 
     const { data: item, error: itemError } = await supabaseAdmin
       .from('guild_shop_items')
-      .select('id, name, description, price_amount_cents, currency, discord_role_id, enabled, delivery_type')
+      .select('id, name, description, price_amount_cents, currency, discord_role_id, enabled, delivery_type, billing_type, subscription_interval, subscription_interval_count')
       .eq('guild_id', guildId)
       .eq('id', itemId)
       .eq('enabled', true)
@@ -70,6 +70,14 @@ export async function POST(
     }
 
     const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
+    const billingType = (item as { billing_type?: string }).billing_type || 'one_time';
+    const isSubscription = billingType === 'subscription';
+    if (isSubscription && deliveryType !== 'role') {
+      return NextResponse.json(
+        { error: 'Subscription items must be role delivery.' },
+        { status: 400 }
+      );
+    }
     if (deliveryType === 'prefilled') {
       const { count, error: countErr } = await supabaseAdmin
         .from('guild_shop_prefilled_codes')
@@ -162,7 +170,7 @@ export async function POST(
     }
 
     const params = new URLSearchParams();
-    params.append('mode', 'payment');
+    params.append('mode', isSubscription ? 'subscription' : 'payment');
     params.append('success_url', successUrl);
     params.append('cancel_url', cancelUrl);
     params.append('line_items[0][quantity]', '1');
@@ -171,6 +179,12 @@ export async function POST(
     params.append('line_items[0][price_data][product_data][name]', item.name);
     if (item.description) {
       params.append('line_items[0][price_data][product_data][description]', item.description);
+    }
+    if (isSubscription) {
+      const interval = (item as { subscription_interval?: string }).subscription_interval === 'year' ? 'year' : 'month';
+      const intervalCount = Math.max(1, (item as { subscription_interval_count?: number }).subscription_interval_count ?? 1);
+      params.append('line_items[0][price_data][recurring][interval]', interval);
+      params.append('line_items[0][price_data][recurring][interval_count]', String(intervalCount));
     }
     params.append('metadata[guild_id]', guildId);
     params.append('metadata[shop_item_id]', item.id);

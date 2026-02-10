@@ -98,6 +98,18 @@ export async function PATCH(
     } else if (typeof body.discordRoleId === 'string') {
       update.discord_role_id = body.discordRoleId.trim();
     }
+    if (body.billingType === 'subscription' || body.billingType === 'one_time') {
+      update.billing_type = body.billingType;
+    }
+    if (body.billingType === 'subscription') {
+      update.subscription_interval = body.subscriptionInterval === 'year' ? 'year' : 'month';
+      update.subscription_interval_count = typeof body.subscriptionIntervalCount === 'number' && body.subscriptionIntervalCount >= 1
+        ? body.subscriptionIntervalCount
+        : 1;
+    } else if (body.billingType === 'one_time') {
+      update.subscription_interval = null;
+      update.subscription_interval_count = null;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('guild_shop_items')

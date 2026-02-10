@@ -76,6 +76,7 @@ const createEventHandlers = require('./modules/comcraft/bot/interactions/events'
 const TopGGManager = require('./modules/comcraft/topgg/manager');
 const VoteRewardsScheduler = require('./modules/comcraft/vote-rewards/scheduler');
 const InactiveKickScheduler = require('./modules/comcraft/inactive-kick/scheduler');
+const ShopSubscriptionRevokeScheduler = require('./modules/comcraft/shop/subscription-revoke-scheduler');
 const DiscordStatsManager = require('./modules/comcraft/stats/discord-stats-manager');
 // Music commands removed - now handled by separate music-bot
 // const MusicManager = require('./modules/comcraft/music/manager');
@@ -950,6 +951,15 @@ client.once('ready', async () => {
     console.log('👋 Inactive Kick Scheduler initialized');
   } catch (error) {
     console.error('❌ Failed to initialize Inactive Kick Scheduler:', error.message);
+  }
+
+  try {
+    const shopSubsScheduler = new ShopSubscriptionRevokeScheduler(client);
+    shopSubsScheduler.start();
+    global.shopSubscriptionRevokeScheduler = shopSubsScheduler;
+    console.log('🛒 Shop subscription revoke scheduler initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Shop subscription revoke scheduler:', error.message);
   }
 
   // Initialize Discord Stats Manager (for support server stats display)
@@ -12061,6 +12071,31 @@ app.post('/api/discord/:guildId/users/:userId/roles', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error in add role API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
+app.delete('/api/discord/:guildId/users/:userId/roles/:roleId', async (req, res) => {
+  try {
+    const { guildId, userId, roleId } = req.params;
+    let botClient = client;
+    let guild = client.guilds.cache.get(guildId);
+    if (!guild && customBotManager) {
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+        guild = customBot.guilds.cache.get(guildId);
+      }
+    }
+    if (!guild) {
+      return res.json({ success: false, error: 'Guild not found' });
+    }
+    const DiscordManager = require('./modules/comcraft/discord-manager');
+    const manager = new DiscordManager(botClient);
+    const result = await manager.removeRoleFromMember(guildId, userId, roleId, 'Shop subscription ended');
+    res.json(result);
+  } catch (error) {
+    console.error('Error in remove role API:', error);
     res.status(500).json({ success: false, error: error.message || 'Internal server error' });
   }
 });

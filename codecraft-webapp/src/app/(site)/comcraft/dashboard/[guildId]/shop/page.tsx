@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy, ExternalLink } from 'lucide-react';
+import { Loader2, ArrowLeft, ShoppingBag, Plus, Pencil, Trash2, Copy, ExternalLink, Palette, RefreshCw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -56,9 +56,20 @@ interface ShopItem {
   currency: string;
   discord_role_id: string | null;
   delivery_type: 'role' | 'code' | 'prefilled';
+  billing_type?: 'one_time' | 'subscription';
+  subscription_interval?: string | null;
+  subscription_interval_count?: number | null;
   enabled: boolean;
   sort_order: number;
   created_at: string;
+}
+
+interface ShopSettings {
+  store_name: string | null;
+  store_description: string | null;
+  store_primary_color: string | null;
+  store_logo_url: string | null;
+  store_footer_text: string | null;
 }
 
 interface PrefilledCode {
@@ -80,6 +91,8 @@ export default function ShopDashboard() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ShopItem[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [settings, setSettings] = useState<ShopSettings | null>(null);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -91,7 +104,17 @@ export default function ShopDashboard() {
     currency: 'eur',
     discordRoleId: '',
     deliveryType: 'role' as 'role' | 'code' | 'prefilled',
+    billingType: 'one_time' as 'one_time' | 'subscription',
+    subscriptionInterval: 'month' as 'month' | 'year',
+    subscriptionIntervalCount: 1,
     enabled: true,
+  });
+  const [settingsForm, setSettingsForm] = useState({
+    storeName: '',
+    storeDescription: '',
+    storePrimaryColor: '#5865F2',
+    storeLogoUrl: '',
+    storeFooterText: '',
   });
   const [prefilledCodes, setPrefilledCodes] = useState<PrefilledCode[]>([]);
   const [prefilledCodesLoading, setPrefilledCodesLoading] = useState(false);
@@ -102,8 +125,45 @@ export default function ShopDashboard() {
     if (guildId) {
       loadItems();
       loadRoles();
+      loadSettings();
     }
   }, [guildId]);
+
+  async function loadSettings() {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/settings`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setSettings(data);
+      setSettingsForm({
+        storeName: data.store_name ?? '',
+        storeDescription: data.store_description ?? '',
+        storePrimaryColor: data.store_primary_color ?? '#5865F2',
+        storeLogoUrl: data.store_logo_url ?? '',
+        storeFooterText: data.store_footer_text ?? '',
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  async function saveSettings() {
+    setSettingsSaving(true);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      toast({ title: 'Saved', description: 'Store appearance updated.' });
+      loadSettings();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Could not save settings.', variant: 'destructive' });
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
 
   async function loadItems() {
     setLoading(true);
@@ -143,6 +203,9 @@ export default function ShopDashboard() {
       currency: 'eur',
       discordRoleId: roles[0]?.id ?? '',
       deliveryType: 'role',
+      billingType: 'one_time',
+      subscriptionInterval: 'month',
+      subscriptionIntervalCount: 1,
       enabled: true,
     });
     setPrefilledCodes([]);
@@ -196,6 +259,9 @@ export default function ShopDashboard() {
       currency: item.currency ?? 'eur',
       discordRoleId: item.discord_role_id ?? '',
       deliveryType: item.delivery_type ?? 'role',
+      billingType: (item.billing_type === 'subscription' ? 'subscription' : 'one_time') as 'one_time' | 'subscription',
+      subscriptionInterval: (item.subscription_interval === 'year' ? 'year' : 'month') as 'month' | 'year',
+      subscriptionIntervalCount: item.subscription_interval_count ?? 1,
       enabled: item.enabled,
     });
     setPrefilledCodes([]);
@@ -228,6 +294,10 @@ export default function ShopDashboard() {
       toast({ title: 'Error', description: 'Price must be at least 1 cent.', variant: 'destructive' });
       return;
     }
+    if (form.billingType === 'subscription' && form.deliveryType !== 'role') {
+      toast({ title: 'Error', description: 'Subscription items must use Role delivery.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
     const body = {
@@ -237,6 +307,9 @@ export default function ShopDashboard() {
       currency: form.currency,
       discordRoleId: form.discordRoleId,
       deliveryType: form.deliveryType,
+      billingType: form.billingType,
+      subscriptionInterval: form.billingType === 'subscription' ? form.subscriptionInterval : undefined,
+      subscriptionIntervalCount: form.billingType === 'subscription' ? form.subscriptionIntervalCount : undefined,
       enabled: form.enabled,
     };
       if (editingId) {
@@ -318,9 +391,78 @@ export default function ShopDashboard() {
           Shop
         </h1>
         <p className="text-muted-foreground mt-1">
-          Sell roles (or other items). Users pay via Stripe; the role is assigned automatically after payment. Set up Stripe in Payments first and add a webhook for shop purchases.
+          Sell roles (one-time or subscription), gift cards, or pre-filled codes. Payments go to your Stripe/PayPal; roles are assigned automatically. Customize your store appearance below.
         </p>
       </div>
+
+      <Card className="p-6 border-2">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Palette className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Store appearance</h2>
+            <p className="text-sm text-muted-foreground">Customize how your public store page looks (name, description, color, logo, footer).</p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Store name</Label>
+            <Input
+              value={settingsForm.storeName}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, storeName: e.target.value }))}
+              placeholder="e.g. My Server Store"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Primary color (hex)</Label>
+            <div className="flex gap-2">
+              <input
+                type="color"
+                value={settingsForm.storePrimaryColor}
+                onChange={(e) => setSettingsForm((s) => ({ ...s, storePrimaryColor: e.target.value }))}
+                className="h-10 w-14 rounded border cursor-pointer"
+              />
+              <Input
+                value={settingsForm.storePrimaryColor}
+                onChange={(e) => setSettingsForm((s) => ({ ...s, storePrimaryColor: e.target.value }))}
+                placeholder="#5865F2"
+              />
+            </div>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Store description</Label>
+            <Textarea
+              value={settingsForm.storeDescription}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, storeDescription: e.target.value }))}
+              placeholder="Short tagline for your store (shown on the store page)"
+              rows={2}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Logo URL (optional)</Label>
+            <Input
+              value={settingsForm.storeLogoUrl}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, storeLogoUrl: e.target.value }))}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Footer text (optional)</Label>
+            <Input
+              value={settingsForm.storeFooterText}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, storeFooterText: e.target.value }))}
+              placeholder="e.g. Thank you for supporting the server!"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={saveSettings} disabled={settingsSaving}>
+            {settingsSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Save appearance
+          </Button>
+        </div>
+      </Card>
 
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
@@ -341,6 +483,7 @@ export default function ShopDashboard() {
                 <TableHead>Name</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Billing</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
@@ -349,6 +492,10 @@ export default function ShopDashboard() {
             <TableBody>
               {items.map((item) => {
                 const role = roles.find((r) => r.id === item.discord_role_id);
+                const isSub = item.billing_type === 'subscription';
+                const subLabel = isSub
+                  ? `${item.subscription_interval_count ?? 1}/${item.subscription_interval === 'year' ? 'year' : 'month'}`
+                  : 'One-time';
                 return (
                   <TableRow key={item.id}>
                     <TableCell>
@@ -363,7 +510,10 @@ export default function ShopDashboard() {
                     <TableCell>
                       {item.delivery_type === 'prefilled' ? 'Pre-filled code' : item.delivery_type === 'code' ? 'Gift card' : 'Role'}
                     </TableCell>
-                    <TableCell>{formatPrice(item.price_amount_cents, item.currency)}</TableCell>
+                    <TableCell>
+                      <span className={isSub ? 'text-primary font-medium' : ''}>{subLabel}</span>
+                    </TableCell>
+                    <TableCell>{formatPrice(item.price_amount_cents, item.currency)}{isSub ? `/${item.subscription_interval === 'year' ? 'yr' : 'mo'}` : ''}</TableCell>
                     <TableCell>{item.enabled ? 'Enabled' : 'Disabled'}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -465,6 +615,55 @@ export default function ShopDashboard() {
                 Gift card: buyer gets a code to redeem for a role. Pre-filled: you add your own codes (e.g. Amazon); buyer receives one after payment.
               </p>
             </div>
+            {form.deliveryType === 'role' && (
+              <div className="space-y-2">
+                <Label>Billing</Label>
+                <Select
+                  value={form.billingType}
+                  onValueChange={(v: 'one_time' | 'subscription') => setForm((f) => ({ ...f, billingType: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="one_time">One-time payment</SelectItem>
+                    <SelectItem value="subscription">Subscription (recurring; role removed when cancelled)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Subscription: charge repeats automatically; the role is removed when the subscription ends or is cancelled.
+                </p>
+              </div>
+            )}
+            {form.billingType === 'subscription' && form.deliveryType === 'role' && (
+              <div className="flex gap-4">
+                <div className="space-y-2 flex-1">
+                  <Label>Interval</Label>
+                  <Select
+                    value={form.subscriptionInterval}
+                    onValueChange={(v: 'month' | 'year') => setForm((f) => ({ ...f, subscriptionInterval: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="month">Monthly</SelectItem>
+                      <SelectItem value="year">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 w-24">
+                  <Label>Every</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.subscriptionIntervalCount}
+                    onChange={(e) => setForm((f) => ({ ...f, subscriptionIntervalCount: parseInt(e.target.value, 10) || 1 }))}
+                  />
+                  <p className="text-xs text-muted-foreground">{form.subscriptionInterval === 'year' ? 'year(s)' : 'month(s)'}</p>
+                </div>
+              </div>
+            )}
             {form.deliveryType !== 'prefilled' && (
               <div className="space-y-2">
                 <Label>Discord role (assigned on purchase or when code is redeemed)</Label>

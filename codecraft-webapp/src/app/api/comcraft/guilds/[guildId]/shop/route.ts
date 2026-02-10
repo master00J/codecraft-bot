@@ -86,6 +86,13 @@ export async function POST(
     const deliveryType =
       body.deliveryType === 'prefilled' ? 'prefilled'
       : body.deliveryType === 'code' ? 'code' : 'role';
+    const billingType = body.billingType === 'subscription' ? 'subscription' : 'one_time';
+    const subscriptionInterval = billingType === 'subscription'
+      ? (body.subscriptionInterval === 'year' ? 'year' : 'month')
+      : null;
+    const subscriptionIntervalCount = billingType === 'subscription'
+      ? (typeof body.subscriptionIntervalCount === 'number' && body.subscriptionIntervalCount >= 1 ? body.subscriptionIntervalCount : 1)
+      : null;
 
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
@@ -93,6 +100,12 @@ export async function POST(
     if (deliveryType !== 'prefilled' && !discordRoleId) {
       return NextResponse.json(
         { error: 'Select a Discord role for this item (required for Role and Gift card)' },
+        { status: 400 }
+      );
+    }
+    if (billingType === 'subscription' && (deliveryType !== 'role' || !discordRoleId)) {
+      return NextResponse.json(
+        { error: 'Subscription items must be Role delivery with a Discord role selected.' },
         { status: 400 }
       );
     }
@@ -115,6 +128,9 @@ export async function POST(
         enabled,
         sort_order: sortOrder,
         delivery_type: deliveryType,
+        billing_type: billingType,
+        subscription_interval: subscriptionInterval,
+        subscription_interval_count: subscriptionIntervalCount,
         updated_at: new Date().toISOString(),
       })
       .select()

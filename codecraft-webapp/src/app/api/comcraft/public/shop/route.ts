@@ -19,20 +19,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data: rows, error } = await supabaseAdmin
-    .from('guild_shop_items')
-    .select('id, name, description, price_amount_cents, currency, delivery_type')
-    .eq('guild_id', guildId)
-    .eq('enabled', true)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true });
+  const [itemsResult, settingsResult] = await Promise.all([
+    supabaseAdmin
+      .from('guild_shop_items')
+      .select('id, name, description, price_amount_cents, currency, delivery_type, billing_type, subscription_interval, subscription_interval_count')
+      .eq('guild_id', guildId)
+      .eq('enabled', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    supabaseAdmin
+      .from('guild_shop_settings')
+      .select('store_name, store_description, store_primary_color, store_logo_url, store_footer_text')
+      .eq('guild_id', guildId)
+      .maybeSingle(),
+  ]);
 
+  const { data: rows, error } = itemsResult;
   if (error) {
     console.error('Public shop fetch error:', error);
     return NextResponse.json({ error: 'Failed to load shop' }, { status: 500 });
   }
 
-  const items = (rows ?? []) as { id: string; delivery_type?: string }[];
+  const items = (rows ?? []) as { id: string; delivery_type?: string; billing_type?: string; subscription_interval?: string; subscription_interval_count?: number }[];
   const prefilledIds = items.filter((i) => i.delivery_type === 'prefilled').map((i) => i.id);
 
   let inStockPrefilled = new Set<string>();
@@ -48,5 +56,16 @@ export async function GET(request: NextRequest) {
     .filter((i) => i.delivery_type !== 'prefilled' || inStockPrefilled.has(i.id))
     .map(({ delivery_type: _dt, ...rest }) => rest);
 
-  return NextResponse.json({ items: filtered });
+  const settings = settingsResult.data ?? null;
+
+  return NextResponse.json({
+    items: filtered,
+    settings: settings ? {
+      storeName: settings.store_name,
+      storeDescription: settings.store_description,
+      storePrimaryColor: settings.store_primary_color || '#5865F2',
+      storeLogoUrl: settings.store_logo_url,
+      storeFooterText: settings.store_footer_text,
+    } : null,
+  });
 }
