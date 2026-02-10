@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 
   const { data: item, error: itemError } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('discord_role_id, delivery_type')
+    .select('name, discord_role_id, delivery_type')
     .eq('guild_id', guildId)
     .eq('id', shopItemId)
     .maybeSingle();
@@ -124,10 +124,37 @@ export async function POST(request: NextRequest) {
   const deliveryType = (item as { delivery_type?: string }).delivery_type || 'role';
   const resource = event.resource as {
     id?: string;
+    amount?: { value?: string; currency_code?: string };
     supplementary_data?: { related_ids?: { order_id?: string } };
   };
   const paypalCaptureId = resource?.id;
   const paypalOrderId = resource?.supplementary_data?.related_ids?.order_id;
+  const amountValue = resource?.amount?.value;
+  const currencyCode = resource?.amount?.currency_code ?? 'eur';
+  const amountStr = amountValue ? `${currencyCode.toUpperCase()} ${amountValue}` : '';
+  const amountCents = amountValue != null ? Math.round(parseFloat(amountValue) * 100) : 0;
+  const currency = currencyCode?.toLowerCase() ?? 'eur';
+
+  // Log order in guild_shop_orders so "Recent sales" shows PayPal purchases too.
+  const { data: orderRow } = await supabaseAdmin
+    .from('guild_shop_orders')
+    .insert({
+      guild_id: guildId,
+      shop_item_id: shopItemId,
+      discord_user_id: discordId,
+      amount_cents: amountCents,
+      currency,
+      delivery_type: deliveryType,
+      paypal_capture_id: paypalCaptureId ?? null,
+    })
+    .select('id')
+    .single();
+  const orderId = (orderRow as { id?: string } | null)?.id ?? null;
+  await supabaseAdmin.from('guild_shop_audit_log').insert({
+    guild_id: guildId,
+    action: 'order_created',
+    details: { shop_item_id: shopItemId, discord_user_id: discordId, paypal_capture_id: paypalCaptureId, order_id: orderId },
+  });
 
   if (deliveryType === 'prefilled' && paypalCaptureId) {
     const { data: poolRow } = await supabaseAdmin
@@ -150,6 +177,7 @@ export async function POST(request: NextRequest) {
         discord_role_id: null,
         paypal_capture_id: paypalCaptureId,
         paypal_order_id: paypalOrderId ?? null,
+        buyer_discord_id: discordId,
       });
     }
     return NextResponse.json({ received: true });
@@ -164,6 +192,7 @@ export async function POST(request: NextRequest) {
       discord_role_id: item.discord_role_id,
       paypal_capture_id: paypalCaptureId,
       paypal_order_id: paypalOrderId ?? null,
+      buyer_discord_id: discordId,
     });
     if (insertErr) {
       console.error('PayPal webhook: failed to create code', guildId, shopItemId, insertErr);
@@ -190,7 +219,35 @@ export async function POST(request: NextRequest) {
     if (!addRoleRes.ok) {
       const err = await addRoleRes.json().catch(() => ({}));
       console.error('PayPal webhook: failed to add role', guildId, discordId, item.discord_role_id, err);
+    } else {
+      await supabaseAdmin.from('guild_shop_audit_log').insert({
+        guild_id: guildId,
+        action: 'role_assigned',
+        details: { shop_item_id: shopItemId, discord_user_id: discordId, paypal_capture_id: paypalCaptureId },
+      });
     }
+  }
+
+  // Notify in configured Discord channel (same as Stripe).
+  const itemName = (item as { name?: string })?.name || 'Premium';
+  const { data: shopSettings } = await supabaseAdmin
+    .from('guild_shop_settings')
+    .select('purchase_notification_channel_id')
+    .eq('guild_id', guildId)
+    .maybeSingle();
+  const notifChannelId = (shopSettings as { purchase_notification_channel_id?: string } | null)?.purchase_notification_channel_id;
+  if (notifChannelId && notifChannelId.trim()) {
+    const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
+    const internalSecret = process.env.INTERNAL_API_SECRET;
+    const content = `🛒 <@${discordId}> purchased **${itemName}**${amountStr ? ` — ${amountStr}` : ''}`;
+    await fetch(`${botApiUrl}/api/discord/${guildId}/channels/${notifChannelId.trim()}/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {}),
+      },
+      body: JSON.stringify({ content }),
+    }).catch((e) => console.error('PayPal webhook: failed to send purchase notification', e));
   }
 
   return NextResponse.json({ received: true });

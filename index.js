@@ -2286,6 +2286,10 @@ client.on('interactionCreate', async (interaction) => {
         await handleInviteCommand(interaction);
         break;
 
+      case 'store':
+        await handleStoreCommand(interaction);
+        break;
+
       case 'setxp':
         await handleSetXPCommand(interaction);
         break;
@@ -3512,6 +3516,34 @@ async function handleInviteCommand(interaction) {
       content: '❌ An error occurred while generating your invite link.'
     });
   }
+}
+
+async function handleStoreCommand(interaction) {
+  if (!interaction.guild?.id) {
+    return interaction.reply({ content: '❌ This command can only be used in a server.', ephemeral: true });
+  }
+  const baseUrl = (process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com').replace(/\/$/, '');
+  const storeUrl = `${baseUrl}/comcraft/store/${interaction.guild.id}`;
+
+  const embed = new EmbedBuilder()
+    .setColor('#5865F2')
+    .setTitle('🛒 Server store')
+    .setDescription(
+      `Browse and buy roles, premium and more for **${interaction.guild.name}**.\n\n` +
+      `Click the button below to open the store in your browser.`
+    )
+    .setTimestamp()
+    .setFooter({ text: 'You may need to sign in with Discord to purchase.' });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('Open store')
+      .setStyle(ButtonStyle.Link)
+      .setURL(storeUrl)
+      .setEmoji('🛒')
+  );
+
+  return interaction.reply({ embeds: [embed], components: [row] });
 }
 
 async function handleMyReferralsCommand(interaction) {
@@ -10486,6 +10518,10 @@ async function registerCommands(clientInstance) {
       .setDescription('🔗 Get your personal invite link to earn rewards'),
 
     new SlashCommandBuilder()
+      .setName('store')
+      .setDescription('🛒 Open the server store (roles, premium, etc.)'),
+
+    new SlashCommandBuilder()
       .setName('setxp')
       .setDescription('[Admin] Set a user\'s XP')
       .addUserOption((option) =>
@@ -12569,6 +12605,57 @@ app.delete('/api/discord/:guildId/channels/:channelId', async (req, res) => {
   res.json(result);
   } catch (error) {
     console.error('Error in delete channel API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
+// Send message to a channel (internal: shop purchase notifications, etc.)
+app.post('/api/discord/:guildId/channels/:channelId/send', async (req, res) => {
+  try {
+    const secret = req.headers['x-internal-secret'];
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    const { guildId, channelId } = req.params;
+    const { content, embed } = req.body || {};
+
+    let botClient = client;
+    let guild = client.guilds.cache.get(guildId);
+    if (!guild && customBotManager) {
+      const customBot = customBotManager.customBots.get(guildId);
+      if (customBot && customBot.isReady && customBot.isReady()) {
+        botClient = customBot;
+        guild = customBot.guilds.cache.get(guildId);
+      }
+    }
+    if (!guild) {
+      return res.status(404).json({ success: false, error: 'Guild not found' });
+    }
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isTextBased()) {
+      return res.status(404).json({ success: false, error: 'Channel not found or not text-based' });
+    }
+
+    const options = {};
+    if (typeof content === 'string' && content.trim()) options.content = content.trim();
+    if (embed && (embed.title || embed.description)) {
+      const embedObj = new EmbedBuilder();
+      if (embed.title) embedObj.setTitle(embed.title);
+      if (embed.description) embedObj.setDescription(embed.description);
+      if (embed.color) embedObj.setColor(embed.color);
+      if (embed.footer) embedObj.setFooter({ text: embed.footer });
+      if (embed.timestamp !== false) embedObj.setTimestamp();
+      options.embeds = [embedObj];
+    }
+    if (!options.content && !options.embeds?.length) {
+      return res.status(400).json({ success: false, error: 'content or embed required' });
+    }
+
+    const message = await channel.send(options);
+    res.json({ success: true, messageId: message.id });
+  } catch (error) {
+    console.error('Error in channel send API:', error);
     res.status(500).json({ success: false, error: error.message || 'Internal server error' });
   }
 });

@@ -274,6 +274,20 @@ class GiveawayManager {
     return row;
   }
 
+  /** Components for ended giveaway message: no join button, only CTA link if present. */
+  buildEndedComponents(giveaway) {
+    if (giveaway?.cta_button_label && giveaway?.cta_button_url) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel(giveaway.cta_button_label)
+          .setStyle(ButtonStyle.Link)
+          .setURL(giveaway.cta_button_url)
+      );
+      return [row];
+    }
+    return [];
+  }
+
   async fetchMessage(giveaway) {
     try {
       const channel = await this.client.channels.fetch(giveaway.channel_id);
@@ -508,13 +522,14 @@ class GiveawayManager {
     const fetched = await this.fetchMessage(updatedGiveaway);
 
     if (fetched) {
-      const row = this.buildJoinRow(giveawayId, updatedGiveaway, true);
       const embed = this.buildEndedEmbed(updatedGiveaway, winners, entryCount);
-      await fetched.message.edit({ embeds: [embed], components: [row] }).catch((err) => {
+      const components = this.buildEndedComponents(updatedGiveaway);
+      await fetched.message.edit({ embeds: [embed], components }).catch((err) => {
         console.warn('Failed to edit giveaway message on end:', err.message);
       });
 
-      if (!automated) {
+      // Always announce winners in the channel so everyone can see who won (manual and recurring/automated).
+      if (winners.length > 0) {
         await fetched.channel.send({ embeds: [embed] }).catch(() => {});
       }
     }

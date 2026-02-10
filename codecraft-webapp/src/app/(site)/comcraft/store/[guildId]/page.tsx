@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ShoppingBag, LogIn, ShieldCheck, BadgeCheck, ImageIcon } from 'lucide-react';
+import { Loader2, ShoppingBag, LogIn, ShieldCheck, ImageIcon, Copy } from 'lucide-react';
 
 interface StoreCategory {
   id: string;
@@ -56,6 +56,13 @@ interface MyStatus {
   subscriptions: { itemId: string; currentPeriodEnd: string; stripeSubscriptionId: string | null }[];
 }
 
+interface MyCode {
+  id: string;
+  code: string;
+  itemName: string | null;
+  createdAt: string;
+}
+
 function formatPrice(cents: number, currency: string) {
   const sym = currency?.toUpperCase() === 'EUR' ? '€' : currency?.toUpperCase() === 'USD' ? '$' : currency || '€';
   return `${sym}${(cents / 100).toFixed(2)}`;
@@ -72,10 +79,9 @@ export default function StorePage() {
   const [myStatus, setMyStatus] = useState<MyStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState<string | null>(null);
-  const [redeemCode, setRedeemCode] = useState('');
-  const [redeeming, setRedeeming] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [myCodes, setMyCodes] = useState<MyCode[]>([]);
 
   useEffect(() => {
     if (!guildId) return;
@@ -100,6 +106,14 @@ export default function StorePage() {
       .then((res) => res.json())
       .then((data) => setMyStatus(data))
       .catch(() => setMyStatus(null));
+  }, [guildId, status]);
+
+  useEffect(() => {
+    if (!guildId || status !== 'authenticated') return;
+    fetch(`/api/comcraft/guilds/${guildId}/shop/my-codes`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => setMyCodes(data.codes ?? []))
+      .catch(() => setMyCodes([]));
   }, [guildId, status]);
 
   useEffect(() => {
@@ -167,35 +181,6 @@ export default function StorePage() {
       if (data.url) window.location.href = data.url;
     } catch {
       toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
-    }
-  }
-
-  async function handleRedeem() {
-    const code = redeemCode.trim();
-    if (!code) return;
-    if (status !== 'authenticated') {
-      void signIn('discord', { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined });
-      return;
-    }
-    setRedeeming(true);
-    try {
-      const res = await fetch(`/api/comcraft/guilds/${guildId}/redeem`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ title: 'Redeem failed', description: data.error || 'Invalid or used code.', variant: 'destructive' });
-        return;
-      }
-      toast({ title: 'Code redeemed!', description: 'You received the role.' });
-      setRedeemCode('');
-    } catch {
-      toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
-    } finally {
-      setRedeeming(false);
     }
   }
 
@@ -313,32 +298,36 @@ export default function StorePage() {
           </div>
         )}
 
-        <Card className="p-5 mb-8 rounded-xl border-2 shadow-sm">
-          <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <BadgeCheck className="h-4 w-4" style={{ color: primaryColor }} aria-hidden />
-            Redeem a code
-          </h2>
-          <p className="text-xs text-muted-foreground mb-3">Have a gift card? Enter it below. You must be signed in and in the server.</p>
-          <div className="flex flex-wrap gap-2">
-            <input
-              type="text"
-              placeholder="XXXX-XXXX-XXXX"
-              value={redeemCode}
-              onChange={(e) => setRedeemCode(e.target.value)}
-              className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border bg-background text-sm font-mono focus:ring-2 focus:ring-offset-2"
-              aria-label="Gift card code"
-            />
-            <Button
-              onClick={handleRedeem}
-              disabled={redeeming || !redeemCode.trim()}
-              style={{ backgroundColor: primaryColor }}
-              className="hover:opacity-90 min-h-[44px]"
-              aria-label="Redeem code"
-            >
-              {redeeming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : 'Redeem'}
-            </Button>
-          </div>
-        </Card>
+        {myCodes.length > 0 && (
+          <Card className="p-5 mb-8 rounded-xl border-2 shadow-sm">
+            <h2 className="text-sm font-semibold mb-2">Your purchased codes</h2>
+            <p className="text-xs text-muted-foreground mb-3">Codes you bought (e.g. Steam, gift cards). Copy and use them as instructed by the seller. If you closed the thank-you page, you can copy them here.</p>
+            <div className="space-y-3">
+              {myCodes.map((c) => (
+                <div key={c.id} className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-muted/50 border">
+                  {c.itemName && <span className="text-sm font-medium">{c.itemName}</span>}
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <code className="flex-1 font-mono text-sm tracking-wider bg-background px-2 py-1.5 rounded border truncate">
+                      {c.code}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(c.code).then(() => {
+                          toast({ title: 'Copied', description: 'Code copied to clipboard.' });
+                        });
+                      }}
+                      aria-label="Copy code"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {categories.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Filter by category">

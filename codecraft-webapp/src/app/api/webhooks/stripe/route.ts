@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
 
   const { data: item, error: itemError } = await supabaseAdmin
     .from('guild_shop_items')
-    .select('discord_role_id, delivery_type, billing_type, price_amount_cents, currency')
+    .select('name, discord_role_id, delivery_type, billing_type, price_amount_cents, currency')
     .eq('guild_id', guildId)
     .eq('id', shopItemId)
     .maybeSingle();
@@ -225,6 +225,30 @@ export async function POST(request: NextRequest) {
     details: { shop_item_id: shopItemId, discord_user_id: discordId, stripe_session_id: stripeSessionId, order_id: orderId },
   });
 
+  // Notify in configured Discord channel when someone purchases (e.g. private notifications channel).
+  const itemName = (item as { name?: string })?.name || 'Premium';
+  const { data: shopSettings } = await supabaseAdmin
+    .from('guild_shop_settings')
+    .select('purchase_notification_channel_id')
+    .eq('guild_id', guildId)
+    .maybeSingle();
+  const notifChannelId = (shopSettings as { purchase_notification_channel_id?: string } | null)?.purchase_notification_channel_id;
+  if (notifChannelId && notifChannelId.trim()) {
+    const botApiUrl = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
+    const internalSecret = process.env.INTERNAL_API_SECRET;
+    const amountStr = amountCents ? `€${(amountCents / 100).toFixed(2)}` : '';
+    const typeLabel = isSubscription ? ' (subscription)' : '';
+    const content = `🛒 <@${discordId}> purchased **${itemName}**${typeLabel}${amountStr ? ` — ${amountStr}` : ''}`;
+    await fetch(`${botApiUrl}/api/discord/${guildId}/channels/${notifChannelId.trim()}/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(internalSecret ? { 'X-Internal-Secret': internalSecret } : {}),
+      },
+      body: JSON.stringify({ content }),
+    }).catch((e) => console.error('Stripe webhook: failed to send purchase notification', e));
+  }
+
   if (deliveryType === 'prefilled' && stripeSessionId) {
     const { data: poolRow } = await supabaseAdmin
       .from('guild_shop_prefilled_codes')
@@ -245,6 +269,7 @@ export async function POST(request: NextRequest) {
         code: (poolRow as { code: string }).code,
         discord_role_id: null,
         stripe_session_id: stripeSessionId,
+        buyer_discord_id: discordId,
       });
     }
     return NextResponse.json({ received: true });
@@ -258,6 +283,7 @@ export async function POST(request: NextRequest) {
       code,
       discord_role_id: item.discord_role_id,
       stripe_session_id: stripeSessionId,
+      buyer_discord_id: discordId,
     });
     if (insertErr) {
       console.error('Stripe webhook: failed to create code', guildId, shopItemId, insertErr);

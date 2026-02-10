@@ -74,6 +74,7 @@ interface ShopSettings {
   store_primary_color: string | null;
   store_logo_url: string | null;
   store_footer_text: string | null;
+  purchase_notification_channel_id?: string | null;
   trust_badges_json?: unknown;
   testimonials_json?: unknown;
   terms_url?: string | null;
@@ -158,6 +159,7 @@ export default function ShopDashboard() {
     storePrimaryColor: '#5865F2',
     storeLogoUrl: '',
     storeFooterText: '',
+    purchaseNotificationChannelId: '',
     trustBadgesText: '',
     testimonialsText: '',
     termsUrl: '',
@@ -166,6 +168,7 @@ export default function ShopDashboard() {
     refundPolicyContent: '',
     currencyDisclaimer: '',
   });
+  const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -179,6 +182,7 @@ export default function ShopDashboard() {
     if (guildId) {
       loadItems();
       loadRoles();
+      loadChannels();
       loadSettings();
       loadCategories();
       loadCoupons();
@@ -205,12 +209,13 @@ export default function ShopDashboard() {
       setSettings(data);
       const trustArr = Array.isArray(data.trust_badges_json) ? data.trust_badges_json : [];
       const testimonialArr = Array.isArray(data.testimonials_json) ? data.testimonials_json : [];
-      setSettingsForm({
+        setSettingsForm({
         storeName: data.store_name ?? '',
         storeDescription: data.store_description ?? '',
         storePrimaryColor: data.store_primary_color ?? '#5865F2',
         storeLogoUrl: data.store_logo_url ?? '',
         storeFooterText: data.store_footer_text ?? '',
+        purchaseNotificationChannelId: data.purchase_notification_channel_id ?? '',
         trustBadgesText: trustArr.map((b: { text?: string }) => b?.text ?? '').filter(Boolean).join('\n'),
         testimonialsText: testimonialArr.map((t: { quote?: string; author?: string }) => `${t?.quote ?? ''}|${t?.author ?? ''}`.trim()).filter(Boolean).join('\n'),
         termsUrl: data.terms_url ?? '',
@@ -281,6 +286,7 @@ export default function ShopDashboard() {
           termsContent: settingsForm.termsContent || null,
           refundPolicyContent: settingsForm.refundPolicyContent || null,
           currencyDisclaimer: settingsForm.currencyDisclaimer || null,
+          purchaseNotificationChannelId: settingsForm.purchaseNotificationChannelId || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -317,6 +323,18 @@ export default function ShopDashboard() {
       if (!res.ok) return;
       const data = await res.json();
       setRoles(data.roles ?? []);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadChannels() {
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/discord/channels`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const text = Array.isArray(data.channels?.text) ? data.channels.text : [];
+      setChannels(text.filter((c: { id?: string; name?: string }) => c?.id).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name || '' })));
     } catch {
       // ignore
     }
@@ -594,6 +612,24 @@ export default function ShopDashboard() {
               onChange={(e) => setSettingsForm((s) => ({ ...s, storeFooterText: e.target.value }))}
               placeholder="e.g. Thank you for supporting the server!"
             />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Purchase notification channel (optional)</Label>
+            <Select
+              value={settingsForm.purchaseNotificationChannelId || 'none'}
+              onValueChange={(v) => setSettingsForm((s) => ({ ...s, purchaseNotificationChannelId: v === 'none' ? '' : v }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="No channel – no Discord notifications" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No channel – no Discord notifications</SelectItem>
+                {channels.map((ch) => (
+                  <SelectItem key={ch.id} value={ch.id}>#{ch.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">When someone purchases from your shop, the bot will post a message in this channel (e.g. &quot;User X purchased Premium&quot;). Use a private channel for admin-only notifications.</p>
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Trust badges (one per line, optional)</Label>

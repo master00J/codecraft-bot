@@ -51,6 +51,7 @@ export async function GET(
       store_primary_color: '#5865F2',
       store_logo_url: null,
       store_footer_text: null,
+      purchase_notification_channel_id: null,
     };
 
     return NextResponse.json(settings);
@@ -100,6 +101,11 @@ export async function PATCH(
     if (typeof body.termsContent === 'string') update.terms_content = body.termsContent.trim() || null;
     if (typeof body.refundPolicyContent === 'string') update.refund_policy_content = body.refundPolicyContent.trim() || null;
     if (typeof body.currencyDisclaimer === 'string') update.currency_disclaimer = body.currencyDisclaimer.trim() || null;
+    if (body.purchaseNotificationChannelId !== undefined) {
+      update.purchase_notification_channel_id = typeof body.purchaseNotificationChannelId === 'string' && body.purchaseNotificationChannelId.trim()
+        ? body.purchaseNotificationChannelId.trim()
+        : null;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('guild_shop_settings')

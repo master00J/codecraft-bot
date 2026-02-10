@@ -46,9 +46,9 @@ export default function PayThankYouPage() {
         )}
         {!codeLoading && codeData?.code && (
           <div className="mt-4 p-4 rounded-lg bg-muted/50 border text-left">
-            <p className="text-sm font-medium mb-1">Your gift card code</p>
+            <p className="text-sm font-medium mb-1">Your code</p>
             <p className="text-xs text-muted-foreground mb-2">
-              Redeem on the server store page or with <code className="bg-muted px-1 rounded">/redeem</code> in Discord.
+              Use this code as instructed by the seller (e.g. in Steam or another platform). You can retrieve it again anytime under &quot;Your purchased codes&quot; on the store page.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 font-mono text-lg tracking-wider bg-background px-3 py-2 rounded border">
