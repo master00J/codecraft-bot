@@ -78,6 +78,8 @@ interface ShopSettings {
   testimonials_json?: unknown;
   terms_url?: string | null;
   refund_policy_url?: string | null;
+  terms_content?: string | null;
+  refund_policy_content?: string | null;
   currency_disclaimer?: string | null;
 }
 
@@ -160,6 +162,8 @@ export default function ShopDashboard() {
     testimonialsText: '',
     termsUrl: '',
     refundPolicyUrl: '',
+    termsContent: '',
+    refundPolicyContent: '',
     currencyDisclaimer: '',
   });
   const [categories, setCategories] = useState<ShopCategory[]>([]);
@@ -211,6 +215,8 @@ export default function ShopDashboard() {
         testimonialsText: testimonialArr.map((t: { quote?: string; author?: string }) => `${t?.quote ?? ''}|${t?.author ?? ''}`.trim()).filter(Boolean).join('\n'),
         termsUrl: data.terms_url ?? '',
         refundPolicyUrl: data.refund_policy_url ?? '',
+        termsContent: data.terms_content ?? '',
+        refundPolicyContent: data.refund_policy_content ?? '',
         currencyDisclaimer: data.currency_disclaimer ?? '',
       });
     } catch {
@@ -272,6 +278,8 @@ export default function ShopDashboard() {
           testimonials,
           termsUrl: settingsForm.termsUrl || null,
           refundPolicyUrl: settingsForm.refundPolicyUrl || null,
+          termsContent: settingsForm.termsContent || null,
+          refundPolicyContent: settingsForm.refundPolicyContent || null,
           currencyDisclaimer: settingsForm.currencyDisclaimer || null,
         }),
       });
@@ -605,20 +613,24 @@ export default function ShopDashboard() {
               rows={2}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Terms URL (optional)</Label>
-            <Input
-              value={settingsForm.termsUrl}
-              onChange={(e) => setSettingsForm((s) => ({ ...s, termsUrl: e.target.value }))}
-              placeholder="https://..."
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Terms of sale – content (optional)</Label>
+            <Textarea
+              value={settingsForm.termsContent}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, termsContent: e.target.value }))}
+              placeholder="Type your terms of sale here. Customers see this when they click “Terms of sale” on your store (link stays in the app)."
+              rows={4}
+              className="resize-y"
             />
           </div>
-          <div className="space-y-2">
-            <Label>Refund policy URL (optional)</Label>
-            <Input
-              value={settingsForm.refundPolicyUrl}
-              onChange={(e) => setSettingsForm((s) => ({ ...s, refundPolicyUrl: e.target.value }))}
-              placeholder="https://..."
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Refund policy – content (optional)</Label>
+            <Textarea
+              value={settingsForm.refundPolicyContent}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, refundPolicyContent: e.target.value }))}
+              placeholder="Type your refund policy here. Customers see this when they click “Refund policy” on your store (link stays in the app)."
+              rows={4}
+              className="resize-y"
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
@@ -858,41 +870,105 @@ export default function ShopDashboard() {
           Users can buy via the bot command <code className="bg-muted px-1 rounded">/store</code> in your server, or via your <strong>store page</strong> (link below). Configure the Stripe/PayPal webhook in Payments so roles are assigned after payment.
         </p>
         {items.length > 0 && (
-          <div className="mt-4 p-3 rounded-lg bg-muted/50 flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">Store page (share this link):</span>
-            <code className="text-xs break-all flex-1 min-w-0">
-              {typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : `…/comcraft/store/${guildId}`}
-            </code>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : '';
-                if (url) window.open(url, '_blank');
-              }}
-            >
-              <ExternalLink className="h-4 w-4 mr-1" />
-              Open store
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : '';
-                void navigator.clipboard.writeText(url).then(() => {
-                  toast({ title: 'Copied', description: 'Store link copied to clipboard.' });
-                });
-              }}
-            >
-              <Copy className="h-4 w-4 mr-1" />
-              Copy link
-            </Button>
-            <Link href={`/comcraft/dashboard/${guildId}/shop/subscriptions`}>
-              <Button variant="outline" size="sm">
-                <CreditCard className="h-4 w-4 mr-1" />
-                Subscriptions
+          <div className="mt-4 space-y-3">
+            <div className="p-3 rounded-lg bg-muted/50 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">Store page (share this link):</span>
+              <code className="text-xs break-all flex-1 min-w-0">
+                {typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : `…/comcraft/store/${guildId}`}
+              </code>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : '';
+                  if (url) window.open(url, '_blank');
+                }}
+              >
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Open store
               </Button>
-            </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}` : '';
+                  void navigator.clipboard.writeText(url).then(() => {
+                    toast({ title: 'Copied', description: 'Store link copied to clipboard.' });
+                  });
+                }}
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy link
+              </Button>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">Terms of sale (share this link):</span>
+              <code className="text-xs break-all flex-1 min-w-0">
+                {typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}/terms` : `…/comcraft/store/${guildId}/terms`}
+              </code>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}/terms` : '';
+                  if (url) window.open(url, '_blank');
+                }}
+              >
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Open
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}/terms` : '';
+                  void navigator.clipboard.writeText(url).then(() => {
+                    toast({ title: 'Copied', description: 'Terms link copied to clipboard.' });
+                  });
+                }}
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy link
+              </Button>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">Refund policy (share this link):</span>
+              <code className="text-xs break-all flex-1 min-w-0">
+                {typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}/refund` : `…/comcraft/store/${guildId}/refund`}
+              </code>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}/refund` : '';
+                  if (url) window.open(url, '_blank');
+                }}
+              >
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Open
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/comcraft/store/${guildId}/refund` : '';
+                  void navigator.clipboard.writeText(url).then(() => {
+                    toast({ title: 'Copied', description: 'Refund policy link copied to clipboard.' });
+                  });
+                }}
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy link
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/comcraft/dashboard/${guildId}/shop/subscriptions`}>
+                <Button variant="outline" size="sm">
+                  <CreditCard className="h-4 w-4 mr-1" />
+                  Subscriptions
+                </Button>
+              </Link>
+            </div>
           </div>
         )}
       </Card>

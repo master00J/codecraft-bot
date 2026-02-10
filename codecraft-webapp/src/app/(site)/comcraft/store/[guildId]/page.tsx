@@ -6,6 +6,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useSession, signIn } from 'next-auth/react';
 import Image from 'next/image';
 import { Card } from '@/components/ui/card';
@@ -45,6 +46,8 @@ interface StoreSettings {
   testimonials?: { quote: string; author?: string }[] | null;
   termsUrl?: string | null;
   refundPolicyUrl?: string | null;
+  termsContent?: string | null;
+  refundPolicyContent?: string | null;
   currencyDisclaimer?: string | null;
 }
 
@@ -488,16 +491,12 @@ export default function StorePage() {
         <footer className="mt-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
           {settings?.storeFooterText && <p className="max-w-md">{settings.storeFooterText}</p>}
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-            {settings?.termsUrl && (
-              <a href={settings.termsUrl} target="_blank" rel="noopener noreferrer" className="underline focus:ring-2 focus:ring-offset-2 rounded">
-                Terms of sale
-              </a>
-            )}
-            {settings?.refundPolicyUrl && (
-              <a href={settings.refundPolicyUrl} target="_blank" rel="noopener noreferrer" className="underline focus:ring-2 focus:ring-offset-2 rounded">
-                Refund policy
-              </a>
-            )}
+            <Link href={`/comcraft/store/${guildId}/terms`} className="underline focus:ring-2 focus:ring-offset-2 rounded">
+              Terms of sale
+            </Link>
+            <Link href={`/comcraft/store/${guildId}/refund`} className="underline focus:ring-2 focus:ring-offset-2 rounded">
+              Refund policy
+            </Link>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <ShieldCheck className="h-4 w-4" aria-hidden />

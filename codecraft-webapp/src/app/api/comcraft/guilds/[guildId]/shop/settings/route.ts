@@ -97,6 +97,8 @@ export async function PATCH(
     if (body.testimonials !== undefined) update.testimonials_json = Array.isArray(body.testimonials) ? body.testimonials : null;
     if (typeof body.termsUrl === 'string') update.terms_url = body.termsUrl.trim() || null;
     if (typeof body.refundPolicyUrl === 'string') update.refund_policy_url = body.refundPolicyUrl.trim() || null;
+    if (typeof body.termsContent === 'string') update.terms_content = body.termsContent.trim() || null;
+    if (typeof body.refundPolicyContent === 'string') update.refund_policy_content = body.refundPolicyContent.trim() || null;
     if (typeof body.currencyDisclaimer === 'string') update.currency_disclaimer = body.currencyDisclaimer.trim() || null;
 
     const { data, error } = await supabaseAdmin

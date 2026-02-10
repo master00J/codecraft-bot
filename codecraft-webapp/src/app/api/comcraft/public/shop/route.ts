@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       .order('name', { ascending: true }),
     supabaseAdmin
       .from('guild_shop_settings')
-      .select('store_name, store_description, store_primary_color, store_logo_url, store_footer_text, trust_badges_json, testimonials_json, terms_url, refund_policy_url, currency_disclaimer')
+      .select('store_name, store_description, store_primary_color, store_logo_url, store_footer_text, trust_badges_json, testimonials_json, terms_url, refund_policy_url, terms_content, refund_policy_content, currency_disclaimer')
       .eq('guild_id', guildId)
       .maybeSingle(),
     supabaseAdmin
@@ -85,6 +85,8 @@ export async function GET(request: NextRequest) {
       testimonials: settings.testimonials_json ?? null,
       termsUrl: settings.terms_url ?? null,
       refundPolicyUrl: settings.refund_policy_url ?? null,
+      termsContent: settings.terms_content ?? null,
+      refundPolicyContent: settings.refund_policy_content ?? null,
       currencyDisclaimer: settings.currency_disclaimer ?? null,
     } : null,
   });
