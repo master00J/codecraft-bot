@@ -229,17 +229,6 @@ export default function ShopDashboard() {
     }
   }
 
-  async function loadCoupons() {
-    try {
-      const res = await fetch(`/api/comcraft/guilds/${guildId}/shop/coupons`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setCoupons(data.coupons ?? []);
-    } catch {
-      // ignore
-    }
-  }
-
   async function loadSales() {
     setSalesLoading(true);
     try {
