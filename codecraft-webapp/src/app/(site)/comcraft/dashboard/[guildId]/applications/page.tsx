@@ -645,6 +645,50 @@ export default function ApplicationsDashboard() {
                 </p>
               </div>
 
+              {/* Live embed preview */}
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Preview (how it looks in Discord)</Label>
+                <div className="rounded-lg overflow-hidden border border-border bg-[#2b2d31] max-w-lg">
+                  <div
+                    className="flex gap-3 p-4"
+                    style={{ borderLeft: '4px solid #5865F2' }}
+                  >
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <p className="text-[15px] font-semibold text-white">
+                        📝 Apply for: {configName || 'Staff'}
+                      </p>
+                      <p className="text-sm text-[#b5bac1] whitespace-pre-wrap break-words">
+                        Use the button below to apply for <span className="font-semibold text-white">{configName || 'Staff'}</span>. You will receive a form with questions.
+                        {embedDescription.trim() && (
+                          <>
+                            {'\n\n'}
+                            {embedDescription.trim().slice(0, 500)}
+                          </>
+                        )}
+                      </p>
+                      <div className="flex flex-wrap gap-4 pt-1">
+                        <div>
+                          <span className="text-xs text-[#949ba4]">⏱️ Cooldown</span>
+                          <p className="text-sm text-[#b5bac1]">{cooldownDays} day(s) between applications</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-[#949ba4]">❓ Questions</span>
+                          <p className="text-sm text-[#b5bac1]">{questions.length} question(s)</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-[#949ba4] pt-1">
+                        Applications for {configName || 'Staff'} will be reviewed by the staff team
+                      </p>
+                    </div>
+                  </div>
+                  <div className="px-4 pb-3">
+                    <div className="inline-flex h-9 items-center justify-center rounded px-4 text-sm font-medium bg-[#5865F2] text-white cursor-default">
+                      📝 Apply: {(configName || 'Staff').substring(0, 80)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Basic Settings */}
               <div className="space-y-4">
                 <div>
