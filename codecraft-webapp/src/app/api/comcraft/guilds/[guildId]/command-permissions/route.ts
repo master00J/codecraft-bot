@@ -8,13 +8,39 @@ export const dynamic = 'force-dynamic';
 
 /** Slash commands that can be restricted by role (command_name as in Discord). */
 export const RESTRICTABLE_COMMANDS = [
+  // Shop & economy
   { name: 'store', label: '/store' },
   { name: 'shop', label: '/shop (combat shop)' },
   { name: 'buy', label: '/buy' },
   { name: 'sell', label: '/sell' },
+  { name: 'redeem', label: '/redeem' },
+  // Applications & tickets
   { name: 'application', label: '/application' },
   { name: 'ticket', label: '/ticket' },
-  { name: 'redeem', label: '/redeem' },
+  { name: 'ticket-setup', label: '/ticket-setup' },
+  { name: 'ticket-stats', label: '/ticket-stats' },
+  { name: 'ticket-panel', label: '/ticket-panel' },
+  // Dashboard & invite
+  { name: 'dashboard', label: '/dashboard' },
+  { name: 'invite', label: '/invite' },
+  // Giveaways & polls
+  { name: 'giveaway', label: '/giveaway' },
+  { name: 'poll', label: '/poll' },
+  // Moderation
+  { name: 'warn', label: '/warn' },
+  { name: 'mute', label: '/mute' },
+  { name: 'unmute', label: '/unmute' },
+  { name: 'kick', label: '/kick' },
+  { name: 'ban', label: '/ban' },
+  // Config & feedback
+  { name: 'customcommand', label: '/customcommand' },
+  { name: 'birthdayconfig', label: '/birthdayconfig' },
+  { name: 'feedback', label: '/feedback' },
+  { name: 'donate', label: '/donate' },
+  // Verification
+  { name: 'verify', label: '/verify' },
+  { name: 'verify-set', label: '/verify-set' },
+  { name: 'sticky', label: '/sticky' },
 ] as const;
 
 // GET - List command permissions for the guild (all restrictable commands with their allowed_role_ids)

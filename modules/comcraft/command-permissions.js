@@ -6,7 +6,15 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getSupabase } = require('../supabase-client');
 
-const RESTRICTABLE_COMMAND_NAMES = ['store', 'shop', 'buy', 'sell', 'application', 'ticket', 'redeem'];
+const RESTRICTABLE_COMMAND_NAMES = [
+  'store', 'shop', 'buy', 'sell', 'redeem',
+  'application', 'ticket', 'ticket-setup', 'ticket-stats', 'ticket-panel',
+  'dashboard', 'invite',
+  'giveaway', 'poll',
+  'warn', 'mute', 'unmute', 'kick', 'ban',
+  'customcommand', 'birthdayconfig', 'feedback', 'donate',
+  'verify', 'verify-set', 'sticky',
+];
 
 /**
  * Check if the member is allowed to use this command. If not, replies ephemerally and returns false.
