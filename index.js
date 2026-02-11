@@ -9186,6 +9186,27 @@ async function handleApplicationReviewButton(interaction) {
       // Update the message
       await applicationsManager.updateApplicationMessage(result.application, interaction.guild);
 
+      // If approved and config has a reward role, assign it to the applicant
+      if (isApprove && discordManager && result.application.config_id) {
+        const configResult = await applicationsManager.getConfigById(interaction.guild.id, result.application.config_id);
+        const config = configResult.config;
+        if (config?.reward_role_id) {
+          try {
+            const roleResult = await discordManager.addRoleToMember(
+              interaction.guild.id,
+              result.application.user_id,
+              config.reward_role_id,
+              'Application approved'
+            );
+            if (!roleResult.success) {
+              console.warn('Application approve: could not assign role:', roleResult.error);
+            }
+          } catch (err) {
+            console.warn('Application approve: error assigning role:', err?.message || err);
+          }
+        }
+      }
+
       // Try to DM the applicant
       try {
         const applicant = await interaction.client.users.fetch(result.application.user_id);

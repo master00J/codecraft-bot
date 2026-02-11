@@ -87,7 +87,8 @@ export async function POST(
       cooldown_days,
       require_account_age_days,
       auto_thread,
-      ping_role_id
+      ping_role_id,
+      reward_role_id
     } = body;
 
     if (!channel_id || !questions || !Array.isArray(questions)) {
@@ -105,6 +106,7 @@ export async function POST(
       require_account_age_days: require_account_age_days ?? 0,
       auto_thread: auto_thread ?? false,
       ping_role_id: ping_role_id ?? null,
+      reward_role_id: reward_role_id ?? null,
       updated_at: new Date().toISOString()
     };
 

@@ -80,6 +80,7 @@ interface ApplicationConfig {
   require_account_age_days: number;
   auto_thread: boolean;
   ping_role_id: string | null;
+  reward_role_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +103,7 @@ export default function ApplicationsDashboard() {
   const [applicationToDelete, setApplicationToDelete] = useState<Application | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [channels, setChannels] = useState<any[]>([]);
+  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
 
   // Config form state
   const [configName, setConfigName] = useState('Staff');
@@ -113,6 +115,7 @@ export default function ApplicationsDashboard() {
   const [accountAgeDays, setAccountAgeDays] = useState(30);
   const [autoThread, setAutoThread] = useState(true);
   const [pingRoleId, setPingRoleId] = useState('');
+  const [rewardRoleId, setRewardRoleId] = useState('');
 
   useEffect(() => {
     if (guildId) {
@@ -127,16 +130,18 @@ export default function ApplicationsDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch config, applications, and channels in parallel
-      const [configResponse, appsResponse, channelsResponse] = await Promise.all([
+      // Fetch config, applications, channels, and roles in parallel
+      const [configResponse, appsResponse, channelsResponse, rolesResponse] = await Promise.all([
         fetch(`/api/comcraft/guilds/${guildId}/application-config`),
         fetch(`/api/comcraft/guilds/${guildId}/applications`),
-        fetch(`/api/comcraft/guilds/${guildId}/discord/channels`)
+        fetch(`/api/comcraft/guilds/${guildId}/discord/channels`),
+        fetch(`/api/comcraft/guilds/${guildId}/discord/roles`).catch(() => ({ json: async () => ({ roles: [] }) }))
       ]);
 
       const configData = await configResponse.json();
       const appsData = await appsResponse.json();
       const channelsData = await channelsResponse.json();
+      const rolesData = await rolesResponse.json();
 
       const list = configData.configs || (configData.config ? [configData.config] : []);
       setConfigs(list);
@@ -153,6 +158,7 @@ export default function ApplicationsDashboard() {
         setAccountAgeDays(first.require_account_age_days ?? 30);
         setAutoThread(first.auto_thread ?? true);
         setPingRoleId(first.ping_role_id || '');
+        setRewardRoleId(first.reward_role_id || '');
       }
 
       if (appsData.applications) {
@@ -161,6 +167,10 @@ export default function ApplicationsDashboard() {
 
       if (channelsData.channels?.text) {
         setChannels(channelsData.channels.text);
+      }
+
+      if (rolesData.roles && Array.isArray(rolesData.roles)) {
+        setRoles(rolesData.roles);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -231,6 +241,7 @@ export default function ApplicationsDashboard() {
           require_account_age_days: accountAgeDays,
           auto_thread: autoThread,
           ping_role_id: pingRoleId || null,
+          reward_role_id: rewardRoleId || null,
         }),
       });
 
@@ -335,6 +346,7 @@ export default function ApplicationsDashboard() {
     setAccountAgeDays(c.require_account_age_days ?? 30);
     setAutoThread(c.auto_thread ?? true);
     setPingRoleId(c.ping_role_id || '');
+    setRewardRoleId(c.reward_role_id || '');
   };
 
   const startNewType = () => {
@@ -349,6 +361,7 @@ export default function ApplicationsDashboard() {
     setAccountAgeDays(30);
     setAutoThread(true);
     setPingRoleId('');
+    setRewardRoleId('');
   };
 
   const getStatusBadge = (status: string) => {
@@ -724,15 +737,44 @@ export default function ApplicationsDashboard() {
                 </div>
 
                 <div>
-                  <Label htmlFor="pingRoleId">Ping Role ID (optional)</Label>
-                  <Input
-                    id="pingRoleId"
-                    placeholder="Enter role ID to ping"
-                    value={pingRoleId}
-                    onChange={(e) => setPingRoleId(e.target.value)}
-                  />
+                  <Label htmlFor="pingRoleId">Ping Role (optional)</Label>
+                  <Select
+                    value={pingRoleId || 'none'}
+                    onValueChange={(v) => setPingRoleId(v === 'none' ? '' : v)}
+                  >
+                    <SelectTrigger id="pingRoleId">
+                      <SelectValue placeholder="Role to ping on new application" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {roles.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-muted-foreground mt-1">
                     Role to ping when a new application is submitted
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="rewardRoleId">Role to assign when approved</Label>
+                  <Select
+                    value={rewardRoleId || 'none'}
+                    onValueChange={(v) => setRewardRoleId(v === 'none' ? '' : v)}
+                  >
+                    <SelectTrigger id="rewardRoleId">
+                      <SelectValue placeholder="Select role (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None – do not assign a role</SelectItem>
+                      {roles.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If set, this role is automatically assigned to the applicant when their application is approved.
                   </p>
                 </div>
               </div>
