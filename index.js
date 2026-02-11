@@ -8819,6 +8819,15 @@ async function handleStoreCommand(interaction) {
     .setDescription(`Buy a role below, or **open the store in your browser** with the button at the bottom. You'll be redirected to secure payment (Stripe or PayPal); after payment, the role is assigned automatically.`)
     .setFooter({ text: 'Payments go to the server owner' })
     .setTimestamp();
+  const currencySymbol = (code) => {
+    const c = (code || 'eur').toUpperCase();
+    if (c === 'EUR') return '€';
+    if (c === 'USD') return '$';
+    if (c === 'GBP') return '£';
+    if (c === 'JPY') return '¥';
+    if (c === 'CHF') return 'CHF ';
+    return c + ' '; // e.g. CAD, AUD
+  };
   const rows = [];
   const maxButtonsPerRow = 5;
   for (let i = 0; i < items.length; i += maxButtonsPerRow) {
@@ -8827,7 +8836,7 @@ async function handleStoreCommand(interaction) {
     for (const item of chunk) {
       const label = item.name.length > 80 ? item.name.slice(0, 77) + '…' : item.name;
       const price = (item.price_amount_cents / 100).toFixed(2);
-      const sym = (item.currency || 'eur').toUpperCase() === 'EUR' ? '€' : '$';
+      const sym = currencySymbol(item.currency);
       row.addComponents(
         new ButtonBuilder()
           .setCustomId(`guild_shop_buy_${item.id}`)
@@ -13796,7 +13805,7 @@ async function handleShopCommand(interaction) {
 
   if (!items || items.length === 0) {
     return interaction.editReply({
-      content: '🛒 The shop is currently empty. Ask an administrator to add items!',
+      content: '🛒 **Combat shop** has no items (weapons/armor/consumables). Add them in **Dashboard → Combat Items**. For the server\'s **role/store page** (pay with card), use **/store** instead.',
     });
   }
 

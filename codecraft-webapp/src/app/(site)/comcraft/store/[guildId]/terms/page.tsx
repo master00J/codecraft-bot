@@ -20,8 +20,8 @@ export default function StoreTermsPage() {
       .then((res) => res.json())
       .then((data) => {
         const s = data.settings ?? null;
-        if (s?.terms_content) {
-          setContent(s.terms_content);
+        if (s?.termsContent) {
+          setContent(s.termsContent);
         }
         setStoreName(s?.storeName ?? 'Store');
       })

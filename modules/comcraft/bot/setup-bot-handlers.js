@@ -5561,7 +5561,7 @@ async function handleShopCommand(interaction, itemManager, economyManager) {
 
   if (!items || items.length === 0) {
     return interaction.editReply({
-      content: '🛒 The shop is currently empty. Ask an administrator to add items!',
+      content: '🛒 **Combat shop** has no items (weapons/armor/consumables). Add them in **Dashboard → Combat Items**. For the server\'s **role/store page** (pay with card), use **/store** instead.',
     });
   }
 
