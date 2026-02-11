@@ -1566,7 +1566,7 @@ export default function TicketsPage() {
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                   <div className="space-y-2">
                     <Label>Name *</Label>
                     <Input
@@ -1640,8 +1640,8 @@ export default function TicketsPage() {
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Who can open this ticket type?</Label>
+                  <div className="space-y-2 border-t pt-4">
+                    <Label className="text-base font-medium">Who can open this ticket type?</Label>
                     <div className="flex flex-wrap gap-2">
                       <Select
                         value="__add__"
