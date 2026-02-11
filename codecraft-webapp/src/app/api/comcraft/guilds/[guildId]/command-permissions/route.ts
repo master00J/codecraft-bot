@@ -100,7 +100,7 @@ export async function PUT(
       return NextResponse.json({ error: 'permissions array required' }, { status: 400 });
     }
 
-    const validNames = new Set(RESTRICTABLE_COMMANDS.map(c => c.name));
+    const validNames = new Set<string>(RESTRICTABLE_COMMANDS.map(c => c.name));
     for (const p of permissions) {
       if (!validNames.has(p.command_name)) continue;
       const roleIds = p.allowed_role_ids == null || (Array.isArray(p.allowed_role_ids) && p.allowed_role_ids.length === 0)
