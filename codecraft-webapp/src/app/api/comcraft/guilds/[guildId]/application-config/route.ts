@@ -7,7 +7,8 @@ const supabase = supabaseAdmin;
 
 const COMCRAFT_BOT_API = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
-const BASE_URL = process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+// Apply link in Discord embed: always point to production so the button works from any deployment
+const APPLY_BASE_URL = process.env.PUBLIC_APP_URL || 'https://codecraft-solutions.com';
 
 /**
  * Log activity to database
@@ -186,7 +187,7 @@ export async function POST(
           timestamp: new Date().toISOString()
         };
 
-        const applyUrl = `${BASE_URL}/comcraft/apply/${guildId}?config=${config.id}`;
+        const applyUrl = `${APPLY_BASE_URL}/comcraft/apply/${guildId}?config=${config.id}`;
         const components = [
           {
             type: 1, // ActionRow
