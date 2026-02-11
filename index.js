@@ -1691,6 +1691,12 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // Handle application assign-role select (after choosing role when multiple options)
+    if (interaction.isStringSelectMenu() && interaction.customId && interaction.customId.startsWith('app_assign_')) {
+      await handleApplicationAssignRoleSelect(interaction);
+      return;
+    }
+
     // Handle application approve/reject buttons
     if (interaction.customId && (interaction.customId.startsWith('app_approve_') || interaction.customId.startsWith('app_reject_'))) {
       await handleApplicationReviewButton(interaction);
@@ -9151,7 +9157,20 @@ async function handleApplicationVoteButton(interaction) {
 }
 
 /**
+ * Resolve list of reward role IDs from config (reward_role_ids array or legacy reward_role_id)
+ */
+function getApplicationRewardRoleIds(config) {
+  if (!config) return [];
+  if (Array.isArray(config.reward_role_ids) && config.reward_role_ids.length > 0) {
+    return config.reward_role_ids;
+  }
+  if (config.reward_role_id) return [config.reward_role_id];
+  return [];
+}
+
+/**
  * Handle application review button (approve/reject)
+ * If Approve and config has multiple reward roles, show a select menu to choose which role to assign.
  */
 async function handleApplicationReviewButton(interaction) {
   await interaction.deferReply({ ephemeral: true });
@@ -9163,18 +9182,50 @@ async function handleApplicationReviewButton(interaction) {
       });
     }
 
-    // Check permissions
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.editReply({
         content: '❌ You need Manage Server permission to review applications.',
       });
     }
 
-    // Extract application ID and action from custom ID
     const isApprove = interaction.customId.startsWith('app_approve_');
     const applicationId = interaction.customId.replace(isApprove ? 'app_approve_' : 'app_reject_', '');
 
-    // Perform action
+    if (isApprove) {
+      const { data: application } = await applicationsManager.supabase
+        .from('applications')
+        .select('*')
+        .eq('id', applicationId)
+        .single();
+      if (application?.config_id) {
+        const configResult = await applicationsManager.getConfigById(interaction.guild.id, application.config_id);
+        const roleIds = getApplicationRewardRoleIds(configResult.config);
+        if (roleIds.length > 1) {
+          const guild = interaction.guild;
+          const options = roleIds.slice(0, 25).map((roleId) => {
+            const role = guild.roles.cache.get(roleId);
+            return {
+              label: (role && role.name) ? role.name.substring(0, 100) : roleId,
+              value: roleId,
+              description: role ? `Assign ${role.name}` : null
+            };
+          }).filter(o => o.label);
+          if (options.length > 0) {
+            const { StringSelectMenuBuilder } = require('discord.js');
+            const select = new StringSelectMenuBuilder()
+              .setCustomId(`app_assign_${applicationId}`)
+              .setPlaceholder(`Select role to assign to ${application.username || 'applicant'}…`)
+              .addOptions(options);
+            const row = new ActionRowBuilder().addComponents(select);
+            return interaction.editReply({
+              content: `✅ Choose which role to assign to **${application.username || 'the applicant'}** (application will be approved and they will receive that role):`,
+              components: [row]
+            });
+          }
+        }
+      }
+    }
+
     let result;
     if (isApprove) {
       result = await applicationsManager.approveApplication(applicationId, interaction.user.id);
@@ -9183,31 +9234,24 @@ async function handleApplicationReviewButton(interaction) {
     }
 
     if (result.success) {
-      // Update the message
       await applicationsManager.updateApplicationMessage(result.application, interaction.guild);
 
-      // If approved and config has a reward role, assign it to the applicant
-      if (isApprove && discordManager && result.application.config_id) {
-        const configResult = await applicationsManager.getConfigById(interaction.guild.id, result.application.config_id);
-        const config = configResult.config;
-        if (config?.reward_role_id) {
-          try {
-            const roleResult = await discordManager.addRoleToMember(
-              interaction.guild.id,
-              result.application.user_id,
-              config.reward_role_id,
-              'Application approved'
-            );
-            if (!roleResult.success) {
-              console.warn('Application approve: could not assign role:', roleResult.error);
-            }
-          } catch (err) {
-            console.warn('Application approve: error assigning role:', err?.message || err);
-          }
+      const roleIds = isApprove && result.application.config_id
+        ? getApplicationRewardRoleIds((await applicationsManager.getConfigById(interaction.guild.id, result.application.config_id)).config)
+        : [];
+      if (isApprove && discordManager && roleIds.length === 1) {
+        try {
+          await discordManager.addRoleToMember(
+            interaction.guild.id,
+            result.application.user_id,
+            roleIds[0],
+            'Application approved'
+          );
+        } catch (err) {
+          console.warn('Application approve: error assigning role:', err?.message || err);
         }
       }
 
-      // Try to DM the applicant
       try {
         const applicant = await interaction.client.users.fetch(result.application.user_id);
         const dmEmbed = new EmbedBuilder()
@@ -9219,7 +9263,6 @@ async function handleApplicationReviewButton(interaction) {
             { name: 'Date', value: new Date().toLocaleDateString(), inline: true }
           )
           .setTimestamp();
-
         if (isApprove) {
           dmEmbed.addFields({
             name: 'Next Steps',
@@ -9227,7 +9270,6 @@ async function handleApplicationReviewButton(interaction) {
             inline: false
           });
         }
-
         await applicant.send({ embeds: [dmEmbed] });
       } catch (err) {
         console.log('Could not DM applicant:', err.message);
@@ -9245,6 +9287,72 @@ async function handleApplicationReviewButton(interaction) {
     console.error('Error handling application review:', error);
     return interaction.editReply({
       content: '❌ An error occurred while processing the review.',
+    });
+  }
+}
+
+/**
+ * Handle select menu: user chose which role to assign when approving (multiple roles per application type)
+ */
+async function handleApplicationAssignRoleSelect(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    if (!applicationsManager || !discordManager) {
+      return interaction.editReply({ content: '❌ Applications system is not available.' });
+    }
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.editReply({ content: '❌ You need Manage Server permission.' });
+    }
+
+    const applicationId = interaction.customId.replace('app_assign_', '');
+    const selectedRoleId = interaction.values && interaction.values[0];
+    if (!selectedRoleId) {
+      return interaction.editReply({ content: '❌ No role selected.' });
+    }
+
+    const result = await applicationsManager.approveApplication(applicationId, interaction.user.id);
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.error}` });
+    }
+
+    await applicationsManager.updateApplicationMessage(result.application, interaction.guild);
+
+    try {
+      await discordManager.addRoleToMember(
+        interaction.guild.id,
+        result.application.user_id,
+        selectedRoleId,
+        'Application approved'
+      );
+    } catch (err) {
+      console.warn('Application assign role error:', err?.message || err);
+    }
+
+    const roleName = interaction.guild.roles.cache.get(selectedRoleId)?.name || selectedRoleId;
+    try {
+      const applicant = await interaction.client.users.fetch(result.application.user_id);
+      const dmEmbed = new EmbedBuilder()
+        .setColor('#57F287')
+        .setTitle('✅ Application Approved')
+        .setDescription(`Your staff application in **${interaction.guild.name}** has been approved. You have been assigned the **${roleName}** role.`)
+        .addFields(
+          { name: 'Reviewed By', value: `${interaction.user.username}`, inline: true },
+          { name: 'Date', value: new Date().toLocaleDateString(), inline: true }
+        )
+        .setTimestamp();
+      await applicant.send({ embeds: [dmEmbed] });
+    } catch (err) {
+      console.log('Could not DM applicant:', err.message);
+    }
+
+    return interaction.editReply({
+      content: `✅ Application approved and **${roleName}** has been assigned. The applicant has been notified via DM.`,
+    });
+  } catch (error) {
+    console.error('Error handling application assign role:', error);
+    return interaction.editReply({
+      content: '❌ An error occurred.',
     });
   }
 }

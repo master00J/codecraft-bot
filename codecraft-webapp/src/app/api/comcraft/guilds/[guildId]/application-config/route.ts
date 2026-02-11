@@ -91,6 +91,7 @@ export async function POST(
       auto_thread,
       ping_role_id,
       reward_role_id,
+      reward_role_ids,
       embed_description
     } = body;
 
@@ -110,6 +111,9 @@ export async function POST(
       auto_thread: auto_thread ?? false,
       ping_role_id: ping_role_id ?? null,
       reward_role_id: reward_role_id ?? null,
+      reward_role_ids: Array.isArray(reward_role_ids) && reward_role_ids.length > 0
+        ? reward_role_ids.filter((id: unknown) => typeof id === 'string' && id.trim())
+        : null,
       embed_description: typeof embed_description === 'string' ? embed_description.trim() || null : null,
       updated_at: new Date().toISOString()
     };

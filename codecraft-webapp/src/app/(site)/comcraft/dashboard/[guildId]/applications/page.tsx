@@ -81,6 +81,7 @@ interface ApplicationConfig {
   auto_thread: boolean;
   ping_role_id: string | null;
   reward_role_id: string | null;
+  reward_role_ids: string[] | null;
   embed_description: string | null;
   created_at: string;
   updated_at: string;
@@ -116,7 +117,7 @@ export default function ApplicationsDashboard() {
   const [accountAgeDays, setAccountAgeDays] = useState(30);
   const [autoThread, setAutoThread] = useState(true);
   const [pingRoleId, setPingRoleId] = useState('');
-  const [rewardRoleId, setRewardRoleId] = useState('');
+  const [rewardRoleIds, setRewardRoleIds] = useState<string[]>([]);
   const [embedDescription, setEmbedDescription] = useState('');
 
   useEffect(() => {
@@ -160,7 +161,13 @@ export default function ApplicationsDashboard() {
         setAccountAgeDays(first.require_account_age_days ?? 30);
         setAutoThread(first.auto_thread ?? true);
         setPingRoleId(first.ping_role_id || '');
-        setRewardRoleId(first.reward_role_id || '');
+        setRewardRoleIds(
+          Array.isArray(first.reward_role_ids) && first.reward_role_ids.length > 0
+            ? first.reward_role_ids
+            : first.reward_role_id
+              ? [first.reward_role_id]
+              : []
+        );
         setEmbedDescription(first.embed_description || '');
       }
 
@@ -244,7 +251,7 @@ export default function ApplicationsDashboard() {
           require_account_age_days: accountAgeDays,
           auto_thread: autoThread,
           ping_role_id: pingRoleId || null,
-          reward_role_id: rewardRoleId || null,
+          reward_role_ids: rewardRoleIds.length > 0 ? rewardRoleIds : null,
           embed_description: embedDescription.trim() || null,
         }),
       });
@@ -350,7 +357,11 @@ export default function ApplicationsDashboard() {
     setAccountAgeDays(c.require_account_age_days ?? 30);
     setAutoThread(c.auto_thread ?? true);
     setPingRoleId(c.ping_role_id || '');
-    setRewardRoleId(c.reward_role_id || '');
+    setRewardRoleIds(
+      Array.isArray(c.reward_role_ids) && c.reward_role_ids.length > 0
+        ? c.reward_role_ids
+        : c.reward_role_id ? [c.reward_role_id] : []
+    );
     setEmbedDescription(c.embed_description || '');
   };
 
@@ -366,7 +377,7 @@ export default function ApplicationsDashboard() {
     setAccountAgeDays(30);
     setAutoThread(true);
     setPingRoleId('');
-    setRewardRoleId('');
+    setRewardRoleIds([]);
     setEmbedDescription('');
   };
 
@@ -823,23 +834,48 @@ export default function ApplicationsDashboard() {
                 </div>
 
                 <div>
-                  <Label htmlFor="rewardRoleId">Role to assign when approved</Label>
-                  <Select
-                    value={rewardRoleId || 'none'}
-                    onValueChange={(v) => setRewardRoleId(v === 'none' ? '' : v)}
-                  >
-                    <SelectTrigger id="rewardRoleId">
-                      <SelectValue placeholder="Select role (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None – do not assign a role</SelectItem>
-                      {roles.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Roles to choose from when approving</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Select
+                      value="__add__"
+                      onValueChange={(v) => {
+                        if (v && v !== '__add__' && !rewardRoleIds.includes(v)) setRewardRoleIds([...rewardRoleIds, v]);
+                      }}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Add role…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__add__">Add role…</SelectItem>
+                        {roles
+                          .filter((r) => !rewardRoleIds.includes(r.id))
+                          .map((r) => (
+                            <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                          ))}
+                        {roles.filter((r) => !rewardRoleIds.includes(r.id)).length === 0 && (
+                          <SelectItem value="__none__" disabled>All roles added</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {rewardRoleIds.map((id) => {
+                      const role = roles.find((r) => r.id === id);
+                      return (
+                        <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                          {role?.name ?? id}
+                          <button
+                            type="button"
+                            aria-label="Remove role"
+                            className="rounded-full hover:bg-muted p-0.5"
+                            onClick={() => setRewardRoleIds(rewardRoleIds.filter((r) => r !== id))}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    If set, this role is automatically assigned to the applicant when their application is approved.
+                    One application type, multiple possible roles. When you approve someone, you choose which role to assign (e.g. Head Admin, Transfer Admin). Leave empty to not assign any role.
                   </p>
                 </div>
               </div>
