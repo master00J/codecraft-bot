@@ -51,7 +51,10 @@ import {
   Twitter,
   ShieldCheck,
   CreditCard,
-  ShoppingBag
+  ShoppingBag,
+  Search,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 // Use Sparkles as icon for Maid Jobs
@@ -96,7 +99,10 @@ export default function GuildDashboardLayout({
   const [currentHash, setCurrentHash] = useState<string>('');
   const [featureTiers, setFeatureTiers] = useState<Record<string, string>>({});
   const [menuOrder, setMenuOrder] = useState<string[] | null>(null);
+  const [menuHidden, setMenuHidden] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isReorderMode, setIsReorderMode] = useState(false);
+  const [isCustomizeMode, setIsCustomizeMode] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
@@ -239,22 +245,21 @@ export default function GuildDashboardLayout({
     checkAccess();
   }, [guildId]);
 
-  // Fetch menu order
+  // Fetch menu order and hidden items
   useEffect(() => {
-    async function fetchMenuOrder() {
+    async function fetchMenu() {
       try {
         const response = await fetch(`/api/comcraft/guilds/${guildId}/menu-order`);
         const data = await response.json();
-        if (data.menuOrder) {
-          setMenuOrder(data.menuOrder);
-        }
+        if (data.menuOrder) setMenuOrder(data.menuOrder);
+        if (Array.isArray(data.menuHidden)) setMenuHidden(data.menuHidden);
       } catch (error) {
-        console.error('Error fetching menu order:', error);
+        console.error('Error fetching menu:', error);
       }
     }
 
     if (guildId && hasAccess) {
-      fetchMenuOrder();
+      fetchMenu();
     }
   }, [guildId, hasAccess]);
 
@@ -265,7 +270,7 @@ export default function GuildDashboardLayout({
       const response = await fetch(`/api/comcraft/guilds/${guildId}/menu-order`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ menuOrder: newOrder }),
+        body: JSON.stringify({ menuOrder: newOrder, menuHidden }),
       });
 
       if (response.ok) {
@@ -281,18 +286,44 @@ export default function GuildDashboardLayout({
     }
   };
 
-  // Handle drag end
+  // Save hidden items
+  const saveMenuHidden = async (newHidden: string[]) => {
+    setSavingOrder(true);
+    try {
+      const response = await fetch(`/api/comcraft/guilds/${guildId}/menu-order`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menuHidden: newHidden, menuOrder: menuOrder ?? undefined }),
+      });
+      if (response.ok) setMenuHidden(newHidden);
+    } catch (error) {
+      console.error('Error saving menu visibility:', error);
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  const toggleHidden = (itemName: string) => {
+    const next = menuHidden.includes(itemName)
+      ? menuHidden.filter((n) => n !== itemName)
+      : [...menuHidden, itemName];
+    setMenuHidden(next);
+    saveMenuHidden(next);
+  };
+
+  // Handle drag end (reorder visible items; keep hidden at end of saved order)
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const currentOrder = menuOrder || navigation.map(item => item.name);
-      const oldIndex = currentOrder.indexOf(active.id as string);
-      const newIndex = currentOrder.indexOf(over.id as string);
-      
+      const visibleNames = visibleNavigation.map((item) => item.name);
+      const oldIndex = visibleNames.indexOf(active.id as string);
+      const newIndex = visibleNames.indexOf(over.id as string);
+
       if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
-        setMenuOrder(newOrder);
+        const newVisibleOrder = arrayMove(visibleNames, oldIndex, newIndex);
+        const newFullOrder = newVisibleOrder.concat(menuHidden);
+        setMenuOrder(newFullOrder);
       }
     }
   };
@@ -333,18 +364,25 @@ export default function GuildDashboardLayout({
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
     { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },
+    { name: 'Command Permissions', href: `/comcraft/dashboard/${guildId}/command-permissions`, icon: Shield },
     { name: 'Payments', href: `/comcraft/dashboard/${guildId}/payments`, icon: CreditCard },
     { name: 'Shop', href: `/comcraft/dashboard/${guildId}/shop`, icon: ShoppingBag },
     { name: 'Game Verification', href: `/comcraft/dashboard/${guildId}/game-verification`, icon: ShieldCheck },
   ];
 
-  // Apply menu order if available
-  const navigation = menuOrder && menuOrder.length > 0
+  // Apply menu order, then exclude hidden items
+  const fullOrderedNav = menuOrder && menuOrder.length > 0
     ? menuOrder
         .map(name => defaultNavigation.find(item => item.name === name))
         .filter((item): item is NavItem => item !== undefined)
         .concat(defaultNavigation.filter(item => !menuOrder.includes(item.name)))
     : defaultNavigation;
+  const visibleNavigation = fullOrderedNav.filter((item) => !menuHidden.includes(item.name));
+  const searchLower = searchQuery.trim().toLowerCase();
+  const navigation = searchLower
+    ? visibleNavigation.filter((item) => item.name.toLowerCase().includes(searchLower))
+    : visibleNavigation;
+  const hiddenNavItems = defaultNavigation.filter((item) => menuHidden.includes(item.name));
 
   // Sortable Nav Item Component (only used in reorder mode)
   function SortableNavItem({ item }: { item: NavItem }) {
@@ -474,26 +512,63 @@ export default function GuildDashboardLayout({
               <div className="text-xs text-gray-400">Dashboard</div>
             </div>
           </Link>
-          {!isReorderMode ? (
-            <button
-              onClick={() => {
-                setIsReorderMode(true);
-                if (!menuOrder) {
-                  setMenuOrder(navigation.map(item => item.name));
-                }
-              }}
-              className="w-full px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2 justify-center"
-            >
-              <GripVertical className="h-3 w-3" />
-              Reorder Menu
-            </button>
+
+          {/* Search */}
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search menu..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-2 text-sm bg-gray-800/50 border border-gray-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          {!isReorderMode && !isCustomizeMode ? (
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => {
+                  setIsReorderMode(true);
+                  if (!menuOrder) {
+                    setMenuOrder(visibleNavigation.map((item) => item.name).concat(menuHidden));
+                  }
+                }}
+                className="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2 justify-center"
+              >
+                <GripVertical className="h-3 w-3" />
+                Reorder
+              </button>
+              <button
+                onClick={() => setIsCustomizeMode(true)}
+                className="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2 justify-center"
+              >
+                <Eye className="h-3 w-3" />
+                Customize
+              </button>
+            </div>
+          ) : isCustomizeMode ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsCustomizeMode(false)}
+                className="flex-1 px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2 justify-center"
+              >
+                <Check className="h-3 w-3" />
+                Done
+              </button>
+              <button
+                onClick={() => setIsCustomizeMode(false)}
+                className="px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center justify-center"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           ) : (
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  if (menuOrder) {
-                    saveMenuOrder(menuOrder);
-                  }
+                  const orderToSave = menuOrder ?? visibleNavigation.map((i) => i.name).concat(menuHidden);
+                  saveMenuOrder(orderToSave);
                 }}
                 disabled={savingOrder}
                 className="flex-1 px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2 justify-center disabled:opacity-50"
@@ -504,10 +579,12 @@ export default function GuildDashboardLayout({
               <button
                 onClick={() => {
                   setIsReorderMode(false);
-                  // Reload original order
                   fetch(`/api/comcraft/guilds/${guildId}/menu-order`)
-                    .then(res => res.json())
-                    .then(data => setMenuOrder(data.menuOrder || null))
+                    .then((res) => res.json())
+                    .then((data) => {
+                      setMenuOrder(data.menuOrder || null);
+                      if (Array.isArray(data.menuHidden)) setMenuHidden(data.menuHidden);
+                    })
                     .catch(() => setMenuOrder(null));
                 }}
                 className="px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 rounded-lg transition-colors flex items-center justify-center"
@@ -519,7 +596,7 @@ export default function GuildDashboardLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {isReorderMode ? (
             <DndContext
               sensors={sensors}
@@ -527,16 +604,67 @@ export default function GuildDashboardLayout({
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={navigation.map(item => item.name)}
+                items={visibleNavigation.map((item) => item.name)}
                 strategy={verticalListSortingStrategy}
               >
-                {navigation.map((item) => (
+                {visibleNavigation.map((item) => (
                   <SortableNavItem key={item.name} item={item} />
                 ))}
               </SortableContext>
             </DndContext>
+          ) : isCustomizeMode ? (
+            <>
+              <p className="text-xs text-gray-500 mb-2 px-1">Click the eye to hide from menu. Hidden items are listed below.</p>
+              {visibleNavigation.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-gray-800/50 text-gray-300"
+                  >
+                    <Icon className="h-5 w-5 flex-shrink-0 text-gray-400" />
+                    <span className="flex-1">{item.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleHidden(item.name)}
+                      disabled={savingOrder}
+                      className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
+                      title="Hide from menu"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+              {hiddenNavItems.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-700">
+                  <p className="text-xs text-gray-500 mb-2 px-1">Hidden — click Show to add back</p>
+                  {hiddenNavItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div
+                        key={item.name}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-500"
+                      >
+                        <Icon className="h-4 w-4 flex-shrink-0" />
+                        <span className="flex-1">{item.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleHidden(item.name)}
+                          disabled={savingOrder}
+                          className="px-2 py-1 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-gray-800 rounded"
+                        >
+                          Show
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           ) : (
-            navigation.map((item) => {
+            <>
+            {navigation.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
               
@@ -600,7 +728,8 @@ export default function GuildDashboardLayout({
                   </div>
                 </Link>
               );
-            })
+            })}
+            </>
           )}
         </nav>
 
