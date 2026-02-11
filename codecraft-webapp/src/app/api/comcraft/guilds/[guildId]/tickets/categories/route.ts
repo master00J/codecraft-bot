@@ -138,6 +138,9 @@ export async function POST(
       support_role_id: body.supportRoleId || null,
       auto_response: body.autoResponse?.trim() || null,
       is_active: typeof body.isActive === 'boolean' ? body.isActive : true,
+      required_role_ids: Array.isArray(body.requiredRoleIds) && body.requiredRoleIds.length > 0
+        ? body.requiredRoleIds.filter((id: unknown) => typeof id === 'string' && id.trim())
+        : null,
     };
 
     const { data, error } = await supabase

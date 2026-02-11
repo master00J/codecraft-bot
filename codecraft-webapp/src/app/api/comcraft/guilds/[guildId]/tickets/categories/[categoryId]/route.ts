@@ -100,6 +100,11 @@ export async function PATCH(
     if (typeof body.isActive === 'boolean') {
       updates.is_active = body.isActive;
     }
+    if (body.requiredRoleIds !== undefined) {
+      updates.required_role_ids = Array.isArray(body.requiredRoleIds) && body.requiredRoleIds.length > 0
+        ? body.requiredRoleIds.filter((id: unknown) => typeof id === 'string' && id.trim())
+        : null;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields provided' }, { status: 400 });

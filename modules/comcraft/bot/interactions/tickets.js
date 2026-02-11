@@ -490,6 +490,23 @@ function createTicketHandlers({ featureGate, ticketManager, supportFeatureKey = 
       const category = await ticketManager.getCategoryById(interaction.guild.id, categoryId);
       if (category) {
         categoryName = category.name;
+        // If this ticket type is restricted to certain roles (e.g. Premium), check the member has one
+        const requiredRoleIds = Array.isArray(category.required_role_ids) && category.required_role_ids.length > 0
+          ? category.required_role_ids
+          : [];
+        if (requiredRoleIds.length > 0) {
+          const member = interaction.member;
+          const hasRole = member && member.roles && member.roles.cache && requiredRoleIds.some((roleId) => member.roles.cache.has(roleId));
+          if (!hasRole) {
+            const roleNames = requiredRoleIds
+              .map((id) => interaction.guild.roles.cache.get(id)?.name || id)
+              .filter(Boolean);
+            return interaction.reply({
+              content: `❌ Only members with ${roleNames.length ? roleNames.join(' or ') : 'a required role'} can open **${category.name}** tickets.`,
+              ephemeral: true
+            });
+          }
+        }
       }
     }
 

@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { Textarea } from '@/components/ui/textarea';
+import { Minus } from 'lucide-react';
 
 interface Ticket {
   id: string;
@@ -84,6 +85,7 @@ interface TicketCategory {
   emoji: string | null;
   category_channel_id: string | null;
   support_role_id: string | null;
+  required_role_ids: string[] | null;
   auto_response: string | null;
   is_active: boolean;
   created_at: string;
@@ -144,6 +146,7 @@ export default function TicketsPage() {
   const [categoryDescription, setCategoryDescription] = useState('');
   const [categoryEmoji, setCategoryEmoji] = useState('');
   const [categorySupportRoleId, setCategorySupportRoleId] = useState('none');
+  const [categoryRequiredRoleIds, setCategoryRequiredRoleIds] = useState<string[]>([]);
   const [categoryAutoResponse, setCategoryAutoResponse] = useState('');
   const [categoryIsActive, setCategoryIsActive] = useState(true);
   const [roles, setRoles] = useState<any[]>([]);
@@ -670,6 +673,7 @@ export default function TicketsPage() {
       setCategoryDescription(category.description || '');
       setCategoryEmoji(category.emoji || '');
       setCategorySupportRoleId(category.support_role_id || 'none');
+      setCategoryRequiredRoleIds(Array.isArray(category.required_role_ids) ? category.required_role_ids : []);
       setCategoryAutoResponse(category.auto_response || '');
       setCategoryIsActive(category.is_active);
     } else {
@@ -678,6 +682,7 @@ export default function TicketsPage() {
       setCategoryDescription('');
       setCategoryEmoji('');
       setCategorySupportRoleId('none');
+      setCategoryRequiredRoleIds([]);
       setCategoryAutoResponse('');
       setCategoryIsActive(true);
     }
@@ -710,6 +715,7 @@ export default function TicketsPage() {
           description: categoryDescription.trim() || null,
           emoji: categoryEmoji.trim() || null,
           supportRoleId: categorySupportRoleId && categorySupportRoleId !== 'none' ? categorySupportRoleId : null,
+          requiredRoleIds: categoryRequiredRoleIds.length > 0 ? categoryRequiredRoleIds : null,
           autoResponse: categoryAutoResponse.trim() || null,
           isActive: categoryIsActive
         })
@@ -1631,6 +1637,54 @@ export default function TicketsPage() {
                     </Select>
                     <p className="text-xs text-gray-500">
                       This role will be mentioned when a ticket of this type is created
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Who can open this ticket type?</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Select
+                        value="__add__"
+                        onValueChange={(v) => {
+                          if (v && v !== '__add__' && !categoryRequiredRoleIds.includes(v)) {
+                            setCategoryRequiredRoleIds([...categoryRequiredRoleIds, v]);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Everyone (default)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__add__">Everyone (no restriction)</SelectItem>
+                          {roles
+                            .filter((r: any) => !categoryRequiredRoleIds.includes(r.id))
+                            .map((r: any) => (
+                              <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                            ))}
+                          {roles.filter((r: any) => !categoryRequiredRoleIds.includes(r.id)).length === 0 && (
+                            <SelectItem value="__none__" disabled>All roles added</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {categoryRequiredRoleIds.map((id) => {
+                        const role = roles.find((r: any) => r.id === id);
+                        return (
+                          <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                            {role?.name ?? id}
+                            <button
+                              type="button"
+                              aria-label="Remove"
+                              className="rounded-full hover:bg-muted p-0.5"
+                              onClick={() => setCategoryRequiredRoleIds(categoryRequiredRoleIds.filter((r) => r !== id))}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      If you add roles, only members with at least one of these roles can open this ticket type (e.g. Premium tickets for Premium role). Leave empty for Standard — everyone can open.
                     </p>
                   </div>
 
