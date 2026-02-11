@@ -104,6 +104,8 @@ const statsCardGenerator = require('./modules/comcraft/stats/stats-card-generato
 const combatCardGenerator = require('./modules/comcraft/combat/combat-card-generator');
 const StockMarketManager = require('./modules/comcraft/economy/stock-market-manager');
 const { getSupabase } = require('./modules/supabase-client');
+const commandPermissions = require('./modules/comcraft/command-permissions');
+global.commandPermissions = commandPermissions;
 const StickyMessagesManager = require('./modules/comcraft/sticky-messages/manager');
 const ApplicationsManager = require('./modules/comcraft/applications/manager');
 // Load auto-reactions manager with error handling
@@ -2262,6 +2264,16 @@ client.on('interactionCreate', async (interaction) => {
       }
     } catch (error) {
       console.error('[InteractionCreate] Error tracking command_use quest:', error.message);
+    }
+  }
+
+  // Guild command permissions (e.g. /store, /shop only for certain roles)
+  if (global.commandPermissions && interaction.guild?.id && global.commandPermissions.RESTRICTABLE_COMMAND_NAMES.includes(commandName)) {
+    try {
+      const allowed = await global.commandPermissions.checkCommandPermission(interaction, commandName);
+      if (!allowed) return;
+    } catch (err) {
+      console.error('[InteractionCreate] Command permission check error:', err.message);
     }
   }
 

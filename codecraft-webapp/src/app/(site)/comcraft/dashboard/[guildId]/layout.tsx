@@ -328,6 +328,7 @@ export default function GuildDashboardLayout({
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
     { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },
+    { name: 'Command Permissions', href: `/comcraft/dashboard/${guildId}/command-permissions`, icon: Shield },
     { name: 'Payments', href: `/comcraft/dashboard/${guildId}/payments`, icon: CreditCard },
     { name: 'Shop', href: `/comcraft/dashboard/${guildId}/shop`, icon: ShoppingBag },
   ];
