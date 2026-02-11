@@ -325,6 +325,122 @@ class ApplicationsManager {
   }
 
   /**
+   * Post the application message to Discord for an existing application (e.g. submitted via web).
+   * Called by the webapp after inserting the row.
+   */
+  async postApplicationMessage(guildId, applicationId) {
+    try {
+      const { data: application, error: appError } = await this.supabase
+        .from('applications')
+        .select('*')
+        .eq('id', applicationId)
+        .eq('guild_id', guildId)
+        .single();
+
+      if (appError || !application) {
+        return { success: false, error: 'Application not found' };
+      }
+
+      let config = null;
+      if (application.config_id) {
+        const r = await this.getConfigById(guildId, application.config_id);
+        config = r.config;
+      }
+      if (!config) {
+        const configResult = await this.getConfig(guildId);
+        config = configResult.config;
+      }
+      if (!config) {
+        return { success: false, error: 'Config not found' };
+      }
+
+      const targetChannelId = config.review_channel_id || config.channel_id;
+      const channel = await this.client.channels.fetch(targetChannelId);
+      if (!channel) {
+        return { success: false, error: 'Application channel not found' };
+      }
+
+      const typeName = config.name || 'Staff';
+      const userId = application.user_id;
+      const username = application.username || 'Unknown';
+      const answers = application.answers || {};
+      const responses = answers.responses || [];
+      const avatar = answers.avatar || null;
+      const authorOpts = { name: username };
+      if (avatar) {
+        authorOpts.iconURL = avatar.startsWith('http') ? avatar : `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`📝 New Application: ${typeName}`)
+        .setAuthor(authorOpts)
+        .setDescription(`**Applicant:** <@${userId}>\n**Status:** 🟡 Pending Review`)
+        .setTimestamp()
+        .setFooter({ text: `Application ID: ${application.id.substring(0, 8)}` });
+
+      config.questions.forEach((question, index) => {
+        if (responses[index]) {
+          embed.addFields({
+            name: question,
+            value: String(responses[index]).substring(0, 1024),
+            inline: false
+          });
+        }
+      });
+
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`app_vote_for_${application.id}`)
+            .setLabel('Vote For')
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('👍'),
+          new ButtonBuilder()
+            .setCustomId(`app_vote_against_${application.id}`)
+            .setLabel('Vote Against')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('👎'),
+          new ButtonBuilder()
+            .setCustomId(`app_approve_${application.id}`)
+            .setLabel('Approve')
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji('✅'),
+          new ButtonBuilder()
+            .setCustomId(`app_reject_${application.id}`)
+            .setLabel('Reject')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('❌')
+        );
+
+      const content = config.ping_role_id ? `<@&${config.ping_role_id}> New application!` : null;
+      const message = await channel.send({ content, embeds: [embed], components: [row] });
+
+      let thread = null;
+      if (config.auto_thread && channel.isTextBased()) {
+        try {
+          thread = await message.startThread({
+            name: `${username} – ${typeName}`,
+            autoArchiveDuration: 1440
+          });
+        } catch (err) {
+          console.error('Failed to create thread:', err);
+        }
+      }
+
+      await this.supabase
+        .from('applications')
+        .update({ message_id: message.id, thread_id: thread?.id || null })
+        .eq('id', applicationId);
+
+      return { success: true, application, message, thread };
+    } catch (error) {
+      console.error('Error posting application message:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Handle vote
    */
   async handleVote(applicationId, userId, voteType) {

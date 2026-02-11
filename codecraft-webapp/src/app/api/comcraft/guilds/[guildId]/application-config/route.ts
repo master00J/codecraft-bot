@@ -7,6 +7,7 @@ const supabase = supabaseAdmin;
 
 const COMCRAFT_BOT_API = process.env.COMCRAFT_BOT_API_URL || 'http://localhost:3002';
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
+const BASE_URL = process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
 /**
  * Log activity to database
@@ -154,11 +155,11 @@ export async function POST(
       'Updated staff application configuration'
     );
 
-    // Send application message to Discord channel – one message per application type, each with its own Apply button (opens that type's modal)
+    // Send application message to Discord channel – link button to web form (no token limit for questions/answers)
     try {
       if (channel_id && enabled && config && COMCRAFT_BOT_API && INTERNAL_SECRET) {
         const roleName = config.name || name || 'Staff';
-        const defaultDesc = `Use the button below to apply for **${roleName}**. You will receive a form with questions.`;
+        const defaultDesc = `Use the button below to apply for **${roleName}**. You will fill in the form on our website (no character limits).`;
         const customDesc = (config.embed_description || '').trim();
         const description = customDesc
           ? `${defaultDesc}\n\n${customDesc}`.slice(0, 4096)
@@ -185,17 +186,17 @@ export async function POST(
           timestamp: new Date().toISOString()
         };
 
-        // One button per form: opens the modal for this application type only
+        const applyUrl = `${BASE_URL}/comcraft/apply/${guildId}?config=${config.id}`;
         const components = [
           {
             type: 1, // ActionRow
             components: [
               {
                 type: 2, // Button
-                style: 1, // Primary
+                style: 5, // Link
                 label: `Apply: ${roleName}`.substring(0, 80),
                 emoji: { name: '📝' },
-                custom_id: `application_apply_${config.id}`
+                url: applyUrl
               }
             ]
           }

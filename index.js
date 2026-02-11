@@ -12132,6 +12132,31 @@ app.post('/api/discord/:guildId/users/:userId/roles', async (req, res) => {
   }
 });
 
+// Post application message to Discord (used when application is submitted via web form). Requires X-Internal-Secret.
+app.post('/api/applications/post-message', async (req, res) => {
+  try {
+    const secret = req.headers['x-internal-secret'];
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    const { guildId, applicationId } = req.body || {};
+    if (!guildId || !applicationId) {
+      return res.status(400).json({ success: false, error: 'guildId and applicationId required' });
+    }
+    if (!applicationsManager) {
+      return res.status(503).json({ success: false, error: 'Applications not available' });
+    }
+    const result = await applicationsManager.postApplicationMessage(guildId, applicationId);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in applications post-message API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
 app.delete('/api/discord/:guildId/users/:userId/roles/:roleId', async (req, res) => {
   try {
     const { guildId, userId, roleId } = req.params;
