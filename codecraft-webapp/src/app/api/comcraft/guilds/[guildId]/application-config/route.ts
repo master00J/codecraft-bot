@@ -88,7 +88,8 @@ export async function POST(
       require_account_age_days,
       auto_thread,
       ping_role_id,
-      reward_role_id
+      reward_role_id,
+      embed_description
     } = body;
 
     if (!channel_id || !questions || !Array.isArray(questions)) {
@@ -107,6 +108,7 @@ export async function POST(
       auto_thread: auto_thread ?? false,
       ping_role_id: ping_role_id ?? null,
       reward_role_id: reward_role_id ?? null,
+      embed_description: typeof embed_description === 'string' ? embed_description.trim() || null : null,
       updated_at: new Date().toISOString()
     };
 
@@ -156,9 +158,14 @@ export async function POST(
     try {
       if (channel_id && enabled && config && COMCRAFT_BOT_API && INTERNAL_SECRET) {
         const roleName = config.name || name || 'Staff';
+        const defaultDesc = `Use the button below to apply for **${roleName}**. You will receive a form with questions.`;
+        const customDesc = (config.embed_description || '').trim();
+        const description = customDesc
+          ? `${defaultDesc}\n\n${customDesc}`.slice(0, 4096)
+          : defaultDesc;
         const embed = {
           title: `📝 Apply for: ${roleName}`,
-          description: `Use the button below to apply for **${roleName}**. You will receive a form with questions.`,
+          description,
           color: '#5865F2',
           fields: [
             {

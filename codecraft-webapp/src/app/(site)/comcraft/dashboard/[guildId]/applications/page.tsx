@@ -81,6 +81,7 @@ interface ApplicationConfig {
   auto_thread: boolean;
   ping_role_id: string | null;
   reward_role_id: string | null;
+  embed_description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -116,6 +117,7 @@ export default function ApplicationsDashboard() {
   const [autoThread, setAutoThread] = useState(true);
   const [pingRoleId, setPingRoleId] = useState('');
   const [rewardRoleId, setRewardRoleId] = useState('');
+  const [embedDescription, setEmbedDescription] = useState('');
 
   useEffect(() => {
     if (guildId) {
@@ -159,6 +161,7 @@ export default function ApplicationsDashboard() {
         setAutoThread(first.auto_thread ?? true);
         setPingRoleId(first.ping_role_id || '');
         setRewardRoleId(first.reward_role_id || '');
+        setEmbedDescription(first.embed_description || '');
       }
 
       if (appsData.applications) {
@@ -242,6 +245,7 @@ export default function ApplicationsDashboard() {
           auto_thread: autoThread,
           ping_role_id: pingRoleId || null,
           reward_role_id: rewardRoleId || null,
+          embed_description: embedDescription.trim() || null,
         }),
       });
 
@@ -347,6 +351,7 @@ export default function ApplicationsDashboard() {
     setAutoThread(c.auto_thread ?? true);
     setPingRoleId(c.ping_role_id || '');
     setRewardRoleId(c.reward_role_id || '');
+    setEmbedDescription(c.embed_description || '');
   };
 
   const startNewType = () => {
@@ -362,6 +367,7 @@ export default function ApplicationsDashboard() {
     setAutoThread(true);
     setPingRoleId('');
     setRewardRoleId('');
+    setEmbedDescription('');
   };
 
   const getStatusBadge = (status: string) => {
@@ -621,6 +627,21 @@ export default function ApplicationsDashboard() {
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   Shown in /application apply (dropdown when you have multiple types).
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="embedDescription">Embed description (optional)</Label>
+                <Textarea
+                  id="embedDescription"
+                  value={embedDescription}
+                  onChange={(e) => setEmbedDescription(e.target.value)}
+                  placeholder="e.g. Requirements: 18+, 5h/week. We expect active participation in staff meetings and a trial period of 2 weeks."
+                  className="min-h-[80px] max-h-[200px] resize-y"
+                  maxLength={2000}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Extra text shown in the Discord embed below the default message. Use it for requirements, expectations, or other info for applicants.
                 </p>
               </div>
 
