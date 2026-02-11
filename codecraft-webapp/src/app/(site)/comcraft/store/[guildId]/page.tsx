@@ -64,7 +64,8 @@ interface MyCode {
 }
 
 function formatPrice(cents: number, currency: string) {
-  const sym = currency?.toUpperCase() === 'EUR' ? '€' : currency?.toUpperCase() === 'USD' ? '$' : currency || '€';
+  const c = currency?.toUpperCase();
+  const sym = c === 'EUR' ? '€' : c === 'USD' ? '$' : c === 'GBP' ? '£' : currency || '€';
   return `${sym}${(cents / 100).toFixed(2)}`;
 }
 
