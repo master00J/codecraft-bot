@@ -2094,6 +2094,11 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
+    // Store category selection (from /store when categories exist)
+    if (interaction.customId && interaction.customId.startsWith('guild_store_category_')) {
+      await handleStoreCategorySelect(interaction);
+      return;
+    }
     // Application type choice (multiple application types per server)
     if (interaction.customId === 'application_choose_type' && applicationsManager) {
       const configId = interaction.values[0];
@@ -8789,33 +8794,69 @@ async function handleDonateCommand(interaction) {
 
 /**
  * Handle /store – list guild shop items (roles for sale via Stripe/PayPal). Buttons open checkout.
+ * Optional category filter: only show items from that category (e.g. "Premium", "Founders pass").
  */
 async function handleStoreCommand(interaction) {
   const guildId = interaction.guild?.id;
   if (!guildId) {
     return interaction.reply({ content: '❌ This command only works in a server.', ephemeral: true });
   }
+  const categoryFilter = interaction.options?.getString?.('category')?.trim?.() || null;
   const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
   let items = [];
+  let categories = [];
   try {
     const res = await fetch(`${baseUrl}/api/comcraft/public/shop?guildId=${encodeURIComponent(guildId)}`);
     if (res.ok) {
       const data = await res.json();
       items = data.items || [];
+      categories = data.categories || [];
     }
   } catch (e) {
     console.error('Shop fetch error:', e);
   }
+  // No category chosen and we have categories → show category selector
+  if (!categoryFilter && categories.length > 0) {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`guild_store_category_${guildId}`)
+      .setPlaceholder('Choose a category…')
+      .addOptions([
+        { label: 'All items', value: '__all__', description: 'Show all shop items' },
+        ...categories.slice(0, 24).map((c) => ({
+          label: (c.name || 'Unnamed').slice(0, 100),
+          value: String(c.id || c.name || '').slice(0, 100),
+          description: null
+        }))
+      ]);
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle(`🛒 ${interaction.guild.name} – Store`)
+      .setDescription('Select a category below to see which items are available, or open the store in your browser.')
+      .setFooter({ text: 'Payments go to the server owner' })
+      .setTimestamp();
+    const row = new ActionRowBuilder().addComponents(select);
+    return interaction.reply({ embeds: [embed], components: [row] });
+  }
+  if (categoryFilter) {
+    const categoryByName = categories.find((c) => (c.name || '').toLowerCase() === categoryFilter.toLowerCase());
+    const categoryId = categoryByName?.id || null;
+    if (categoryId) {
+      items = items.filter((i) => i.category_id === categoryId);
+    } else {
+      items = [];
+    }
+  }
   if (!items.length) {
-    return interaction.reply({
-      content: '🛒 This server has no shop items at the moment. Check back later or ask an admin to add items in **Dashboard → Shop**.',
-      ephemeral: true
-    });
+    const hint = categoryFilter
+      ? `No items in category **${categoryFilter}**. Check the category name in Dashboard → Shop → Categories, or use \`/store\` without a category to see all items.`
+      : '🛒 This server has no shop items at the moment. Check back later or ask an admin to add items in **Dashboard → Shop**.';
+    return interaction.reply({ content: hint, ephemeral: true });
   }
   const storePageUrl = `${baseUrl}/comcraft/store/${guildId}`;
+  const titleSuffix = categoryFilter ? ` – ${categoryFilter}` : '';
   const embed = new EmbedBuilder()
     .setColor('#5865F2')
-    .setTitle(`🛒 ${interaction.guild.name} – Store`)
+    .setTitle(`🛒 ${interaction.guild.name} – Store${titleSuffix}`)
     .setDescription(`Buy a role below, or **open the store in your browser** with the button at the bottom. You'll be redirected to secure payment (Stripe or PayPal); after payment, the role is assigned automatically.`)
     .setFooter({ text: 'Payments go to the server owner' })
     .setTimestamp();
@@ -8900,6 +8941,92 @@ async function handleGuildShopBuyButton(interaction) {
       content: '❌ Something went wrong. Try again or contact the server admin.'
     });
   }
+}
+
+/**
+ * Handle store category select menu – show items for chosen category (or all).
+ */
+async function handleStoreCategorySelect(interaction) {
+  const guildId = (interaction.customId || '').replace(/^guild_store_category_/, '');
+  const selectedValue = interaction.values?.[0];
+  if (!guildId || !selectedValue) {
+    return interaction.reply({ content: '❌ Invalid selection.', ephemeral: true });
+  }
+  const baseUrl = process.env.WEBAPP_URL || process.env.WEBAPP_API_URL || 'https://codecraft-solutions.com';
+  let items = [];
+  let categories = [];
+  try {
+    const res = await fetch(`${baseUrl}/api/comcraft/public/shop?guildId=${encodeURIComponent(guildId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      items = data.items || [];
+      categories = data.categories || [];
+    }
+  } catch (e) {
+    console.error('Shop fetch error:', e);
+  }
+  const showAll = selectedValue === '__all__';
+  if (!showAll) {
+    const categoryId = selectedValue;
+    items = items.filter((i) => String(i.category_id) === String(categoryId));
+  }
+  const categoryName = showAll ? null : (categories.find((c) => String(c.id) === selectedValue || c.name === selectedValue)?.name || selectedValue);
+  await interaction.deferUpdate();
+  if (!items.length) {
+    const hint = showAll
+      ? '🛒 This server has no shop items at the moment.'
+      : `No items in category **${categoryName || selectedValue}**.`;
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle(`🛒 ${interaction.guild?.name || 'Store'} – Store`)
+      .setDescription(hint)
+      .setTimestamp();
+    return interaction.editReply({ embeds: [embed], components: [] });
+  }
+  const storePageUrl = `${baseUrl}/comcraft/store/${guildId}`;
+  const titleSuffix = categoryName ? ` – ${categoryName}` : '';
+  const embed = new EmbedBuilder()
+    .setColor('#5865F2')
+    .setTitle(`🛒 ${interaction.guild?.name || 'Store'} – Store${titleSuffix}`)
+    .setDescription(`Buy a role below, or **open the store in your browser** with the button at the bottom. You'll be redirected to secure payment (Stripe or PayPal); after payment, the role is assigned automatically.`)
+    .setFooter({ text: 'Payments go to the server owner' })
+    .setTimestamp();
+  const currencySymbol = (code) => {
+    const c = (code || 'eur').toUpperCase();
+    if (c === 'EUR') return '€';
+    if (c === 'USD') return '$';
+    if (c === 'GBP') return '£';
+    if (c === 'JPY') return '¥';
+    if (c === 'CHF') return 'CHF ';
+    return c + ' ';
+  };
+  const rows = [];
+  const maxButtonsPerRow = 5;
+  for (let i = 0; i < items.length; i += maxButtonsPerRow) {
+    const row = new ActionRowBuilder();
+    const chunk = items.slice(i, i + maxButtonsPerRow);
+    for (const item of chunk) {
+      const label = item.name.length > 80 ? item.name.slice(0, 77) + '…' : item.name;
+      const price = (item.price_amount_cents / 100).toFixed(2);
+      const sym = currencySymbol(item.currency);
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`guild_shop_buy_${item.id}`)
+          .setLabel(`${label} (${sym}${price})`)
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    rows.push(row);
+  }
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel('Open store in browser')
+        .setStyle(ButtonStyle.Link)
+        .setURL(storePageUrl)
+    )
+  );
+  return interaction.editReply({ embeds: [embed], components: rows });
 }
 
 /**
@@ -10669,7 +10796,13 @@ async function registerCommands(clientInstance) {
 
     new SlashCommandBuilder()
       .setName('store')
-      .setDescription('🛒 Open the server store (roles, premium, etc.)'),
+      .setDescription('🛒 Open the server store (roles, premium, etc.)')
+      .addStringOption((opt) =>
+        opt
+          .setName('category')
+          .setDescription('Show only this category (e.g. Premium, Founders pass)')
+          .setRequired(false)
+      ),
 
     new SlashCommandBuilder()
       .setName('setxp')
@@ -11549,7 +11682,13 @@ async function registerCommands(clientInstance) {
 
     new SlashCommandBuilder()
       .setName('store')
-      .setDescription('🛒 View server store – buy roles with card (Stripe/PayPal)'),
+      .setDescription('🛒 View server store – buy roles with card (Stripe/PayPal)')
+      .addStringOption((opt) =>
+        opt
+          .setName('category')
+          .setDescription('Show only this category (e.g. Premium, Founders pass)')
+          .setRequired(false)
+      ),
 
     new SlashCommandBuilder()
       .setName('redeem')

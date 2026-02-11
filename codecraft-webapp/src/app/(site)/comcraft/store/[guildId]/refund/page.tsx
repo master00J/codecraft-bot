@@ -64,10 +64,12 @@ export default function StoreRefundPage() {
             Back to store
           </Button>
         </Link>
-        <Card className="p-8">
+        <Card className="p-8 overflow-hidden">
           <h1 className="text-2xl font-bold mb-6">Refund policy – {storeName}</h1>
-          <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-muted-foreground">
-            {content}
+          <div className="prose prose-sm dark:prose-invert max-w-none min-w-0 break-words text-muted-foreground text-[0.95rem] leading-relaxed" style={{ overflowWrap: 'break-word' }}>
+            {content.split(/\n\s*\n/).map((para, i) => (
+              <p key={i} className="mb-4 last:mb-0 whitespace-pre-wrap break-words">{para.trim()}</p>
+            ))}
           </div>
         </Card>
       </div>
