@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       .order('name', { ascending: true }),
     supabaseAdmin
       .from('guild_shop_settings')
-      .select('store_name, store_description, store_primary_color, store_logo_url, store_footer_text, trust_badges_json, testimonials_json, terms_url, refund_policy_url, terms_content, refund_policy_content, currency_disclaimer')
+      .select('store_name, store_description, store_primary_color, store_logo_url, store_footer_text, trust_badges_json, testimonials_json, terms_url, refund_policy_url, terms_content, refund_policy_content, currency_disclaimer, store_background_image_url, store_color_preset, store_secondary_color, store_background_color')
       .eq('guild_id', guildId)
       .maybeSingle(),
     supabaseAdmin
@@ -88,6 +88,10 @@ export async function GET(request: NextRequest) {
       termsContent: settings.terms_content ?? null,
       refundPolicyContent: settings.refund_policy_content ?? null,
       currencyDisclaimer: settings.currency_disclaimer ?? null,
+      storeBackgroundImageUrl: settings.store_background_image_url ?? null,
+      storeColorPreset: settings.store_color_preset ?? 'default',
+      storeSecondaryColor: settings.store_secondary_color ?? null,
+      storeBackgroundColor: settings.store_background_color ?? null,
     } : null,
   });
 }

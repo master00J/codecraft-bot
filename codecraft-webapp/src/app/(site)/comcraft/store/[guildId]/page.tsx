@@ -42,6 +42,10 @@ interface StoreSettings {
   storePrimaryColor: string;
   storeLogoUrl: string | null;
   storeFooterText: string | null;
+  storeBackgroundImageUrl?: string | null;
+  storeColorPreset?: string | null;
+  storeSecondaryColor?: string | null;
+  storeBackgroundColor?: string | null;
   trustBadges?: { text: string }[] | null;
   testimonials?: { quote: string; author?: string }[] | null;
   termsUrl?: string | null;
@@ -67,6 +71,28 @@ function formatPrice(cents: number, currency: string) {
   const c = currency?.toUpperCase();
   const sym = c === 'EUR' ? '€' : c === 'USD' ? '$' : c === 'GBP' ? '£' : currency || '€';
   return `${sym}${(cents / 100).toFixed(2)}`;
+}
+
+const COLOR_PRESETS: Record<string, { primary: string; secondary: string; background: string }> = {
+  default: { primary: '#5865F2', secondary: '#4752C4', background: '#0f1419' },
+  dark: { primary: '#6366f1', secondary: '#4f46e5', background: '#0c0a0f' },
+  ocean: { primary: '#0ea5e9', secondary: '#0284c7', background: '#0c1929' },
+  forest: { primary: '#22c55e', secondary: '#16a34a', background: '#0a1f0f' },
+  sunset: { primary: '#f97316', secondary: '#ea580c', background: '#1c0a00' },
+};
+
+function getStoreColors(settings: StoreSettings | null) {
+  if (!settings) return COLOR_PRESETS.default;
+  const preset = settings.storeColorPreset || 'default';
+  if (preset === 'custom') {
+    return {
+      primary: settings.storePrimaryColor || '#5865F2',
+      secondary: settings.storeSecondaryColor || '#4752C4',
+      background: settings.storeBackgroundColor || '#0f1419',
+    };
+  }
+  const base = COLOR_PRESETS[preset] ?? COLOR_PRESETS.default;
+  return { ...base, primary: settings.storePrimaryColor || base.primary };
 }
 
 export default function StorePage() {
@@ -123,7 +149,8 @@ export default function StorePage() {
     }
   }, [settings?.storeName]);
 
-  const primaryColor = settings?.storePrimaryColor || '#5865F2';
+  const colors = getStoreColors(settings);
+  const primaryColor = colors.primary;
   const filteredItems =
     selectedCategoryId == null
       ? items
@@ -211,9 +238,19 @@ export default function StorePage() {
     );
   }
 
+  const bgImageUrl = settings?.storeBackgroundImageUrl;
+  const bgStyle = bgImageUrl
+    ? {
+        backgroundImage: `linear-gradient(to bottom, ${colors.background}ee 0%, ${colors.background}cc 30%, ${colors.background}99 100%), url(${bgImageUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+      }
+    : { backgroundColor: colors.background };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
-      <div className="container max-w-5xl mx-auto px-4 py-8">
+    <div className="min-h-screen" style={bgStyle}>
+      <div className="container max-w-5xl mx-auto px-4 py-8 relative z-0">
         <header className="text-center mb-10">
           {settings?.storeLogoUrl ? (
             <div className="relative w-20 h-20 mx-auto mb-4 rounded-xl overflow-hidden border-2 shadow-lg" style={{ borderColor: primaryColor }}>

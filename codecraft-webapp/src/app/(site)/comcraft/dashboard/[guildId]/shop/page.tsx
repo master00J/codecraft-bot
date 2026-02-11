@@ -82,6 +82,10 @@ interface ShopSettings {
   terms_content?: string | null;
   refund_policy_content?: string | null;
   currency_disclaimer?: string | null;
+  store_background_image_url?: string | null;
+  store_color_preset?: string | null;
+  store_secondary_color?: string | null;
+  store_background_color?: string | null;
 }
 
 interface ShopCategory {
@@ -159,6 +163,10 @@ export default function ShopDashboard() {
     storePrimaryColor: '#5865F2',
     storeLogoUrl: '',
     storeFooterText: '',
+    storeBackgroundImageUrl: '',
+    storeColorPreset: 'default',
+    storeSecondaryColor: '#4752C4',
+    storeBackgroundColor: '#0f1419',
     purchaseNotificationChannelId: '',
     trustBadgesText: '',
     testimonialsText: '',
@@ -215,6 +223,10 @@ export default function ShopDashboard() {
         storePrimaryColor: data.store_primary_color ?? '#5865F2',
         storeLogoUrl: data.store_logo_url ?? '',
         storeFooterText: data.store_footer_text ?? '',
+        storeBackgroundImageUrl: data.store_background_image_url ?? '',
+        storeColorPreset: data.store_color_preset ?? 'default',
+        storeSecondaryColor: data.store_secondary_color ?? '#4752C4',
+        storeBackgroundColor: data.store_background_color ?? '#0f1419',
         purchaseNotificationChannelId: data.purchase_notification_channel_id ?? '',
         trustBadgesText: trustArr.map((b: { text?: string }) => b?.text ?? '').filter(Boolean).join('\n'),
         testimonialsText: testimonialArr.map((t: { quote?: string; author?: string }) => `${t?.quote ?? ''}|${t?.author ?? ''}`.trim()).filter(Boolean).join('\n'),
@@ -287,6 +299,10 @@ export default function ShopDashboard() {
           refundPolicyContent: settingsForm.refundPolicyContent || null,
           currencyDisclaimer: settingsForm.currencyDisclaimer || null,
           purchaseNotificationChannelId: settingsForm.purchaseNotificationChannelId || null,
+          storeBackgroundImageUrl: settingsForm.storeBackgroundImageUrl.trim() || null,
+          storeColorPreset: settingsForm.storeColorPreset || 'default',
+          storeSecondaryColor: settingsForm.storeSecondaryColor?.trim() || null,
+          storeBackgroundColor: settingsForm.storeBackgroundColor?.trim() || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -614,6 +630,86 @@ export default function ShopDashboard() {
               placeholder="e.g. Thank you for supporting the server!"
             />
           </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Background image URL (optional)</Label>
+            <Input
+              value={settingsForm.storeBackgroundImageUrl}
+              onChange={(e) => setSettingsForm((s) => ({ ...s, storeBackgroundImageUrl: e.target.value }))}
+              placeholder="https://... (full-page background for the store)"
+            />
+            <p className="text-xs text-muted-foreground">Shown behind the store content. Use a high-resolution image; a dark overlay keeps text readable.</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Color palette</Label>
+            <Select
+              value={settingsForm.storeColorPreset}
+              onValueChange={(v) => setSettingsForm((s) => ({ ...s, storeColorPreset: v }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default (Discord blue)</SelectItem>
+                <SelectItem value="dark">Dark (indigo)</SelectItem>
+                <SelectItem value="ocean">Ocean (sky blue)</SelectItem>
+                <SelectItem value="forest">Forest (green)</SelectItem>
+                <SelectItem value="sunset">Sunset (orange)</SelectItem>
+                <SelectItem value="custom">Custom (set below)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {(settingsForm.storeColorPreset === 'custom') && (
+            <>
+              <div className="space-y-2">
+                <Label>Primary color (hex)</Label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={settingsForm.storePrimaryColor}
+                    onChange={(e) => setSettingsForm((s) => ({ ...s, storePrimaryColor: e.target.value }))}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    value={settingsForm.storePrimaryColor}
+                    onChange={(e) => setSettingsForm((s) => ({ ...s, storePrimaryColor: e.target.value }))}
+                    placeholder="#5865F2"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Secondary color (hex)</Label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={settingsForm.storeSecondaryColor}
+                    onChange={(e) => setSettingsForm((s) => ({ ...s, storeSecondaryColor: e.target.value }))}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    value={settingsForm.storeSecondaryColor}
+                    onChange={(e) => setSettingsForm((s) => ({ ...s, storeSecondaryColor: e.target.value }))}
+                    placeholder="#4752C4"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Background color (hex)</Label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={settingsForm.storeBackgroundColor}
+                    onChange={(e) => setSettingsForm((s) => ({ ...s, storeBackgroundColor: e.target.value }))}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    value={settingsForm.storeBackgroundColor}
+                    onChange={(e) => setSettingsForm((s) => ({ ...s, storeBackgroundColor: e.target.value }))}
+                    placeholder="#0f1419"
+                  />
+                </div>
+              </div>
+            </>
+          )}
           <div className="space-y-2 sm:col-span-2">
             <Label>Purchase notification channel (optional)</Label>
             <Select
