@@ -662,8 +662,8 @@ export default function ModerationPage() {
 
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <div className="font-medium">Links</div>
-                      <p className="text-xs text-muted-foreground">Block unauthorized URLs</p>
+                      <div className="font-medium">Block all links</div>
+                      <p className="text-xs text-muted-foreground">Block every URL (Twitch, YouTube, TikTok, Discord, etc.). Use &quot;Discord invites only&quot; below to allow stream links but block server invites.</p>
                     </div>
                     <Switch
                       checked={config.filter_links}
@@ -674,8 +674,8 @@ export default function ModerationPage() {
 
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <div className="font-medium">Discord Invites</div>
-                      <p className="text-xs text-muted-foreground">Prevent server advertising</p>
+                      <div className="font-medium">Block Discord server invites only</div>
+                      <p className="text-xs text-muted-foreground">Block discord.gg / discord.com/invite links only. Twitch, YouTube, TikTok and other links stay allowed.</p>
                     </div>
                     <Switch
                       checked={config.filter_invites}
