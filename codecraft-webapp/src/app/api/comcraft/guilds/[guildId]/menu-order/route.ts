@@ -38,10 +38,10 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get menu order from guild config
+    // Get menu order and hidden items from guild config
     const { data: config, error } = await supabase
       .from('guild_configs')
-      .select('menu_order')
+      .select('menu_order, menu_hidden')
       .eq('guild_id', guildId)
       .single();
 
@@ -50,8 +50,9 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch menu order' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      menuOrder: config?.menu_order || null 
+    return NextResponse.json({
+      menuOrder: config?.menu_order || null,
+      menuHidden: Array.isArray(config?.menu_hidden) ? config.menu_hidden : null,
     });
   } catch (error: any) {
     console.error('Error in menu order GET:', error);
@@ -85,16 +86,25 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { menuOrder } = body;
+    const { menuOrder, menuHidden } = body;
 
-    if (!Array.isArray(menuOrder)) {
-      return NextResponse.json({ error: 'menuOrder must be an array' }, { status: 400 });
+    const updatePayload: Record<string, unknown> = {};
+    if (menuOrder !== undefined) {
+      if (!Array.isArray(menuOrder)) {
+        return NextResponse.json({ error: 'menuOrder must be an array' }, { status: 400 });
+      }
+      updatePayload.menu_order = menuOrder;
+    }
+    if (menuHidden !== undefined) {
+      updatePayload.menu_hidden = Array.isArray(menuHidden) ? menuHidden : null;
+    }
+    if (Object.keys(updatePayload).length === 0) {
+      return NextResponse.json({ error: 'Provide menuOrder and/or menuHidden' }, { status: 400 });
     }
 
-    // Update menu order in guild config
     const { error } = await supabase
       .from('guild_configs')
-      .update({ menu_order: menuOrder })
+      .update(updatePayload)
       .eq('guild_id', guildId);
 
     if (error) {
@@ -102,7 +112,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Failed to update menu order' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, menuOrder });
+    return NextResponse.json({
+      success: true,
+      menuOrder: updatePayload.menu_order ?? undefined,
+      menuHidden: updatePayload.menu_hidden ?? undefined,
+    });
   } catch (error: any) {
     console.error('Error in menu order PATCH:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
