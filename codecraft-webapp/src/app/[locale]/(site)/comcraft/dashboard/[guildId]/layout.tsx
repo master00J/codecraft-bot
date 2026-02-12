@@ -55,6 +55,7 @@ import {
   Search,
   Eye,
   EyeOff,
+  Tag,
 } from 'lucide-react';
 
 // Use Sparkles as icon for Maid Jobs
@@ -368,6 +369,7 @@ export default function GuildDashboardLayout({
     { name: 'Payments', href: `/comcraft/dashboard/${guildId}/payments`, icon: CreditCard },
     { name: 'Shop', href: `/comcraft/dashboard/${guildId}/shop`, icon: ShoppingBag },
     { name: 'Game Verification', href: `/comcraft/dashboard/${guildId}/game-verification`, icon: ShieldCheck },
+    { name: 'Rank Nickname', href: `/comcraft/dashboard/${guildId}/rank-nickname`, icon: Tag },
   ];
 
   // Apply menu order, then exclude hidden items
