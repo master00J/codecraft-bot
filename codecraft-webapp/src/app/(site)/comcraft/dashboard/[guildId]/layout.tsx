@@ -56,6 +56,7 @@ import {
   Search,
   EyeOff,
   Eye,
+  Tag,
 } from 'lucide-react';
 import {
   DndContext,
@@ -356,6 +357,7 @@ export default function GuildDashboardLayout({
     { name: 'Vouches', href: `/comcraft/dashboard/${guildId}/vouches`, icon: Star },
     { name: 'Applications', href: `/comcraft/dashboard/${guildId}/applications`, icon: ClipboardList },
     { name: 'Game Verification', href: `/comcraft/dashboard/${guildId}/game-verification`, icon: ShieldCheck },
+    { name: 'Rank Nickname', href: `/comcraft/dashboard/${guildId}/rank-nickname`, icon: Tag },
     { name: 'AI Assistant', href: `/comcraft/dashboard/${guildId}/ai`, icon: Bot, tier: featureTiers['AI Assistant'] },
     { name: 'Bot Settings', href: `/comcraft/dashboard/${guildId}/bot-personalizer`, icon: Settings, tier: featureTiers['Bot Settings'] },
     { name: 'Authorized Users', href: `/comcraft/dashboard/${guildId}/authorized-users`, icon: UserCog },

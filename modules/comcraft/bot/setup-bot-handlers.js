@@ -1084,6 +1084,15 @@ function setupEventHandlers(client, handlers) {
         console.error('[GuildMemberUpdate] Error tracking role_obtain quest:', error.message);
       }
     }
+
+    // Rank nickname: set nickname to [PREFIX] (Username) when member has a configured role
+    if (global.rankNicknameManager) {
+      try {
+        await global.rankNicknameManager.handleMemberUpdate(oldMember, newMember);
+      } catch (error) {
+        console.error('[GuildMemberUpdate] Error in rank nickname:', error.message);
+      }
+    }
   });
 
   // Message Reaction Remove handler

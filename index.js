@@ -87,6 +87,7 @@ const CamOnlyVoiceManager = require('./modules/comcraft/cam-only-voice/manager')
 const camOnlyVoiceCommands = require('./modules/comcraft/cam-only-voice/commands');
 const CamOnlyVoiceHandlers = require('./modules/comcraft/cam-only-voice/handlers');
 const VoiceChatRoleManager = require('./modules/comcraft/voice-chat-role/manager');
+const RankNicknameManager = require('./modules/comcraft/rank-nickname/manager');
 const DiscordReferralManager = require('./modules/comcraft/referrals/manager');
 // Voice Move Commands and Handlers
 let voiceMoveCommands = null;
@@ -670,6 +671,17 @@ client.once('ready', async () => {
   } catch (error) {
     console.error('❌ Failed to initialize Voice Chat Role Manager:', error.message);
     global.voiceChatRoleManager = null;
+  }
+
+  // Initialize Rank Nickname Manager (optional: [PREFIX] (Username) when member has role)
+  let rankNicknameManager = null;
+  try {
+    rankNicknameManager = new RankNicknameManager(client);
+    global.rankNicknameManager = rankNicknameManager;
+    console.log('✅ Rank Nickname Manager initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Rank Nickname Manager:', error.message);
+    global.rankNicknameManager = null;
   }
 
   // Initialize Discord Referral Manager
