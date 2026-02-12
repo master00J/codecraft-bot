@@ -103,7 +103,8 @@ export async function POST(
       updated_at: new Date().toISOString(),
     };
     if (clientId !== undefined) updateData.client_id = clientId || null;
-    if (clientSecret !== undefined) updateData.client_secret = clientSecret || null;
+    // Only overwrite client_secret when the client sent the field (re-entered). Leave blank = keep current.
+    if (body.hasOwnProperty('clientSecret')) updateData.client_secret = clientSecret || null;
     if (body.hasOwnProperty('webhookId')) updateData.webhook_id = webhookId || null;
 
     const { data: existing } = await supabaseAdmin
