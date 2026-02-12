@@ -48,28 +48,41 @@ class RankNicknameManager {
   }
 
   /**
+   * Strip existing [PREFIX] (name) so we never double-wrap. Returns base name for the parentheses.
+   */
+  getBaseDisplayName(displayName) {
+    if (!displayName || typeof displayName !== 'string') return 'User';
+    const s = displayName.trim();
+    const match = s.match(/^\[[^\]]+\]\s*\((.+)\)\s*$/);
+    if (match) return match[1].trim() || s;
+    return s;
+  }
+
+  /**
    * Get the configured role with highest position that the member has
    */
   getHighestConfiguredRole(member, config) {
-    const roleIds = new Set(config.map(c => c.role_id));
+    const roleIds = new Set(config.map(c => String(c.role_id).trim()));
     const memberRoles = member.roles.cache
       .filter(r => roleIds.has(r.id))
       .sort((a, b) => b.position - a.position);
     const topRole = memberRoles.first();
     if (!topRole) return null;
-    const entry = config.find(c => c.role_id === topRole.id);
-    return entry ? { role: topRole, prefix: entry.prefix } : null;
+    const entry = config.find(c => String(c.role_id).trim() === topRole.id);
+    return entry ? { role: topRole, prefix: String(entry.prefix || '').trim() } : null;
   }
 
   /**
-   * Build nickname with prefix, max 32 chars
+   * Build nickname with prefix, max 32 chars. Uses base name (no double [PREFIX] ( [PREFIX] (name) )).
    */
   buildNickname(prefix, displayName) {
-    const raw = `[${prefix}] (${displayName || 'User'})`;
+    const base = this.getBaseDisplayName(displayName) || 'User';
+    const safePrefix = (prefix || '').trim().slice(0, 10);
+    const raw = `[${safePrefix}] (${base})`;
     if (raw.length <= NICKNAME_MAX_LENGTH) return raw;
-    const maxInner = NICKNAME_MAX_LENGTH - prefix.length - 5; // "[XXX] ()"
-    const inner = (displayName || 'User').slice(0, Math.max(0, maxInner));
-    return `[${prefix}] (${inner})`;
+    const maxInner = NICKNAME_MAX_LENGTH - safePrefix.length - 5; // "[X] ()"
+    const inner = base.slice(0, Math.max(0, maxInner));
+    return `[${safePrefix}] (${inner})`;
   }
 
   /**
@@ -89,6 +102,11 @@ class RankNicknameManager {
 
     const match = this.getHighestConfiguredRole(newMember, config);
     if (!match) return;
+
+    if (!newMember.manageable) {
+      console.warn('[RankNickname] Cannot change nickname: bot role is below this member\'s highest role. Move the bot role above the rank roles.');
+      return;
+    }
 
     const newNick = this.buildNickname(match.prefix, newMember.displayName);
     if (newMember.nickname === newNick) return;
@@ -127,6 +145,10 @@ class RankNicknameManager {
       if (member.user.bot) continue;
       const match = this.getHighestConfiguredRole(member, config);
       if (!match) continue;
+      if (!member.manageable) {
+        console.warn(`[RankNickname] Skip ${member.user.tag}: bot role below member's role (move bot higher).`);
+        continue;
+      }
       const newNick = this.buildNickname(match.prefix, member.displayName);
       if (member.nickname === newNick) continue;
       try {

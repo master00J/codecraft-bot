@@ -234,7 +234,7 @@ export default function RankNicknamePage() {
       </Card>
 
       <p className="text-sm text-muted-foreground">
-        The bot needs <strong>Manage Nicknames</strong> permission. Nicknames are set when a member <strong>gains</strong> one of these roles. If someone already had the role before you added the prefix, click <strong>Sync nicknames now</strong> above or remove and re-assign the role.
+        The bot needs <strong>Manage Nicknames</strong> and its role must be <strong>above</strong> the rank roles in Server settings → Roles (otherwise Discord blocks nickname changes). Nicknames are set when a member <strong>gains</strong> one of these roles. If someone already had the role before you added the prefix, click <strong>Sync nicknames now</strong> above or remove and re-assign the role.
       </p>
     </div>
   );

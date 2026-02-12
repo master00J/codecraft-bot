@@ -65,7 +65,7 @@ export async function POST(
 
     const { searchParams } = new URL(request.url);
     const itemId = searchParams.get('itemId');
-    const provider = (searchParams.get('provider') || 'stripe').toLowerCase();
+    let provider = (searchParams.get('provider') || 'stripe').toLowerCase();
     if (!itemId) {
       return NextResponse.json({ error: 'itemId query required' }, { status: 400 });
     }
@@ -162,6 +162,17 @@ export async function POST(
 
     const amountValue = (priceCents / 100).toFixed(2);
     const currencyCode = (item.currency || 'eur').toUpperCase().slice(0, 3);
+
+    // If default is Stripe but Stripe is not set up, use PayPal when available (shop often doesn't pass provider)
+    if (provider === 'stripe') {
+      const [{ data: stripeConfig }, { data: ppConfig }] = await Promise.all([
+        supabaseAdmin.from('guild_stripe_config').select('stripe_secret_key, enabled').eq('guild_id', guildId).maybeSingle(),
+        supabaseAdmin.from('guild_paypal_config').select('client_id, client_secret, enabled').eq('guild_id', guildId).maybeSingle(),
+      ]);
+      const hasStripe = stripeConfig?.stripe_secret_key && stripeConfig?.enabled;
+      const hasPayPal = ppConfig?.client_id && ppConfig?.client_secret && ppConfig?.enabled;
+      if (!hasStripe && hasPayPal) provider = 'paypal';
+    }
 
     if (provider === 'paypal') {
       const { data: ppConfig, error: configError } = await supabaseAdmin
