@@ -87,7 +87,11 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ success: true, synced: data.synced ?? 0 });
+    return NextResponse.json({
+      success: true,
+      synced: data.synced ?? 0,
+      skippedHierarchy: data.skippedHierarchy ?? 0,
+    });
   } catch (error: any) {
     console.error('Rank nickname sync API error:', error);
     return NextResponse.json(

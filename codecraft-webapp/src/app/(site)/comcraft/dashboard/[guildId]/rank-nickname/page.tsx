@@ -125,10 +125,9 @@ export default function RankNicknamePage() {
       const res = await fetch(`/api/comcraft/guilds/${guildId}/rank-nickname/sync`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Sync failed');
-      toast({
-        title: 'Sync done',
-        description: data.synced !== undefined ? `${data.synced} nickname(s) updated.` : 'Nicknames synced.',
-      });
+      let desc = data.synced !== undefined ? `${data.synced} nickname(s) updated.` : 'Nicknames synced.';
+      if (data.skippedHierarchy > 0) desc += ` ${data.skippedHierarchy} skipped (bot role below member – move bot role above rank roles).`;
+      toast({ title: 'Sync done', description: desc });
     } catch (e: any) {
       toast({
         title: 'Sync failed',

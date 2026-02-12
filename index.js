@@ -13359,7 +13359,7 @@ app.post('/api/rank-nickname/sync', async (req, res) => {
     if (result.error) {
       return res.status(400).json({ success: false, error: result.error, synced: result.synced || 0 });
     }
-    res.json({ success: true, synced: result.synced });
+    res.json({ success: true, synced: result.synced, skippedHierarchy: result.skippedHierarchy || 0 });
   } catch (error) {
     console.error('Error in rank-nickname sync API:', error);
     res.status(500).json({ success: false, error: error.message || 'Internal server error' });

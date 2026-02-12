@@ -98,23 +98,37 @@ class RankNicknameManager {
     if (config.length === 0) return;
 
     const guild = newMember.guild;
-    if (!guild.members.me?.permissions.has('ManageNicknames')) return;
-
-    const match = this.getHighestConfiguredRole(newMember, config);
-    if (!match) return;
-
-    if (!newMember.manageable) {
-      console.warn('[RankNickname] Cannot change nickname: bot role is below this member\'s highest role. Move the bot role above the rank roles.');
+    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    if (!me?.permissions.has('ManageNicknames')) {
+      console.warn('[RankNickname] Bot lacks Manage Nicknames in guild', guildId);
       return;
     }
 
-    const newNick = this.buildNickname(match.prefix, newMember.displayName);
-    if (newMember.nickname === newNick) return;
+    let member = newMember;
+    if (newMember.partial) {
+      try {
+        member = await newMember.fetch();
+      } catch (err) {
+        console.warn('[RankNickname] Could not fetch member:', err.message);
+        return;
+      }
+    }
+
+    const match = this.getHighestConfiguredRole(member, config);
+    if (!match) return;
+
+    if (!member.manageable) {
+      console.warn('[RankNickname] Cannot change nickname for', member.user.tag, '- bot role is below this member\'s highest role. Move the bot role above the rank roles in Server settings.');
+      return;
+    }
+
+    const newNick = this.buildNickname(match.prefix, member.displayName);
+    if (member.nickname === newNick) return;
 
     try {
-      await newMember.setNickname(newNick, 'Rank nickname (role prefix)');
+      await member.setNickname(newNick, 'Rank nickname (role prefix)');
     } catch (err) {
-      console.warn('[RankNickname] Could not set nickname:', err.message);
+      console.warn('[RankNickname] Could not set nickname for', member.user.tag, ':', err.message);
     }
   }
 
@@ -125,15 +139,19 @@ class RankNicknameManager {
   async syncGuild(guildId) {
     if (!this.supabase) return { synced: 0, error: 'Database not configured' };
     const config = await this.getConfig(guildId);
-    if (config.length === 0) return { synced: 0 };
+    if (config.length === 0) {
+      return { synced: 0, error: 'No role prefixes configured for this server. Add at least one role + prefix in Dashboard → Rank Nickname. If you did, run the rank_nickname_schema.sql migration.' };
+    }
 
     const guild = this.client.guilds.cache.get(guildId);
     if (!guild) return { synced: 0, error: 'Guild not found. Is the bot in the server?' };
-    if (!guild.members.me?.permissions.has('ManageNicknames')) {
+    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    if (!me?.permissions.has('ManageNicknames')) {
       return { synced: 0, error: 'Bot needs "Manage Nicknames" permission in this server.' };
     }
 
     let synced = 0;
+    let skippedHierarchy = 0;
     try {
       await guild.members.fetch();
     } catch (err) {
@@ -146,7 +164,7 @@ class RankNicknameManager {
       const match = this.getHighestConfiguredRole(member, config);
       if (!match) continue;
       if (!member.manageable) {
-        console.warn(`[RankNickname] Skip ${member.user.tag}: bot role below member's role (move bot higher).`);
+        skippedHierarchy++;
         continue;
       }
       const newNick = this.buildNickname(match.prefix, member.displayName);
@@ -159,7 +177,9 @@ class RankNicknameManager {
       }
     }
 
-    return { synced };
+    const result = { synced };
+    if (skippedHierarchy > 0) result.skippedHierarchy = skippedHierarchy;
+    return result;
   }
 }
 
