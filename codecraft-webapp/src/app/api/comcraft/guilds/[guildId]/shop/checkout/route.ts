@@ -258,9 +258,54 @@ export async function POST(
       .maybeSingle();
 
     if (configError || !stripeConfig?.stripe_secret_key || !stripeConfig.enabled) {
+      // Last chance: try PayPal again for this guild (in case fallback missed or config just saved)
+      const { data: ppLast } = await supabaseAdmin
+        .from('guild_paypal_config')
+        .select('client_id, client_secret, enabled, sandbox')
+        .eq('guild_id', guildId)
+        .maybeSingle();
+      if (ppLast?.client_id && ppLast?.client_secret && ppLast?.enabled) {
+        try {
+          const accessToken = await getPayPalAccessToken(
+            ppLast.client_id,
+            ppLast.client_secret,
+            ppLast.sandbox !== false
+          );
+          const customId = JSON.stringify({
+            guild_id: guildId,
+            shop_item_id: item.id,
+            discord_id: discordId,
+          });
+          const isCodeDelivery = deliveryType === 'code' || deliveryType === 'prefilled';
+          const paypalReturnUrl =
+            isCodeDelivery
+              ? `${baseUrl}/comcraft/pay/thank-you?shop=1&guild_id=${guildId}`
+              : successUrl;
+          const { approveUrl, orderId } = await createPayPalOrder({
+            accessToken,
+            sandbox: ppLast.sandbox !== false,
+            amountValue,
+            currencyCode,
+            description: item.description || item.name,
+            returnUrl: paypalReturnUrl,
+            cancelUrl,
+            customId,
+          });
+          return NextResponse.json({ url: approveUrl, sessionId: orderId, provider: 'paypal' });
+        } catch (e) {
+          console.error('[Shop checkout] PayPal last-chance error for guild', guildId, e);
+        }
+      }
+      const hint = !ppLast
+        ? 'No PayPal row for this server.'
+        : !ppLast.client_secret
+          ? 'PayPal Client Secret is missing (re-enter in Payments and Save PayPal).'
+          : !ppLast.enabled
+            ? 'PayPal is disabled (turn Enable PayPal on and Save).'
+            : 'Check Dashboard → Payments for this server.';
       return NextResponse.json(
         {
-          error: 'No payment method is set up for this server. In Dashboard → Payments, configure PayPal (Client ID + Client Secret + Enable PayPal, then Save PayPal) or Stripe. Use the same server as this store.',
+          error: `No payment method for this server (ID: ${guildId}). ${hint} In Dashboard open this server → Payments → PayPal: Client ID + Client Secret + Enable on → Save PayPal.`,
         },
         { status: 400 }
       );
