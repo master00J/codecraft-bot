@@ -165,12 +165,15 @@ export async function POST(
 
     // If default is Stripe but Stripe is not set up, use PayPal when available (shop often doesn't pass provider)
     if (provider === 'stripe') {
-      const [{ data: stripeConfig }, { data: ppConfig }] = await Promise.all([
+      const [
+        { data: stripeConfig, error: stripeErr },
+        { data: ppConfigFallback, error: ppErr },
+      ] = await Promise.all([
         supabaseAdmin.from('guild_stripe_config').select('stripe_secret_key, enabled').eq('guild_id', guildId).maybeSingle(),
         supabaseAdmin.from('guild_paypal_config').select('client_id, client_secret, enabled').eq('guild_id', guildId).maybeSingle(),
       ]);
-      const hasStripe = stripeConfig?.stripe_secret_key && stripeConfig?.enabled;
-      const hasPayPal = ppConfig?.client_id && ppConfig?.client_secret && ppConfig?.enabled;
+      const hasStripe = !stripeErr && stripeConfig?.stripe_secret_key && stripeConfig?.enabled;
+      const hasPayPal = !ppErr && !!ppConfigFallback?.client_id && !!ppConfigFallback?.client_secret && !!ppConfigFallback?.enabled;
       if (!hasStripe && hasPayPal) provider = 'paypal';
     }
 
@@ -181,11 +184,32 @@ export async function POST(
         .eq('guild_id', guildId)
         .maybeSingle();
 
-      if (configError || !ppConfig?.client_id || !ppConfig?.client_secret || !ppConfig.enabled) {
+      if (configError) {
+        console.error('[Shop checkout] PayPal config error for guild', guildId, configError.message);
+        return NextResponse.json(
+          { error: `PayPal config could not be loaded (${configError.message}). Check Dashboard → Payments for this server.` },
+          { status: 400 }
+        );
+      }
+      if (!ppConfig) {
         return NextResponse.json(
           {
-            error: 'PayPal is not fully set up for this server. In Dashboard → Payments, add your PayPal Client ID and Client Secret, turn "Enable PayPal" on, and click Save PayPal. The webhook is only for assigning roles after payment.',
+            error: `No PayPal config for this server (guild ${guildId}). Open Dashboard → Payments for the same server as this store and add Client ID, Client Secret, turn Enable PayPal on, then Save PayPal.`,
           },
+          { status: 400 }
+        );
+      }
+      if (!ppConfig.client_id || !ppConfig.client_secret) {
+        return NextResponse.json(
+          {
+            error: 'PayPal Client ID and Client Secret are required. In Dashboard → Payments, paste both from your PayPal app and click Save PayPal (re-enter the Secret if it was never saved).',
+          },
+          { status: 400 }
+        );
+      }
+      if (!ppConfig.enabled) {
+        return NextResponse.json(
+          { error: 'PayPal is disabled for this server. In Dashboard → Payments, turn "Enable PayPal" on and click Save PayPal.' },
           { status: 400 }
         );
       }
@@ -226,7 +250,7 @@ export async function POST(
       }
     }
 
-    // Stripe (default)
+    // Stripe (default) – only reached when PayPal was not used (not configured or not chosen)
     const { data: stripeConfig, error: configError } = await supabaseAdmin
       .from('guild_stripe_config')
       .select('stripe_secret_key, enabled')
@@ -235,7 +259,9 @@ export async function POST(
 
     if (configError || !stripeConfig?.stripe_secret_key || !stripeConfig.enabled) {
       return NextResponse.json(
-        { error: 'This server has not set up payments yet.' },
+        {
+          error: 'No payment method is set up for this server. In Dashboard → Payments, configure PayPal (Client ID + Client Secret + Enable PayPal, then Save PayPal) or Stripe. Use the same server as this store.',
+        },
         { status: 400 }
       );
     }
