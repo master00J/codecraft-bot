@@ -99,6 +99,46 @@ class RankNicknameManager {
       console.warn('[RankNickname] Could not set nickname:', err.message);
     }
   }
+
+  /**
+   * Sync nicknames for all members who have a configured role.
+   * Use when users already had the role before the prefix was set, or to fix missed updates.
+   */
+  async syncGuild(guildId) {
+    if (!this.supabase) return { synced: 0, error: 'Database not configured' };
+    const config = await this.getConfig(guildId);
+    if (config.length === 0) return { synced: 0 };
+
+    const guild = this.client.guilds.cache.get(guildId);
+    if (!guild) return { synced: 0, error: 'Guild not found. Is the bot in the server?' };
+    if (!guild.members.me?.permissions.has('ManageNicknames')) {
+      return { synced: 0, error: 'Bot needs "Manage Nicknames" permission in this server.' };
+    }
+
+    let synced = 0;
+    try {
+      await guild.members.fetch();
+    } catch (err) {
+      console.warn('[RankNickname] Sync fetch members failed:', err.message);
+      return { synced: 0, error: err.message || 'Failed to fetch members' };
+    }
+
+    for (const [, member] of guild.members.cache) {
+      if (member.user.bot) continue;
+      const match = this.getHighestConfiguredRole(member, config);
+      if (!match) continue;
+      const newNick = this.buildNickname(match.prefix, member.displayName);
+      if (member.nickname === newNick) continue;
+      try {
+        await member.setNickname(newNick, 'Rank nickname sync');
+        synced++;
+      } catch (err) {
+        console.warn(`[RankNickname] Sync failed for ${member.user.tag}:`, err.message);
+      }
+    }
+
+    return { synced };
+  }
 }
 
 module.exports = RankNicknameManager;

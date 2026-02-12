@@ -172,7 +172,9 @@ export async function POST(
 
       if (configError || !ppConfig?.client_id || !ppConfig?.client_secret || !ppConfig.enabled) {
         return NextResponse.json(
-          { error: 'This server has not set up PayPal yet.' },
+          {
+            error: 'PayPal is not fully set up for this server. In Dashboard → Payments, add your PayPal Client ID and Client Secret, turn "Enable PayPal" on, and click Save PayPal. The webhook is only for assigning roles after payment.',
+          },
           { status: 400 }
         );
       }

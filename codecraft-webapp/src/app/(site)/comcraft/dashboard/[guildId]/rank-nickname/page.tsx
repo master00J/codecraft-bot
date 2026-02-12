@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Plus, Trash2, User } from 'lucide-react';
+import { Loader2, Plus, Trash2, User, RefreshCw } from 'lucide-react';
 
 interface RankNicknameItem {
   id: string;
@@ -38,6 +38,7 @@ export default function RankNicknamePage() {
   const [roles, setRoles] = useState<DiscordRole[]>([]);
   const [newRoleId, setNewRoleId] = useState('');
   const [newPrefix, setNewPrefix] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (guildId) fetchData();
@@ -118,6 +119,27 @@ export default function RankNicknamePage() {
     }
   }
 
+  async function syncNow() {
+    setSyncing(true);
+    try {
+      const res = await fetch(`/api/comcraft/guilds/${guildId}/rank-nickname/sync`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      toast({
+        title: 'Sync done',
+        description: data.synced !== undefined ? `${data.synced} nickname(s) updated.` : 'Nicknames synced.',
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Sync failed',
+        description: e.message || 'Could not sync. Check bot permission "Manage Nicknames" and that the bot is in the server.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const roleName = (roleId: string) => roles.find(r => r.id === roleId)?.name || roleId;
 
   if (loading) {
@@ -179,7 +201,15 @@ export default function RankNicknamePage() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="font-semibold mb-4">Configured role prefixes</h2>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h2 className="font-semibold">Configured role prefixes</h2>
+          {list.length > 0 && (
+            <Button variant="outline" size="sm" onClick={syncNow} disabled={syncing}>
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Sync nicknames now
+            </Button>
+          )}
+        </div>
         {list.length === 0 ? (
           <p className="text-muted-foreground">No role prefixes yet. Add one above to enable rank nicknames for this server.</p>
         ) : (
@@ -204,7 +234,7 @@ export default function RankNicknamePage() {
       </Card>
 
       <p className="text-sm text-muted-foreground">
-        The bot needs <strong>Manage Nicknames</strong> permission. Nicknames are updated when a member gains or loses one of these roles.
+        The bot needs <strong>Manage Nicknames</strong> permission. Nicknames are set when a member <strong>gains</strong> one of these roles. If someone already had the role before you added the prefix, click <strong>Sync nicknames now</strong> above or remove and re-assign the role.
       </p>
     </div>
   );

@@ -13345,6 +13345,27 @@ app.get('/api/discord/:guildId/permissions', async (req, res) => {
   }
 });
 
+// Rank nickname: sync all members with configured roles (for users who already had the role)
+app.post('/api/rank-nickname/sync', async (req, res) => {
+  try {
+    const guildId = req.body?.guild_id || req.query?.guild_id;
+    if (!guildId) {
+      return res.status(400).json({ success: false, error: 'guild_id required' });
+    }
+    if (!global.rankNicknameManager) {
+      return res.status(503).json({ success: false, error: 'Rank Nickname Manager not available' });
+    }
+    const result = await global.rankNicknameManager.syncGuild(guildId);
+    if (result.error) {
+      return res.status(400).json({ success: false, error: result.error, synced: result.synced || 0 });
+    }
+    res.json({ success: true, synced: result.synced });
+  } catch (error) {
+    console.error('Error in rank-nickname sync API:', error);
+    res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+  }
+});
+
 // Post role menu to Discord
 app.post('/api/autoroles/:menuId/post', async (req, res) => {
   try {

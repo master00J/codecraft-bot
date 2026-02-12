@@ -367,8 +367,8 @@ export default function PaymentsDashboard() {
                   PayPal Developer Dashboard <ExternalLink className="h-3 w-3" />
                 </a>
               </li>
-              <li>Paste Client ID and Secret below. Use Sandbox for testing.</li>
-              <li>For Shop role assignment: add a webhook in the app and paste the Webhook ID.</li>
+              <li><strong>Required for Shop:</strong> paste <strong>Client ID</strong> and <strong>Client Secret</strong> below, turn <strong>Enable PayPal</strong> on, then click <strong>Save PayPal</strong>. Without these, the store will show &quot;payments not set up&quot;.</li>
+              <li>For role assignment after purchase: add the webhook URL in your PayPal app (event: Payment capture completed) and paste the Webhook ID here, then Save again.</li>
             </ol>
           </div>
           <div className="space-y-2">
