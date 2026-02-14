@@ -41,6 +41,8 @@ export const RESTRICTABLE_COMMANDS = [
   { name: 'verify', label: '/verify' },
   { name: 'verify-set', label: '/verify-set' },
   { name: 'sticky', label: '/sticky' },
+  // Casino
+  { name: 'add-balance', label: '/add-balance (casino balance)' },
 ] as const;
 
 // GET - List command permissions for the guild (all restrictable commands with their allowed_role_ids)

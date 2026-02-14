@@ -270,9 +270,7 @@ export async function DELETE(
     }
 
     const body = await request.json().catch(() => ({}));
-    const { case_id, reason } = body || {};
-
-    if (!case_id) {
+    const { case_id, reason } = body || {};    if (!case_id) {
       return NextResponse.json({ error: 'case_id is required' }, { status: 400 });
     }
 

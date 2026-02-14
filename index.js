@@ -1632,7 +1632,7 @@ client.on('interactionCreate', async (interaction) => {
       console.error('[index.js] Error stack:', error.stack);
       if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
         await interaction.reply({
-          content: '❌ Er is een fout opgetreden bij het openen van de reply modal.',
+          content: '❌ An error occurred while opening the reply modal.',
           ephemeral: true
         }).catch(() => {});
       }
@@ -2327,6 +2327,10 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'setxp':
         await handleSetXPCommand(interaction);
+        break;
+
+      case 'add-balance':
+        await handleAddBalanceCommand(interaction);
         break;
 
       // ============ QUEST COMMANDS ============
@@ -3740,7 +3744,7 @@ async function handleLeaderboardCommand(interaction) {
   const leaderboard = await xpManager.getLeaderboard(interaction.guild.id, 10);
 
   if (leaderboard.length === 0) {
-    return interaction.editReply('📊 Nog geen data beschikbaar!');
+    return interaction.editReply('📊 No data available yet!');
   }
 
   const embed = new EmbedBuilder()
@@ -3782,6 +3786,48 @@ async function handleSetXPCommand(interaction) {
       ephemeral: true
     });
   }
+}
+
+/**
+ * Handle /add-balance – give casino/economy coins to a user. Permission controlled via Dashboard → Command permissions.
+ */
+async function handleAddBalanceCommand(interaction) {
+  const guildId = interaction.guild?.id;
+  if (!guildId) {
+    return interaction.reply({ content: '❌ This command only works in a server.', ephemeral: true });
+  }
+  if (!casinoManager?.economyManager) {
+    return interaction.reply({
+      content: '❌ Economy/casino is not available. Please try again later.',
+      ephemeral: true
+    });
+  }
+  const targetUser = interaction.options.getUser('user', true);
+  const amount = interaction.options.getInteger('amount', true);
+  if (amount < 1) {
+    return interaction.reply({ content: '❌ Amount must be at least 1.', ephemeral: true });
+  }
+  const economy = casinoManager.economyManager;
+  await economy.getUserEconomy(guildId, targetUser.id, targetUser.username);
+  const result = await economy.addCoins(
+    guildId,
+    targetUser.id,
+    amount,
+    'admin_add',
+    `Added via /add-balance by ${interaction.user.tag}`,
+    { added_by: interaction.user.id }
+  );
+  if (!result.success) {
+    return interaction.reply({
+      content: `❌ ${result.error || 'Failed to add balance.'}`,
+      ephemeral: true
+    });
+  }
+  const formatted = economy.formatCoins(BigInt(result.newBalance));
+  await interaction.reply({
+    content: `✅ Added **${amount.toLocaleString()}** coins to ${targetUser.tag}. New balance: **${formatted}**.`,
+    ephemeral: true
+  });
 }
 
 async function handleWarnCommand(interaction) {
@@ -8836,8 +8882,7 @@ async function handleStoreCommand(interaction) {
         { label: 'All items', value: '__all__', description: 'Show all shop items' },
         ...categories.slice(0, 24).map((c) => ({
           label: (c.name || 'Unnamed').slice(0, 100),
-          value: String(c.id || c.name || '').slice(0, 100),
-          description: null
+          value: String(c.id || c.name || '').slice(0, 100)
         }))
       ]);
     const embed = new EmbedBuilder()
@@ -11510,7 +11555,25 @@ async function registerCommands(clientInstance) {
     // ============ CASINO COMMANDS ============
     new SlashCommandBuilder()
       .setName('casino')
-      .setDescription('🎰 Open het casino menu'),
+      .setDescription('🎰 Open the casino menu'),
+
+    new SlashCommandBuilder()
+      .setName('add-balance')
+      .setDescription('[Admin] Give casino/economy balance to a user')
+      .addUserOption((option) =>
+        option
+          .setName('user')
+          .setDescription('User to add balance to')
+          .setRequired(true)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName('amount')
+          .setDescription('Amount of coins to add')
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(999999999)
+      ),
 
     // ============ STOCK MARKET COMMANDS ============
     new SlashCommandBuilder()
@@ -14517,7 +14580,7 @@ async function handleEquipCommand(interaction) {
 async function handleUnequipCommand(interaction) {
   if (!inventoryManager) {
     return interaction.reply({
-      content: '❌ Inventory system is niet beschikbaar.',
+      content: '❌ Inventory system is not available.',
       ephemeral: true,
     });
   }
@@ -14561,7 +14624,7 @@ async function handleUnequipCommand(interaction) {
 async function handleCombatLeaderboardCommand(interaction) {
   if (!combatXPManager) {
     return interaction.reply({
-      content: '❌ Combat XP system is niet beschikbaar.',
+      content: '❌ Combat XP system is not available.',
       ephemeral: true,
     });
   }
@@ -14572,7 +14635,7 @@ async function handleCombatLeaderboardCommand(interaction) {
   const leaderboard = await combatXPManager.getLeaderboard(interaction.guild.id, page);
 
   if (leaderboard.length === 0) {
-    return interaction.editReply('📊 Nog geen combat data beschikbaar!');
+    return interaction.editReply('📊 No combat data available yet!');
   }
 
   const embed = new EmbedBuilder()

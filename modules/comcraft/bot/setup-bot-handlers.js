@@ -1531,6 +1531,10 @@ async function handleSlashCommand(interaction, handlers) {
       break;
     }
 
+    case 'add-balance':
+      await handleAddBalanceCommand(interaction, casinoManager);
+      break;
+
     // Utility commands
     case 'help':
       await handleHelpCommand(interaction);
@@ -3829,6 +3833,45 @@ async function handleCasinoCommand(interaction, casinoManager) {
   });
 }
 
+async function handleAddBalanceCommand(interaction, casinoManager) {
+  const guildId = interaction.guild?.id;
+  if (!guildId) {
+    return interaction.reply({ content: '❌ This command only works in a server.', ephemeral: true });
+  }
+  if (!casinoManager?.economyManager) {
+    return interaction.reply({
+      content: '❌ Economy/casino is not available. Please try again later.',
+      ephemeral: true
+    });
+  }
+  const targetUser = interaction.options.getUser('user', true);
+  const amount = interaction.options.getInteger('amount', true);
+  if (amount < 1) {
+    return interaction.reply({ content: '❌ Amount must be at least 1.', ephemeral: true });
+  }
+  const economy = casinoManager.economyManager;
+  await economy.getUserEconomy(guildId, targetUser.id, targetUser.username);
+  const result = await economy.addCoins(
+    guildId,
+    targetUser.id,
+    amount,
+    'admin_add',
+    `Added via /add-balance by ${interaction.user.tag}`,
+    { added_by: interaction.user.id }
+  );
+  if (!result.success) {
+    return interaction.reply({
+      content: `❌ ${result.error || 'Failed to add balance.'}`,
+      ephemeral: true
+    });
+  }
+  const formatted = economy.formatCoins(BigInt(result.newBalance));
+  return interaction.reply({
+    content: `✅ Added **${amount.toLocaleString()}** coins to ${targetUser.tag}. New balance: **${formatted}**.`,
+    ephemeral: true
+  });
+}
+
 async function handleCasinoButton(interaction, casinoManager, economyManager) {
   if (!casinoManager || !economyManager) {
     return interaction.reply({
@@ -5358,6 +5401,23 @@ async function registerCommands(client, clientId, isCustomBot = false, guildId =
           )
       ),
     new SlashCommandBuilder().setName('casino').setDescription('🎰 Open the casino menu'),
+    new SlashCommandBuilder()
+      .setName('add-balance')
+      .setDescription('[Admin] Give casino/economy balance to a user')
+      .addUserOption((option) =>
+        option
+          .setName('user')
+          .setDescription('User to add balance to')
+          .setRequired(true)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName('amount')
+          .setDescription('Amount of coins to add')
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(999999999)
+      ),
     new SlashCommandBuilder().setName('serverinfo').setDescription('View server information'),
     new SlashCommandBuilder().setName('dashboard').setDescription('Get dashboard link'),
     new SlashCommandBuilder()

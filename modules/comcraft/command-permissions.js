@@ -14,6 +14,7 @@ const RESTRICTABLE_COMMAND_NAMES = [
   'warn', 'mute', 'unmute', 'kick', 'ban',
   'customcommand', 'birthdayconfig', 'feedback', 'donate',
   'verify', 'verify-set', 'sticky',
+  'add-balance',
 ];
 
 /**
